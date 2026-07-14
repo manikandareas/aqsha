@@ -1,10 +1,35 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { QueryClient } from '@tanstack/svelte-query';
-import type { AgentKind, AskQuestionsResumeData } from '@aqsha/chat-core';
+import {
+	type AgentKind,
+	type AskQuestionsResumeData,
+	normalizeAskQuestions
+} from '@aqsha/chat-core';
 import { readableApiErrorMessage } from '$lib/errors';
 import { queryKeys } from '$lib/query';
 import { agentIdFor } from '../lib/mastra-client';
 import { createChunkReplayFilter } from '../lib/chunk-replay';
+import {
+	type DeepFailure,
+	type DeepNotice,
+	type DeepRun,
+	type DeepRunSnapshot,
+	type WorkflowStepsSnapshot,
+	activeHeavyDeepStep,
+	clearDeepRunId,
+	DANGLING_TURN_ERROR,
+	DEEP_HEAVY_STALL_MS,
+	DEEP_HEAVY_STEP_MESSAGE,
+	DEEP_STALL_MESSAGE,
+	DEEP_STALL_MS,
+	DEEP_WORKFLOW_ID,
+	deepFailureFromSteps,
+	deepNoticeFromResult,
+	discoverDeepRunId,
+	getDeepRunId,
+	iterateStream,
+	setDeepRunId
+} from '../lib/deep-workflow';
 import {
 	dropLastTurn,
 	initialMastraTimeline,
@@ -15,28 +40,26 @@ import {
 	type MastraStatus,
 	type MastraTimelineState,
 	reduceMastraChunk,
+	reduceWorkflowChunk,
+	seedWorkflowProgress,
 	settleAssistantTurn,
+	settleWorkflowTurn,
 	startAssistantTurn,
-	startRegenerate
+	startRegenerate,
+	reviveWorkflowTurn
 } from '../lib/mastra-timeline';
 import type { TimelineMessage } from '../lib/timeline-types';
 
-// ── THC-5: durable-thread chat agent as a Svelte 5 runes state class ─────────────────────────────
+// ── THX-5: durable-thread chat + `/deep` Workflow agent as a Svelte 5 runes state class ──────────────
 //
-// Port of the CHAT spine of `apps/web/features/threads/lib/use-mastra-agent.ts`. One long-lived
-// `subscribeToThread` receives all runs for a thread; chat chunks reduce through `reduceMastraChunk`.
-// State that reduces per chunk is `$state`; the derived tier is `$derived`; handles/registries/replay
-// are plain (non-reactive) private fields (NOT `$state` — they must survive without re-init and never
-// leak across users under SSR, §3.5). Reactivity rules (§3.4): the subscription lifecycle is owned
-// imperatively by this class (`start()`/`destroy()` from the consuming `$effect`), NOT a per-field
-// `$effect` reflex; `committedAgentKind` is the only `$derived`.
-//
-// PHASE BOUNDARY: the `/deep` durable Workflow orchestration (sendDeep / consumeWorkflow / runById
-// re-attach poll / plan+ask workflow resume / failure-recovery) is Phase 7 (THX-5). The workflow
-// REDUCERS (`reduceWorkflowChunk`, `seedWorkflowProgress`, `settleWorkflowTurn`, `reviveWorkflowTurn`)
-// are already ported+tested in `mastra-timeline.ts`; Phase 7 wires the imperative driver onto this
-// same class. Everything here — subscription, replay/idempotency, reconnect, send, queue-while-busy,
-// stop, regenerate, HITL tool approval + ask-resume — is the complete chat engine and the substrate.
+// Extends the Phase 6 CHAT spine (subscription / replay / reconnect / send / queue / stop / regenerate /
+// HITL tool approval) with the imperative `/deep` durable Workflow orchestration ported from
+// `apps/web/features/threads/lib/use-mastra-agent.ts`: sendDeep / consumeWorkflow / runById re-attach
+// poll / plan+clarify resume / terminal reconciliation / failure-recovery (retry via timeTravelStream)
+// / stall detection / server-queue durability. The workflow REDUCERS (`reduceWorkflowChunk`,
+// `seedWorkflowProgress`, `settleWorkflowTurn`, `reviveWorkflowTurn`) were ported+tested in Phase 6;
+// this class is the driver. Reactivity (§3.4): the subscription + re-attach poll lifecycles are owned
+// imperatively (`start()`/`destroy()` from the consuming `$effect`), NOT per-field reflexes.
 
 /** Subscription handle from `agent.subscribeToThread` (subset used here). */
 type ThreadSubscription = {
@@ -48,18 +71,29 @@ type ThreadSubscription = {
 	unsubscribe: () => void;
 };
 
-/** A message held while a run is active, re-sent when the thread returns to `ready` (DUR-6, chat). */
+/** Workflow client (subset of `getWorkflow(id)` used). */
+type WorkflowClient = {
+	createRun: (p: { runId?: string; resourceId: string }) => Promise<DeepRun>;
+	runById: (runId: string) => Promise<DeepRunSnapshot>;
+};
+
+/** A message held while a run is active, re-sent when the thread returns to `ready` (DUR-6). */
 type QueuedSend = {
 	id: string;
+	mode: 'chat' | 'deep';
 	text: string;
 	display: string;
 	clientContext?: string[];
+	richText?: string;
 	attachmentIds?: string[];
 	agentKind: AgentKind;
+	/** Present ⇒ SERVER queue (`queueMessage`, plain chat) — runs even if the tab closes, not cancellable. */
+	serverRunId?: string;
 };
 
 /** Context of the last-sent turn, for regenerate (FE-8). */
 type LastSentTurn = {
+	mode: 'chat' | 'deep';
 	text: string;
 	clientContext?: string[];
 	richText?: string;
@@ -75,19 +109,12 @@ export type SendOptions = {
 };
 
 export type ThreadAgentOptions = {
-	/** Same MastraClient across the thread; the tier only selects which agent id we subscribe to. */
 	getClient: () => MastraClient;
 	threadId: string;
-	/** Reactive resource id (Clerk userId) — may be null until clerk-js loads (gate on `isLoaded`). */
 	getResourceId: () => string | null | undefined;
 	queryClient: QueryClient;
-	/** Stored thread tier (`chat_threads.agent_kind`); the subscription follows this before any send. */
 	initialAgentKind?: AgentKind;
 	seed?: TimelineMessage[];
-	/**
-	 * Callback for a settled `request_document_edit` tool (paid side-effect, deduped per tool-call).
-	 * Wired to the BlockNote AI editor in Phase 10; a no-op until then.
-	 */
 	onRequestDocumentEdit?: (edit: { artifactId: string; instruction: string }) => void;
 };
 
@@ -116,11 +143,10 @@ function lastUserText(messages: readonly TimelineMessage[]): string | null {
 type ServerMessageLike = { id: string; role?: string };
 
 /**
- * Ids of the last [user, assistant] pair in server memory (to delete on regenerate). Durable-thread
- * `sendMessage` stores user input as a SIGNAL (`role:"signal"`, NOT `role:"user"`), so matching by
- * `role==="user"` would MISS it → a duplicate user bubble after refresh (G6). Match POSITIONALLY:
- * remove the last assistant + all non-assistant messages just before it, regardless of role label.
- * Verbatim port of `lastTurnMessageIds` in `use-mastra-agent.ts`.
+ * Ids of the last [user, assistant] pair in server memory (to delete on regenerate). Verbatim port of
+ * `lastTurnMessageIds` — durable-thread `sendMessage` stores user input as a SIGNAL (`role:"signal"`),
+ * so matching by `role==="user"` would MISS it → a duplicate user bubble after refresh (G6). Match
+ * positionally: the last assistant + all non-assistant messages just before it, regardless of label.
  */
 export function lastTurnMessageIds(messages: readonly ServerMessageLike[]): string[] {
 	let lastAssistant = -1;
@@ -130,9 +156,6 @@ export function lastTurnMessageIds(messages: readonly ServerMessageLike[]): stri
 			break;
 		}
 	}
-	// Dangling turn: messages after the last assistant (e.g. a `deep-user:<runId>` from a failed run,
-	// whose answer was never persisted). Drop ONLY the last dangling turn (the trailing user/signal +
-	// what follows), never older dangling turns or the whole history when there is no assistant yet.
 	const tail = messages.slice(lastAssistant + 1);
 	if (tail.length > 0) {
 		let start = 0;
@@ -154,6 +177,9 @@ export function lastTurnMessageIds(messages: readonly ServerMessageLike[]): stri
 	return ids;
 }
 
+/** A cancellable token for a re-attach poll loop. */
+type PollToken = { cancelled: boolean };
+
 export class ThreadAgent {
 	readonly #getClient: () => MastraClient;
 	readonly #threadId: string;
@@ -166,12 +192,10 @@ export class ThreadAgent {
 	#timeline = $state<MastraTimelineState>(initialMastraTimeline());
 	#sentKind = $state<AgentKind | null>(null);
 	#queued = $state<QueuedSend[]>([]);
+	#deepStalled = $state<string | null>(null);
+	#deepFailed = $state<DeepFailure | null>(null);
+	#deepNotice = $state<DeepNotice | null>(null);
 
-	/**
-	 * Tier the subscription follows: the active turn's tier once sent, else the stored thread tier. A
-	 * reactive getter (not a `$derived` field) because it reads the constructor-assigned
-	 * `#initialAgentKind`; reading the `$state` `#sentKind` inside the getter keeps it reactive.
-	 */
 	get committedAgentKind(): AgentKind {
 		return this.#sentKind ?? this.#initialAgentKind;
 	}
@@ -189,6 +213,10 @@ export class ThreadAgent {
 	#docEditKeys = new Set<string>();
 	#dispatchingQueue = false;
 	#lastSend: LastSentTurn | null = null;
+	#deepRun: DeepRun | null = null;
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- non-reactive server-run registry
+	#queuedServerRuns = new Map<string, { display: string; attachmentIds?: string[] }>();
+	#pollToken: PollToken | null = null;
 
 	constructor(opts: ThreadAgentOptions) {
 		this.#getClient = opts.getClient;
@@ -222,37 +250,44 @@ export class ThreadAgent {
 	get queued(): QueuedSend[] {
 		return this.#queued;
 	}
+	get deepStalled(): string | null {
+		return this.#deepStalled;
+	}
+	get deepFailed(): DeepFailure | null {
+		return this.#deepFailed;
+	}
+	get deepNotice(): DeepNotice | null {
+		return this.#deepNotice;
+	}
 
-	// ── subscription lifecycle (E1) ────────────────────────────────────────────────────────────────
+	// ── lifecycle ────────────────────────────────────────────────────────────────────────────────
 
-	/** Begin the single long-lived subscription. Idempotent; call once from the consuming `$effect`. */
+	/** Begin the subscription + the initial `/deep` re-attach poll. Idempotent; call once from `$effect`. */
 	start(): void {
 		if (this.#started) return;
 		this.#started = true;
 		void this.#subscribeLoop();
+		this.#scheduleReattach();
 	}
 
-	/** Tear down the subscription (call from the `$effect` cleanup / on unmount). */
+	/** Tear down the subscription + poll (call from the `$effect` cleanup / on unmount). */
 	destroy(): void {
 		this.#cancelled = true;
 		this.#subEpoch += 1;
+		if (this.#pollToken) this.#pollToken.cancelled = true;
+		this.#pollToken = null;
 		this.#sub?.unsubscribe();
 		this.#sub = null;
 	}
 
-	/**
-	 * Two-layered reconnect: client-js internal retry ({maxRetries:20}) plus this outer re-subscribe
-	 * loop that re-runs after retries exhaust or the stream ends. Re-reads `committedAgentKind` each
-	 * iteration so a lite→pro commit re-subscribes to the `astra-pro` channel (buffer replay + the
-	 * replay filter close the race). Self-heals: a brand-new thread has nothing to subscribe to until
-	 * the first `sendMessage`, so subscribe failures just retry (silent until the thread has messages).
-	 */
+	// ── subscription lifecycle (E1) ────────────────────────────────────────────────────────────────
+
 	async #subscribeLoop(): Promise<void> {
 		let failures = 0;
 		while (!this.#cancelled) {
 			const resourceId = this.#getResourceId();
 			if (!resourceId) {
-				await delay(300); // wait for clerk-js (userId + real bearer) before subscribing
+				await delay(300);
 				continue;
 			}
 			const myEpoch = this.#subEpoch;
@@ -264,7 +299,7 @@ export class ThreadAgent {
 				})) as unknown as ThreadSubscription;
 				if (this.#cancelled || myEpoch !== this.#subEpoch) {
 					sub.unsubscribe();
-					continue; // torn down / tier changed while awaiting → drop this sub and re-loop
+					continue;
 				}
 				this.#sub = sub;
 				failures = 0;
@@ -274,8 +309,8 @@ export class ThreadAgent {
 					reconnect: { maxRetries: 20, delayMs: 1000 }
 				});
 				if (this.#cancelled) return;
-				if (myEpoch !== this.#subEpoch) continue; // tier committed → re-subscribe immediately
-				await delay(1000); // stream ended unexpectedly → wait then re-subscribe
+				if (myEpoch !== this.#subEpoch) continue;
+				await delay(1000);
 			} catch (err) {
 				if (this.#cancelled) return;
 				this.#noteFailure((failures += 1), err);
@@ -284,7 +319,6 @@ export class ThreadAgent {
 		}
 	}
 
-	/** After a lite→pro commit, cycle the subscription so it follows the new agent channel. */
 	#cycleSubscription(): void {
 		this.#subEpoch += 1;
 		this.#sub?.unsubscribe();
@@ -292,7 +326,7 @@ export class ThreadAgent {
 	}
 
 	#noteFailure(attempt: number, err: unknown): void {
-		if (this.#timeline.messages.length === 0) return; // new thread pre-send → normal, stay silent
+		if (this.#timeline.messages.length === 0) return;
 		console.warn('[astra] langganan thread gagal', { attempt, threadId: this.#threadId, err });
 		if (attempt >= 3 && this.#timeline.error !== SUBSCRIBE_DEGRADED_ERROR) {
 			this.#timeline = { ...this.#timeline, error: SUBSCRIBE_DEGRADED_ERROR };
@@ -309,7 +343,7 @@ export class ThreadAgent {
 
 	#onChunk = (chunk: unknown): void => {
 		const c0 = chunk as MastraChunk;
-		if (!this.#replay(c0)) return; // duplicate replay (FE-2) → drop before the non-idempotent reducer
+		if (!this.#replay(c0)) return; // duplicate replay (FE-2)
 		if (c0?.type === 'text-delta' || c0?.type === 'reasoning-delta') {
 			this.#pendingDeltas.push(c0);
 			if (!this.#deltaFlushScheduled) {
@@ -326,8 +360,19 @@ export class ThreadAgent {
 			}
 			return;
 		}
-		// Structural chunk: flush buffered deltas first so state order == stream order.
 		this.#flushDeltas();
+		// DUR-6: a queued SERVER run (queueMessage) starting → birth its user bubble + placeholder BEFORE
+		// the reducer processes `start` (ensureActiveAssistant uses this placeholder).
+		if (c0?.type === 'start' && c0.runId) {
+			const queuedInfo = this.#queuedServerRuns.get(c0.runId);
+			if (queuedInfo) {
+				this.#queuedServerRuns.delete(c0.runId);
+				this.#queued = this.#queued.filter((i) => i.serverRunId !== c0.runId);
+				this.#apply((s) =>
+					startAssistantTurn(s, queuedInfo.display, c0.runId!, queuedInfo.attachmentIds)
+				);
+			}
+		}
 		this.#apply((s) => reduceMastraChunk(s, c0));
 		this.#detectDocumentEdit(c0);
 		this.#afterStructural();
@@ -342,12 +387,10 @@ export class ThreadAgent {
 		this.#afterStructural();
 	}
 
-	/** Apply a reducer step + surface a settle→invalidate edge (E2) without an `$effect` reflex. */
 	#apply(fn: (s: MastraTimelineState) => MastraTimelineState): void {
 		this.#timeline = fn(this.#timeline);
 	}
 
-	/** On a `!ready → ready` transition, invalidate the thread's server-derived caches (E2). */
 	#afterStructural(): void {
 		const now = this.#timeline.status;
 		if (this.#prevStatus !== 'ready' && now === 'ready') {
@@ -360,10 +403,6 @@ export class ThreadAgent {
 		this.#maybeDispatchQueue();
 	}
 
-	/**
-	 * `request_document_edit` settle → publish to the doc-edit callback ONCE per tool-call (paid
-	 * side-effect guard, a second layer under the replay filter). Verbatim of the web onChunk branch.
-	 */
 	#detectDocumentEdit(c: MastraChunk): void {
 		if (c?.type !== 'tool-result' && c?.type !== 'tool-output') return;
 		const payload = c.payload ?? {};
@@ -380,36 +419,38 @@ export class ThreadAgent {
 		this.#onRequestDocumentEdit?.({ artifactId, instruction });
 	}
 
-	// ── send + queue-while-busy (DUR-6, chat) ──────────────────────────────────────────────────────
-
-	/** Commit this turn's tier → the subscription re-subscribes to the same agent channel. */
+	// ── tier commit ────────────────────────────────────────────────────────────────────────────────
 	#commitAgentKind(kind: AgentKind): void {
 		if (this.committedAgentKind === kind) return;
 		this.#sentKind = kind;
 		this.#cycleSubscription();
 	}
 
+	commitAgentKind(kind: AgentKind): void {
+		this.#commitAgentKind(kind);
+	}
+
+	// ── send (chat) + queue-while-busy (DUR-6) ─────────────────────────────────────────────────────
+
 	async send(text: string, opts: SendOptions = {}): Promise<void> {
 		const resourceId = this.#getResourceId();
 		if (!text.trim() || !resourceId) return;
 		const agentKind: AgentKind = opts.agentKind ?? 'lite';
 		if (this.status !== 'ready') {
-			// DUR-6: an active run → queue, not silently drop.
-			this.#queued = [
-				...this.#queued,
-				{
-					id: `q${(queuedSeq += 1)}`,
-					text,
-					display: opts.richText ?? text,
-					clientContext: opts.clientContext,
-					attachmentIds: opts.attachmentIds,
-					agentKind
-				}
-			];
+			await this.#enqueueWhileBusy({
+				mode: 'chat',
+				text,
+				display: opts.richText ?? text,
+				clientContext: opts.clientContext,
+				richText: opts.richText,
+				attachmentIds: opts.attachmentIds,
+				agentKind
+			});
 			return;
 		}
 		this.#commitAgentKind(agentKind);
 		this.#lastSend = {
+			mode: 'chat',
 			text,
 			clientContext: opts.clientContext,
 			richText: opts.richText,
@@ -425,7 +466,6 @@ export class ThreadAgent {
 				message: display,
 				resourceId,
 				threadId: this.#threadId,
-				// Ephemeral per-call context (slash/@mention expansion) — NOT persisted to memory.
 				...(opts.clientContext && opts.clientContext.length > 0
 					? {
 							ifIdle: {
@@ -444,54 +484,154 @@ export class ThreadAgent {
 		}
 	}
 
-	/** Dispatch the head of the client queue when the thread returns to ready (re-entrancy guarded). */
+	/**
+	 * DUR-6 queue: plain chat over a chat run → SERVER queue (`queueMessage`; runtime auto-starts a new
+	 * run when the active one finishes, runs even if the tab closes). Everything else (context/attachment/
+	 * different tier, all `/deep`, or while a `/deep` run is active) → CLIENT queue dispatched on ready.
+	 */
+	async #enqueueWhileBusy(item: Omit<QueuedSend, 'id' | 'serverRunId'>): Promise<void> {
+		const id = `q:${this.#now()}:${(queuedSeq += 1)}`;
+		const resourceId = this.#getResourceId();
+		const deepActive = this.#deepRun !== null || getDeepRunId(this.#threadId) !== null;
+		const activeChatRunId = deepActive ? null : (this.#timeline.activeRunId ?? null);
+		const canServerQueue =
+			item.mode === 'chat' &&
+			activeChatRunId !== null &&
+			!!resourceId &&
+			!(item.clientContext && item.clientContext.length > 0) &&
+			!(item.attachmentIds && item.attachmentIds.length > 0) &&
+			item.agentKind === this.committedAgentKind;
+		if (canServerQueue) {
+			try {
+				const agent = this.#getClient().getAgent(
+					agentIdFor(this.committedAgentKind)
+				) as unknown as {
+					queueMessage: (p: {
+						runId: string;
+						message: string;
+						resourceId: string;
+						threadId: string;
+					}) => Promise<{ runId?: string }>;
+				};
+				const res = await agent.queueMessage({
+					runId: activeChatRunId,
+					message: item.display,
+					resourceId: resourceId!,
+					threadId: this.#threadId
+				});
+				if (typeof res.runId === 'string') {
+					this.#queuedServerRuns.set(res.runId, {
+						display: item.display,
+						attachmentIds: item.attachmentIds
+					});
+					this.#queued = [...this.#queued, { ...item, id, serverRunId: res.runId }];
+					return;
+				}
+			} catch {
+				/* queueMessage failed → fall back to the client queue (still sent, just needs a live tab) */
+			}
+		}
+		this.#queued = [...this.#queued, { ...item, id }];
+	}
+
+	/** Dispatch the first CLIENT-queued item when the thread returns to ready (re-entrancy guarded). */
 	#maybeDispatchQueue(): void {
-		if (this.status !== 'ready' || this.#queued.length === 0 || this.#dispatchingQueue) return;
+		if (this.status !== 'ready' || this.#dispatchingQueue) return;
+		const next = this.#queued.find((i) => i.serverRunId === undefined);
+		if (!next) return;
 		this.#dispatchingQueue = true;
-		const [head, ...rest] = this.#queued;
-		this.#queued = rest;
-		void this.send(head.text, {
-			clientContext: head.clientContext,
-			richText: head.display,
-			attachmentIds: head.attachmentIds,
-			agentKind: head.agentKind
-		}).finally(() => {
+		this.#queued = this.#queued.filter((i) => i.id !== next.id);
+		const opts: SendOptions = {
+			clientContext: next.clientContext,
+			richText: next.richText,
+			attachmentIds: next.attachmentIds,
+			agentKind: next.agentKind
+		};
+		const run = next.mode === 'deep' ? this.sendDeep(next.text, opts) : this.send(next.text, opts);
+		void run.finally(() => {
 			this.#dispatchingQueue = false;
-			// Chain the next queued item if the send returned to ready synchronously.
 			this.#maybeDispatchQueue();
 		});
 	}
 
 	cancelQueued(id: string): void {
-		this.#queued = this.#queued.filter((i) => i.id !== id);
+		// Server-queued items can't be cancelled (no unqueue API) → only client items.
+		this.#queued = this.#queued.filter((i) => i.id !== id || i.serverRunId !== undefined);
 	}
 
-	// ── stop / regenerate (chat) ───────────────────────────────────────────────────────────────────
+	// ── stop / regenerate ──────────────────────────────────────────────────────────────────────────
 
-	/** Stop the active chat turn: server-side cancel (`abort`) → the reducer settles on the `abort`
-	 *  chunk (no `AbortError`). Client queue is cleared (the user stopped the pipeline). */
-	async stop(): Promise<void> {
-		this.#queued = [];
-		try {
-			await this.#sub?.abort();
-		} catch {
-			/* best-effort */
+	/**
+	 * Stop the active turn. Chat → server abort → the reducer settles on the `abort` chunk. `/deep` →
+	 * cancel the Workflow run server-side (FE-4); a persisted-but-detached run (post-refresh RUNNING) is
+	 * cancelled lazily. The B1 failure card is intentionally left alone. Client queue is cleared.
+	 */
+	stop(): void {
+		this.#queued = this.#queued.filter((i) => i.serverRunId !== undefined);
+		this.#deepStalled = null;
+		const run = this.#deepRun;
+		const settleDeepStop = () => {
+			clearDeepRunId(this.#threadId);
+			this.#deepRun = null;
+			this.#apply((s) => settleAssistantTurn({ ...s, planGate: undefined, askGate: undefined }));
+		};
+		if (run) {
+			void run.cancel().catch(() => {});
+			settleDeepStop();
+			return;
 		}
+		const resourceId = this.#getResourceId();
+		const deepRunId = getDeepRunId(this.#threadId);
+		if (deepRunId && deepRunId !== this.#deepFailed?.runId) {
+			if (resourceId) {
+				void this.#workflow()
+					.createRun({ runId: deepRunId, resourceId })
+					.then((r) => r.cancel())
+					.catch(() => {});
+				settleDeepStop();
+				return;
+			}
+			// Post-refresh window before Clerk resolves resourceId → no-op; a later click cancels for real.
+			return;
+		}
+		void this.#sub?.abort().catch(() => {});
 		this.#apply((s) => settleAssistantTurn(s));
 	}
 
 	/**
-	 * Regenerate the last answer: delete the last [user, assistant] pair from server memory
-	 * (positional, signal-aware) then re-send the same question with the original context/tier (FE-8).
-	 * Chat path only; a `/deep` regenerate lands in Phase 7 (THX-5).
+	 * Regenerate (G6): re-run the last user message without a duplicate. A `/deep` turn regenerates AS
+	 * `/deep` (not downgraded to chat, which would orphan its report + sources). Deletes the last
+	 * [user, assistant] pair from server memory first, then re-sends with the original context/tier (FE-8).
 	 */
 	async regenerate(): Promise<void> {
 		const resourceId = this.#getResourceId();
 		if (!resourceId || this.status !== 'ready') return;
 		const text = lastUserText(this.#timeline.messages);
 		if (!text) return;
+		if (this.#deepFailed) this.dismissDeepFailure();
 		const last = this.#lastSend;
 		const lastMatches = last !== null && (last.richText ?? last.text) === text;
+
+		if (lastMatches && last!.mode === 'deep') {
+			try {
+				await this.#deleteLastServerTurn();
+			} catch (err) {
+				this.#apply((s) => ({
+					...s,
+					error: readableApiErrorMessage(err, 'Gagal membuat ulang jawaban.')
+				}));
+				return;
+			}
+			this.#apply((s) => dropLastTurn(s));
+			await this.sendDeep(last!.text, {
+				clientContext: last!.clientContext,
+				richText: last!.richText,
+				attachmentIds: last!.attachmentIds,
+				agentKind: last!.agentKind
+			});
+			return;
+		}
+
 		this.#apply((s) => startRegenerate(s));
 		try {
 			const agent = this.#getClient().getAgent(agentIdFor(this.committedAgentKind));
@@ -532,12 +672,12 @@ export class ThreadAgent {
 		if (staleIds.length > 0) await thread.deleteMessages(staleIds);
 	}
 
-	/** Drop the last turn locally (used by a `/deep` regenerate path in Phase 7). */
+	/** Drop the last turn locally. */
 	dropLastTurn(): void {
 		this.#apply((s) => dropLastTurn(s));
 	}
 
-	// ── HITL: tool approval (requireApproval) + ask-questions resume (tool path) ────────────────────
+	// ── HITL: tool approval (requireApproval) + ask-questions resume (tool + workflow) ──────────────
 
 	async approve(toolCallId: string): Promise<void> {
 		await this.#respond(toolCallId, true);
@@ -564,17 +704,39 @@ export class ThreadAgent {
 		}
 	}
 
-	/**
-	 * Resolve the ask-questions gate (chat tool-suspend path). The continuation streams back through
-	 * the subscription. The workflow (`/deep clarify`) resume path is Phase 7 (THX-5); this handles the
-	 * `source:"tool"` gate that reaches the chat spine via `reduceMastraChunk`.
-	 */
 	async resolveAsk(resume: AskQuestionsResumeData): Promise<void> {
 		const gate = this.#timeline.askGate;
 		if (!gate) return;
 		this.#apply((s) => ({ ...s, askGate: undefined, status: 'streaming' }));
+		if (gate.source === 'workflow') {
+			// `/deep` step `clarify` → resume the Workflow (parallel to resolvePlan).
+			const run = this.#deepRun;
+			if (!run) {
+				this.#apply((s) => ({ ...settleAssistantTurn(s), askGate: undefined }));
+				return;
+			}
+			try {
+				const stream = await run.resumeStream({
+					step: 'clarify',
+					resumeData: resume as Record<string, unknown>
+				});
+				await this.#consumeWorkflow(stream);
+				this.#maybeReattachAfterStreamClose(run.runId);
+			} catch (err) {
+				if (await this.#clearDeepRunIdUnlessAlive(run.runId)) {
+					this.#bumpReattach();
+					return;
+				}
+				this.#apply((s) => ({
+					...settleAssistantTurn(s),
+					error: readableApiErrorMessage(err, 'Gagal melanjutkan riset mendalam.')
+				}));
+			}
+			return;
+		}
+		// source === "tool" (chat): resume the tool-suspend via `sendToolApproval` carrying `resumeData`.
 		const resourceId = this.#getResourceId();
-		if (gate.source !== 'tool' || !resourceId || !gate.toolCallId) {
+		if (!resourceId || !gate.toolCallId) {
 			this.#apply((s) => ({
 				...settleAssistantTurn(s),
 				error:
@@ -596,6 +758,421 @@ export class ThreadAgent {
 				...settleAssistantTurn(s),
 				error: readableApiErrorMessage(err, 'Gagal mengirim jawaban.')
 			}));
+		}
+	}
+
+	// ── `/deep` Workflow orchestration (THX-5) ──────────────────────────────────────────────────────
+
+	#workflow(): WorkflowClient {
+		return this.#getClient().getWorkflow(DEEP_WORKFLOW_ID) as unknown as WorkflowClient;
+	}
+
+	async #fetchDeepRun(runId: string): Promise<DeepRunSnapshot | null> {
+		try {
+			return await this.#workflow().runById(runId);
+		} catch {
+			return null;
+		}
+	}
+
+	async #deepRunStatus(runId: string): Promise<string> {
+		return (await this.#fetchDeepRun(runId))?.status ?? '';
+	}
+
+	#clearDeepRunAndRefresh(): void {
+		clearDeepRunId(this.#threadId);
+		void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.sources(this.#threadId) });
+		void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+	}
+
+	/** B1: single terminal handler (live path + poll re-attach) so semantics can't drift. */
+	#applyDeepTerminal(
+		runId: string,
+		status: string,
+		steps: WorkflowStepsSnapshot,
+		result?: unknown
+	): void {
+		const currentKey = getDeepRunId(this.#threadId);
+		const ownsKey = currentKey === null || currentKey === runId;
+		this.#deepStalled = null;
+		if (this.#deepRun === null || this.#deepRun.runId === runId) this.#deepRun = null;
+		this.#apply((s) => settleWorkflowTurn(seedWorkflowProgress(s, runId, steps), runId));
+		if (status === 'failed') {
+			this.#deepFailed = deepFailureFromSteps(runId, steps);
+			if (ownsKey) setDeepRunId(this.#threadId, runId); // re-assert the recovery key (survives refresh)
+			return;
+		}
+		this.#deepFailed = null;
+		if (status === 'success') this.#deepNotice = deepNoticeFromResult(runId, result);
+		if (ownsKey) {
+			this.#clearDeepRunAndRefresh();
+		} else {
+			void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.sources(this.#threadId) });
+			void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.all });
+		}
+	}
+
+	async #reconcileDeepTerminal(runId: string | undefined): Promise<void> {
+		if (!runId) {
+			this.#deepRun = null;
+			this.#clearDeepRunAndRefresh();
+			return;
+		}
+		const st = await this.#fetchDeepRun(runId);
+		if (!st) {
+			this.#deepRun = null;
+			this.#bumpReattach();
+			return;
+		}
+		this.#applyDeepTerminal(runId, st.status ?? '', st.steps ?? {}, st.result);
+	}
+
+	async #consumeWorkflow(stream: ReadableStream<MastraChunk>): Promise<void> {
+		let suspended = false;
+		let terminalHandled = false;
+		for await (const chunk of iterateStream(stream)) {
+			this.#apply((s) => reduceWorkflowChunk(s, chunk));
+			const stepId = (chunk.payload as { id?: unknown } | undefined)?.id;
+			if (
+				chunk.type === 'workflow-step-suspended' &&
+				(stepId === 'approve-plan' || stepId === 'clarify')
+			) {
+				suspended = true;
+			}
+			if (
+				chunk.type === 'workflow-step-result' &&
+				(stepId === 'search-literature' || stepId === 'assign-citations')
+			) {
+				void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.sources(this.#threadId) });
+			}
+			if (
+				!suspended &&
+				!terminalHandled &&
+				(chunk.type === 'workflow-finish' || chunk.type === 'workflow-canceled')
+			) {
+				terminalHandled = true;
+				await this.#reconcileDeepTerminal(chunk.runId ?? this.#deepRun?.runId);
+			}
+		}
+	}
+
+	/** Keep the runId if the run is still alive server-side (→ poll re-attach recovers it). */
+	async #clearDeepRunIdUnlessAlive(runId: string | undefined): Promise<boolean> {
+		if (!runId) return false;
+		const status = await this.#deepRunStatus(runId);
+		if (status === 'running' || status === 'suspended' || status === 'waiting') return true;
+		this.#deepRun = null;
+		if (status === '') this.#bumpReattach();
+		if (status === '' || status === 'failed') return false; // failed key = B1 recovery, keep it
+		clearDeepRunId(this.#threadId);
+		return false;
+	}
+
+	#maybeReattachAfterStreamClose(runId: string): void {
+		if (this.#deepRun?.runId !== runId) return; // normal terminal → runId already cleared
+		if (this.#timeline.planGate || this.#timeline.askGate) return; // normal suspend-close (HITL)
+		this.#bumpReattach();
+	}
+
+	async sendDeep(question: string, opts: SendOptions = {}): Promise<void> {
+		const resourceId = this.#getResourceId();
+		if (!resourceId || !question.trim()) return;
+		const agentKind: AgentKind = opts.agentKind ?? 'lite';
+		if (this.status !== 'ready') {
+			// `/deep` is always CLIENT queue — the Workflow isn't over the thread-stream runtime.
+			await this.#enqueueWhileBusy({
+				mode: 'deep',
+				text: question,
+				display: opts.richText ?? question,
+				clientContext: opts.clientContext,
+				richText: opts.richText,
+				attachmentIds: opts.attachmentIds,
+				agentKind
+			});
+			return;
+		}
+		this.#commitAgentKind(agentKind);
+		this.#lastSend = {
+			mode: 'deep',
+			text: question,
+			clientContext: opts.clientContext,
+			richText: opts.richText,
+			attachmentIds: opts.attachmentIds,
+			agentKind
+		};
+		const turnSeed = `${this.#threadId}:${this.#now()}`;
+		const display = opts.richText ?? question;
+		this.#apply((s) => startAssistantTurn(s, display, turnSeed, opts.attachmentIds));
+		try {
+			const run = await this.#workflow().createRun({ resourceId });
+			this.#deepRun = run;
+			this.#deepFailed = null;
+			this.#deepNotice = null;
+			setDeepRunId(this.#threadId, run.runId);
+			const inputData: Record<string, unknown> = {
+				question,
+				threadId: this.#threadId,
+				agentKind
+			};
+			if (opts.richText && opts.richText !== question) inputData.displayQuestion = opts.richText;
+			if (opts.clientContext && opts.clientContext.length > 0)
+				inputData.context = opts.clientContext.join('\n\n');
+			const stream = await run.stream({ inputData, closeOnSuspend: true });
+			await this.#consumeWorkflow(stream);
+			this.#maybeReattachAfterStreamClose(run.runId);
+		} catch (err) {
+			if (await this.#clearDeepRunIdUnlessAlive(this.#deepRun?.runId)) {
+				this.#bumpReattach();
+				return;
+			}
+			this.#apply((s) => ({
+				...settleAssistantTurn(s),
+				error: readableApiErrorMessage(err, 'Gagal memulai riset mendalam.')
+			}));
+		}
+	}
+
+	async resolvePlan(approved: boolean, edits?: string): Promise<void> {
+		const run = this.#deepRun;
+		if (!run) {
+			this.#apply((s) => ({ ...settleAssistantTurn(s), planGate: undefined }));
+			return;
+		}
+		this.#apply((s) => ({ ...s, planGate: undefined, status: approved ? 'streaming' : 'ready' }));
+		try {
+			const stream = await run.resumeStream({
+				step: 'approve-plan',
+				resumeData: { approved, ...(edits ? { edits } : {}) }
+			});
+			await this.#consumeWorkflow(stream);
+			this.#maybeReattachAfterStreamClose(run.runId);
+		} catch (err) {
+			if (await this.#clearDeepRunIdUnlessAlive(run.runId)) {
+				this.#bumpReattach();
+				return;
+			}
+			this.#apply((s) => ({
+				...settleAssistantTurn(s),
+				error: readableApiErrorMessage(err, 'Gagal melanjutkan riset mendalam.')
+			}));
+		}
+	}
+
+	dismissDeepFailure(): void {
+		this.#deepFailed = null;
+		clearDeepRunId(this.#threadId);
+		this.#deepRun = null;
+	}
+
+	dismissDeepNotice(): void {
+		this.#deepNotice = null;
+	}
+
+	/** DUR-5: restart a stalled run from its last active step (`.restart`), snapshot-based. */
+	async restartDeep(): Promise<void> {
+		const resourceId = this.#getResourceId();
+		if (!resourceId) return;
+		const runId = this.#deepRun?.runId ?? getDeepRunId(this.#threadId);
+		if (!runId) return;
+		this.#deepStalled = null;
+		try {
+			const run = await this.#workflow().createRun({ runId, resourceId });
+			this.#deepRun = run;
+			await run.restart({});
+			this.#bumpReattach();
+		} catch (err) {
+			if ((await this.#deepRunStatus(runId)) === 'pending') {
+				this.#apply((s) => ({
+					...s,
+					error: 'Run riset ini belum pernah mulai. Hentikan, lalu kirim ulang pertanyaannya.'
+				}));
+				return;
+			}
+			this.#apply((s) => ({
+				...s,
+				error: readableApiErrorMessage(err, 'Gagal memulai ulang riset mendalam.')
+			}));
+		}
+	}
+
+	/** B1: retry a failed run FROM the failed step via time-travel (`.timeTravelStream`) — no new debit. */
+	async retryDeep(): Promise<void> {
+		const failure = this.#deepFailed;
+		const resourceId = this.#getResourceId();
+		if (!resourceId || !failure) return;
+		if (this.status !== 'ready') return;
+		const stepId = failure.stepId;
+		if (!stepId) {
+			this.dismissDeepFailure();
+			this.#apply((s) => ({
+				...s,
+				error: 'Tidak bisa menentukan langkah yang gagal. Coba buat ulang jawabannya.'
+			}));
+			return;
+		}
+		this.#deepFailed = null;
+		try {
+			const run = await this.#workflow().createRun({ runId: failure.runId, resourceId });
+			this.#deepRun = run;
+			setDeepRunId(this.#threadId, failure.runId);
+			this.#apply((s) => reviveWorkflowTurn(s, failure.runId));
+			const stream = await run.timeTravelStream({ step: stepId });
+			await this.#consumeWorkflow(stream);
+			this.#maybeReattachAfterStreamClose(failure.runId);
+		} catch (err) {
+			const snap = await this.#fetchDeepRun(failure.runId);
+			const status = snap?.status ?? '';
+			if (status === 'running' || status === 'suspended' || status === 'waiting') {
+				this.#bumpReattach();
+				return;
+			}
+			if (status === 'success' || status === 'canceled') {
+				this.#applyDeepTerminal(failure.runId, status, snap?.steps ?? {}, snap?.result);
+				return;
+			}
+			this.#deepFailed = failure;
+			this.#apply((s) => ({
+				...settleWorkflowTurn(s, failure.runId),
+				error: readableApiErrorMessage(err, 'Gagal mengulang riset mendalam.')
+			}));
+		}
+	}
+
+	// ── `/deep` re-attach poll (runById, step-level) ────────────────────────────────────────────────
+
+	/** FE-5: re-run the re-attach poll without waiting for a manual refresh (stream broke, run alive). */
+	#bumpReattach(): void {
+		this.#scheduleReattach();
+	}
+
+	#scheduleReattach(): void {
+		if (this.#pollToken) this.#pollToken.cancelled = true;
+		const token: PollToken = { cancelled: false };
+		this.#pollToken = token;
+		void this.#reattachPoll(token);
+	}
+
+	async #reattachPoll(token: PollToken): Promise<void> {
+		const resourceId = this.#getResourceId();
+		if (!resourceId) return;
+		let runId = getDeepRunId(this.#threadId);
+		if (!runId) {
+			const msgs = this.#timeline.messages;
+			const last = msgs[msgs.length - 1];
+			if (!last || last.role !== 'user') return;
+			runId = await discoverDeepRunId(this.#getClient(), this.#threadId, resourceId);
+			if (token.cancelled) return;
+			if (!runId) {
+				setTimeout(() => {
+					if (token.cancelled) return;
+					const m = this.#timeline.messages;
+					const l = m[m.length - 1];
+					if (this.status !== 'ready' || !l || l.role !== 'user') return;
+					this.#apply((s) =>
+						s.status === 'ready' && !s.error ? { ...s, error: DANGLING_TURN_ERROR } : s
+					);
+				}, 5000);
+				return;
+			}
+			setDeepRunId(this.#threadId, runId);
+		}
+		// Immediate "working" indicator if the turn genuinely dangles.
+		this.#apply((s) => {
+			if (s.status !== 'ready') return s;
+			const l = s.messages[s.messages.length - 1];
+			return l && l.role === 'user' ? { ...s, status: 'submitted' } : s;
+		});
+		const rid = runId;
+		const wf = this.#workflow();
+		let errors = 0;
+		let sourcesSeeded = false;
+		let sourcesRefreshed = false;
+		let progressSig = '';
+		let progressAt = Date.now();
+		while (!token.cancelled) {
+			const wfState = await this.#fetchDeepRun(rid);
+			if (token.cancelled) return;
+			if (!wfState) {
+				errors += 1;
+				if (errors >= 8) {
+					this.#apply((s) => settleAssistantTurn(s));
+					return;
+				}
+				await delay(2500);
+				continue;
+			}
+			errors = 0;
+			const status = wfState.status;
+			const steps = wfState.steps ?? {};
+			if (status === 'suspended') {
+				this.#deepStalled = null;
+				if (this.#deepRun === null) {
+					this.#deepRun = await wf.createRun({ runId: rid, resourceId });
+				}
+				const clarifyStep = steps['clarify'];
+				if (clarifyStep?.status === 'suspended' && clarifyStep.suspendPayload) {
+					const questions = normalizeAskQuestions(clarifyStep.suspendPayload.questions);
+					if (questions.length === 0) {
+						this.#apply((s) => settleWorkflowTurn(seedWorkflowProgress(s, rid, steps), rid));
+						return;
+					}
+					const findings = clarifyStep.suspendPayload.findings;
+					this.#apply((s) => ({
+						...seedWorkflowProgress(s, rid, steps),
+						askGate: {
+							source: 'workflow',
+							questions,
+							...(typeof findings === 'string' && findings ? { findings } : {}),
+							runId: rid
+						}
+					}));
+					return;
+				}
+				const sp = steps['approve-plan']?.suspendPayload ?? {};
+				const subQuestions = Array.isArray(sp.subQuestions)
+					? sp.subQuestions.filter((x): x is string => typeof x === 'string')
+					: [];
+				this.#apply((s) => ({
+					...seedWorkflowProgress(s, rid, steps),
+					planGate: { plan: typeof sp.plan === 'string' ? sp.plan : '', subQuestions }
+				}));
+				return;
+			}
+			if (status === 'success' || status === 'failed' || status === 'canceled') {
+				this.#applyDeepTerminal(rid, status, steps, wfState.result);
+				return;
+			}
+			// Stop during RUNNING cleared/changed the key → settle & exit; don't re-seed progress.
+			if (getDeepRunId(this.#threadId) !== rid) {
+				this.#deepStalled = null;
+				this.#apply((s) => settleWorkflowTurn(s, rid));
+				return;
+			}
+			this.#apply((s) => seedWorkflowProgress(s, rid, steps));
+			const sig = `${status}|${Object.entries(steps)
+				.map(([id, st]) => `${id}:${String(st?.status ?? '')}`)
+				.sort()
+				.join(',')}`;
+			if (sig !== progressSig) {
+				progressSig = sig;
+				progressAt = Date.now();
+				this.#deepStalled = null;
+			} else if (status === 'running' || status === 'waiting' || status === 'pending') {
+				const heavyStep = activeHeavyDeepStep(steps);
+				if (Date.now() - progressAt >= (heavyStep ? DEEP_HEAVY_STALL_MS : DEEP_STALL_MS)) {
+					this.#deepStalled =
+						(heavyStep && DEEP_HEAVY_STEP_MESSAGE[heavyStep]) || DEEP_STALL_MESSAGE;
+				}
+			}
+			if (!sourcesSeeded && steps['search-literature']) {
+				sourcesSeeded = true;
+				void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.sources(this.#threadId) });
+			}
+			if (!sourcesRefreshed && steps['search-literature']?.status === 'success') {
+				sourcesRefreshed = true;
+				void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.sources(this.#threadId) });
+			}
+			await delay(2500);
 		}
 	}
 

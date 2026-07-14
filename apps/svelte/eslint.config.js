@@ -110,5 +110,23 @@ export default defineConfig(
 		rules: {
 			'svelte/no-navigation-without-resolve': 'off'
 		}
+	},
+	{
+		// Thread source cards / inline citations render EXTERNAL research URLs — a dynamic `href` to an
+		// arbitrary domain (paper/web/DOI), opened in a new tab. resolve() models internal SvelteKit
+		// route ids only, so it cannot apply here. Same precedent as vendored `ui/**` + `marketing/**` +
+		// `settings/**` above; the hrefs stay a clean 1:1 diff with `apps/web`.
+		files: [
+			'src/lib/components/ai-elements/InlineCitation.svelte',
+			'src/lib/features/threads/components/SourceCardList.svelte',
+			'src/lib/features/threads/components/SourceLinkList.svelte',
+			'src/lib/features/threads/components/SourceLinkRow.svelte',
+			'src/lib/features/threads/components/SourcesPanel.svelte',
+			'src/lib/features/threads/components/deep-viz/SourceCardList.svelte',
+			'src/lib/features/threads/components/deep-viz/PaperPills.svelte'
+		],
+		rules: {
+			'svelte/no-navigation-without-resolve': 'off'
+		}
 	}
 );

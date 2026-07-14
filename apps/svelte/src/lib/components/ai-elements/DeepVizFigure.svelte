@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { parseDeepVizBlock, type DeepVizBlock } from '@aqsha/chat-core/deep-viz';
+	import type { SourceCardData } from '$lib/features/threads/lib/timeline-types';
+	import VizFigureBody from '$lib/features/threads/components/deep-viz/VizFigureBody.svelte';
 	import type { VizFigureAssign } from './contexts';
 
 	// `<deepviz payload>` gate — port of `DeepVizMarkdownComponent` / `viz-block.tsx`. ANTI-FORGERY:
@@ -7,26 +9,23 @@
 	// by `Response` only when `viz={true}`).
 	//   1. no assigner (ordinary chat) → render the raw payload as PLAIN CODE (a forged fence never a figure).
 	//   2. present, payload corrupt/unknown → compact fallback (not a crash), raw JSON in <details>.
-	//   3. valid → the gated figure frame (figure number = block.figure ?? assign(block.id)).
-	// The rich chart bodies (consensus meter, claims-evidence, …) are Phase 7 (THX-4); Phase 6 renders
-	// the anti-forgery-gated frame + caption.
+	//   3. valid → the RICH gated figure (THX-4 `VizFigureBody`: consensus meter / timeline / claims / …),
+	//      figure number = block.figure ?? assign(block.id). The citation map is threaded to PaperPills.
+	// A per-block error boundary keeps one bad chart from tearing down the whole report.
 
-	let { token, figureAssign }: { token: { payload?: string }; figureAssign?: VizFigureAssign } =
-		$props();
+	let {
+		token,
+		figureAssign,
+		citations
+	}: {
+		token: { payload?: string };
+		figureAssign?: VizFigureAssign;
+		citations?: Map<number, SourceCardData[]>;
+	} = $props();
 
 	const payload = $derived(typeof token.payload === 'string' ? token.payload : '');
 	const assignFigure = $derived(figureAssign);
 	const block = $derived<DeepVizBlock | null>(payload ? parseDeepVizBlock(payload) : null);
-
-	// Human title per block type (mirror intent of web VIZ_TITLES; rich rendering = Phase 7).
-	const TITLES: Record<string, string> = {
-		'consensus-meter': 'Konsensus bukti',
-		'results-timeline': 'Lini masa hasil',
-		'top-contributors': 'Kontributor utama',
-		'claims-evidence': 'Klaim & bukti',
-		'gaps-matrix': 'Matriks celah',
-		'open-questions': 'Pertanyaan terbuka'
-	};
 </script>
 
 {#if !assignFigure}
@@ -46,15 +45,12 @@
 {:else}
 	{@const figure = block.figure ?? assignFigure(block.id)}
 	<svelte:boundary>
-		<figure class="deep-viz not-prose my-4 rounded-xl border p-4">
-			<div class="text-sm font-semibold">{TITLES[block.type] ?? 'Visualisasi bukti'}</div>
-			<figcaption class="mt-2 text-xs text-muted-foreground">Gambar {figure}</figcaption>
-		</figure>
+		<VizFigureBody {figure} {block} {citations} />
 		{#snippet failed()}
 			<div
-				class="not-prose my-4 rounded-xl border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground"
+				class="not-prose my-4 rounded-xl border border-dashed bg-muted/30 p-3 text-[12px] text-muted-foreground"
 			>
-				Visualisasi tidak dapat ditampilkan.
+				<p>Visual tidak dapat dimuat.</p>
 			</div>
 		{/snippet}
 	</svelte:boundary>

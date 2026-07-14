@@ -3,6 +3,7 @@
 	import { Streamdown } from 'svelte-streamdown';
 	import type { StatsGroup } from '@aqsha/chat-core/stats-viz';
 	import { cn } from '$lib/utils';
+	import { useSmoothText } from '$lib/features/threads/lib/smooth-text.svelte';
 	import type { SourceCardData } from '$lib/features/threads/lib/timeline-types';
 	import { aqshaMarkdownExtensions } from './markdown-extensions';
 	import { createNumberer, type StatsVizContextValue } from './contexts';
@@ -57,6 +58,13 @@
 			: undefined
 	);
 
+	// Smooth character reveal while streaming (mirror web `response.tsx`); the full text shows at once
+	// once settled. `parseIncompleteMarkdown` keeps half-formed markdown from flashing during the reveal.
+	const smooth = useSmoothText(
+		() => text,
+		() => streaming
+	);
+
 	// `[data-streamdown]` wrapper → the Phase 3 golden CSS (prose/table/citation) applies as descendant
 	// selectors (§9.1 point 4). Web `MessageResponse` classes preserved.
 	const WRAP = $derived(
@@ -70,7 +78,7 @@
 
 <div data-streamdown data-streaming={streaming || undefined} class={WRAP}>
 	<Streamdown
-		content={text}
+		content={smooth.current}
 		baseTheme="shadcn"
 		parseIncompleteMarkdown={true}
 		allowedLinkPrefixes={['https://', 'http://', 'mailto:', '/']}
@@ -84,7 +92,11 @@
 			{#if token.type === 'aqsha-stats'}
 				<StatsVizFigure token={token as { runKey?: string }} stats={statsValue} />
 			{:else if token.type === 'aqsha-viz'}
-				<DeepVizFigure token={token as { payload?: string }} figureAssign={vizFigureAssign} />
+				<DeepVizFigure
+					token={token as { payload?: string }}
+					figureAssign={vizFigureAssign}
+					{citations}
+				/>
 			{/if}
 		{/snippet}
 	</Streamdown>
