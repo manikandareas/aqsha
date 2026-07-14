@@ -25,7 +25,16 @@ const config = {
 	kit: {
 		// Node server behind Dokploy (plan §2). ORIGIN/PROTOCOL_HEADER/HOST_HEADER
 		// + trustedOrigins are configured at deploy time (Phase 12).
-		adapter: adapter()
+		adapter: adapter(),
+
+		// Content Collections generated module (blog/changelog). Alias declared here (not tsconfig
+		// `paths`) because SvelteKit regenerates `.svelte-kit/tsconfig.json` and overwrites app `paths`;
+		// `kit.alias` is the supported way to add both the Vite + tsc alias. The `@content-collections/vite`
+		// plugin generates the folder on dev/build; `content-collections build` (scripts) generates it
+		// ahead of typecheck/test. See docs/migration/apps-svelte-phase4-decision-record.md.
+		alias: {
+			'content-collections': './.content-collections/generated'
+		}
 	}
 };
 

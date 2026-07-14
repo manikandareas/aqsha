@@ -3,6 +3,7 @@ import { playwright } from '@vitest/browser-playwright';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { sentrySvelteKit } from '@sentry/sveltekit';
+import contentCollections from '@content-collections/vite';
 
 // SvelteKit/Svelte config (adapter, runes, preprocess) lives in svelte.config.js
 // so shadcn-svelte CLI / Sentry / editor tooling read one source of truth.
@@ -17,6 +18,14 @@ const sentrySourcemapUpload = Boolean(
 export default defineConfig({
 	plugins: [
 		tailwindcss(),
+		// Content Collections (blog/changelog) — generate `.content-collections/generated` saat
+		// dev/build + watch konten. HARUS sebelum sveltekit(). Runtime alias `content-collections`
+		// juga dipasang di svelte.config.js `kit.alias` agar svelte-check/tsc me-resolve tipe generated
+		// (SvelteKit menimpa tsconfig `paths` → alias WAJIB lewat kit.alias, bukan tsconfig). Renderer =
+		// compileMarkdown → HTML string (lihat content-collections.ts). Build tooling → devDependency.
+		// DILEWATI di vitest: test memakai generated folder yang sudah di-build (prefiks script test),
+		// dan watcher plugin mencegah proses vitest exit bersih ("close timed out").
+		...(process.env.VITEST ? [] : [contentCollections()]),
 		// sentrySvelteKit() → Promise<Plugin[]>; Vite meng-await elemen plugin (PluginOption menerima
 		// Promise), jadi tak perlu async defineConfig. `autoInstrument:false`: kita tak trace
 		// (tracesSampleRate 0) → tak perlu wrap load functions; plugin murni untuk source map. Harus

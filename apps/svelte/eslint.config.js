@@ -85,5 +85,17 @@ export default defineConfig(
 		rules: {
 			'svelte/no-navigation-without-resolve': 'off'
 		}
+	},
+	{
+		// Marketing landing nav is anchor-heavy (`/#bandingin`, `/#pricing`) + query links
+		// (`/sign-up?plan=...`) that resolve() does not model, and Aqsha deploys at domain root
+		// (no base path) so resolve()'s only job — prepending `base` — is a no-op here. Keeping the
+		// hrefs literal (identical to `apps/web/features/marketing/**`) also keeps the port a clean
+		// 1:1 diff for parity review. Same precedent as vendored `ui/**` above. Blog/changelog routes
+		// (real dynamic nav) keep the rule ON and use resolve() properly.
+		files: ['src/lib/features/marketing/**'],
+		rules: {
+			'svelte/no-navigation-without-resolve': 'off'
+		}
 	}
 );

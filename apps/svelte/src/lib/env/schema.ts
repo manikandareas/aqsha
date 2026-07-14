@@ -18,7 +18,9 @@ const publicEnvSchema = z.object({
 	PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: z.string().min(1),
 	PUBLIC_API_URL: z.url('PUBLIC_API_URL harus URL valid'),
 	PUBLIC_SENTRY_DSN: z.string().nullable(),
-	PUBLIC_SENTRY_ENVIRONMENT: z.string().min(1)
+	PUBLIC_SENTRY_ENVIRONMENT: z.string().min(1),
+	PUBLIC_SITE_URL: z.url('PUBLIC_SITE_URL harus URL valid'),
+	PUBLIC_SEO_ALLOW_INDEXING: z.enum(['true', 'false'])
 });
 
 export type PrivateEnv = {

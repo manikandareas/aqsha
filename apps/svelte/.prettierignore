@@ -7,3 +7,9 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# Content Collections source (blog/changelog) — SoT konten disalin verbatim dari apps/web; jangan
+# di-reformat (jaga byte-parity + hindari perubahan render markdown soft-wrap).
+/content/
+# Generated Content Collections module.
+/.content-collections/

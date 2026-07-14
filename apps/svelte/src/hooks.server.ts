@@ -6,6 +6,7 @@ import { serverEnv } from '$lib/server/env';
 import { publicEnv } from '$lib/env/public';
 import { createServerApiClient } from '$lib/server/api';
 import { initServerSentry } from '$lib/observability';
+import { seoAllowIndexing } from '$lib/seo/config';
 
 // Boot (§3.7 fail-fast): mengimpor `$lib/server/env` sudah menjalankan validasi zod SEMUA env
 // (PUBLIC + PRIVATE); env salah → throw saat server start. Lalu init Sentry server SDK.
@@ -29,6 +30,7 @@ const PUBLIC_PATTERNS: RegExp[] = [
 	/^\/changelog(?:\/.*)?$/,
 	/^\/sitemap\.xml$/,
 	/^\/robots\.txt$/,
+	/^\/manifest\.webmanifest$/,
 	/^\/sentry-tunnel(?:\/.*)?$/
 ];
 
@@ -69,8 +71,25 @@ const guard: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
-// sentryHandle FIRST (trace seluruh request termasuk handler kita), lalu clerk, lalu guard.
-export const handle = sequence(Sentry.sentryHandle(), clerk, guard);
+/**
+ * Security headers + preview-noindex (§10 Phase 4 task 7). `apps/web` tak menyetel header/CSP/redirect
+ * (next.config.ts kosong dari itu) → tak ada yang di-port; ini hardening baseline additif + gate index.
+ * Innermost supaya berjalan atas respons yang benar-benar dirender (redirect guard tak butuh header ini).
+ * CSP tak diperketat (parity web yang tak punya CSP; risiko pecah Clerk/Sentry/streamdown). Sanitasi
+ * konten = MDX build-time trusted (Content Collections) + escaping default Svelte.
+ */
+const securityHeaders: Handle = async ({ event, resolve }) => {
+	const response = await resolve(event);
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+	// Preview deployment: cegah index sampai cutover (flip domain set PUBLIC_SEO_ALLOW_INDEXING=true).
+	if (!seoAllowIndexing) response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+	return response;
+};
+
+// sentryHandle FIRST (trace seluruh request termasuk handler kita), lalu clerk, guard, headers.
+export const handle = sequence(Sentry.sentryHandle(), clerk, guard, securityHeaders);
 
 /**
  * Server-side authenticated fetch (§3.6): suntik token Clerk untuk panggilan `event.fetch` ke origin

@@ -15,11 +15,22 @@
 
 Di-wire di `src/routes/+layout.svelte` (`<svelte:head>` icon links). Manifest/robots/sitemap handler = Phase 4 (`+server.ts`).
 
+## Disalin Phase 4 (bareng consumer marketing/error/SEO)
+
+| Source (`apps/web`) | Target (`apps/svelte/static`) | Consumer |
+|---|---|---|
+| `public/landing/{hero-frame,frame-workspace,frame-astra,frame-citations,frame-provenance}.png` | `landing/*.png` (5 file, ~3.5MB each) | Hero + FeatureFrame (MKT-1) |
+| `public/error.png` | `error.png` | ErrorStatePage generic (task 7) |
+| `public/not-found.png` | `not-found.png` | ErrorStatePage 404 (task 7) |
+| — (generatif satori+resvg, one-off) | `og.png` (1200×630) | OG/Twitter card (MKT-6); padanan `app/opengraph-image.tsx` dinamis, dijadikan STATIS (nol runtime dep). Regen: `scripts/generate-og.mjs`. |
+
+`content/{blog,changelog}/*.mdx` disalin verbatim ke `apps/svelte/content/` (SoT konten; di-`.prettierignore`).
+
 ## Belum disalin (per-fase, bareng consumer)
 
-Bulk marketing/brand (`app/icon0.svg` 1.1MB, `public/pro-card.png` 1.5MB, `whimsical-floating-paper.png` 1.6MB,
-`logo-*.png`, `public/landing/**`, illustration SVG, `error.png`/`not-found.png`) **disalin saat surface konsumennya
-diport** (Phase 4 marketing, Phase 3 shell) agar diff tetap terukur. `next.svg`/`vercel.svg` **tidak** dibawa (artefak Next).
+Bulk brand sisa (`app/icon0.svg` 1.1MB, `public/pro-card.png` 1.5MB, `whimsical-floating-paper.png` 1.6MB,
+`logo-*.png`, illustration SVG) **disalin saat surface konsumennya diport** (Phase 8/9) agar diff tetap terukur.
+`next.svg`/`vercel.svg` **tidak** dibawa (artefak Next).
 
 ## Font self-host (spec — file + `@font-face` di Phase 3)
 

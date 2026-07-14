@@ -2,6 +2,7 @@
 	import '../app.css';
 	import type { Snippet } from 'svelte';
 	import { ClerkProvider } from 'svelte-clerk';
+	import { shadcn } from '@clerk/themes';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { publicEnv } from '$lib/env/public';
@@ -24,6 +25,7 @@
 	<link rel="icon" href="/favicon.ico" sizes="any" />
 	<link rel="icon" type="image/png" href="/icon.png" />
 	<link rel="apple-touch-icon" href="/apple-icon.png" />
+	<link rel="manifest" href="/manifest.webmanifest" />
 </svelte:head>
 
 <!-- Provider order mirrors apps/web/app/layout.tsx exactly:
@@ -31,7 +33,11 @@
      AppToaster is a sibling of OnboardingGate inside ThemeProvider so toasts render during the
      onboarding-gate loading window (padanan web AppToaster placement). `{...data}` = svelte-clerk
      initialState spread (Phase 1 finding). -->
-<ClerkProvider {...data} publishableKey={publicEnv.PUBLIC_CLERK_PUBLISHABLE_KEY}>
+<ClerkProvider
+	{...data}
+	publishableKey={publicEnv.PUBLIC_CLERK_PUBLISHABLE_KEY}
+	appearance={{ theme: shadcn }}
+>
 	<QueryClientProvider client={queryClient}>
 		<AppProviders>
 			<ThemeProvider>
