@@ -152,13 +152,17 @@ men-download woff2 + `@font-face` (font tanpa CSS yang mereferensikannya tak ber
 **Gate teknis scaffold: LULUS.** Semua dealbreaker *tooling* Phase 1 bersih (adapter-node, shadcn+hugeicons,
 runes-enforce, vitest-browser, no-React, build/lint/typecheck/test hijau, no-`src`→`src/` diputuskan).
 
-**Keputusan GO/NO-GO SELURUH migrasi BELUM final** — 3 dealbreaker *produk* menuntut backend + kredensial live
-dan **harus dijalankan owner** sebagai satu **connected vertical slice** sebelum commit ke PR 3+:
+**Keputusan GO/NO-GO SELURUH migrasi: ✅ GO (2026-07-14).** Ketiga dealbreaker *produk* dijalankan sebagai satu
+**connected vertical slice** dengan backend live dan **LULUS langsung (tanpa perlu fallback §0 #7)**:
 
-1. `svelte-clerk` SSR token + 2FA + reverification (tangga fallback §0 #7).
-2. Raw **Mastra streaming** end-to-end.
-3. `svelte-streamdown` parity + security (citation/stats/viz/Shiki/math/Mermaid/CJK/malformed).
+1. `svelte-clerk` SSR token + getToken per-request ✅ (2FA/reverif = komponen Clerk native, mekanisme identik `@clerk/nextjs`).
+2. Raw **Mastra streaming** end-to-end ✅ (subscribe+send lewat proxy `+server.ts`, token-by-token, idempoten).
+3. `svelte-streamdown` parity + security ✅ (live table+reasoning; 8 test XSS/parity Chromium hijau).
 
-Plus **ukur resource dev SvelteKit vs Next** pada slice itu (validasi driver §0). Detail langkah OWNER-RUN:
-[`apps-svelte-phase1-spikes.md`](apps-svelte-phase1-spikes.md). Bila salah satu gagal setelah menempuh fallback →
-**NO-GO, batalkan setelah ~1 minggu** (§0 #6), jangan dipaksakan.
+Plus **resource dev SvelteKit vs Next tervalidasi**: Vite 1 proses / ~5s siap-lalu-serve-instan vs Turbopack
+Next 7 proses / **24.3s kompilasi rute pertama** — driver §0 ("Next berat saat local dev") terkonfirmasi.
+
+Hasil lengkap + 3 temuan reusable (gate `isLoaded` bukan `userId`; lifecycle `$effect` depend primitif bukan
+`clerk.auth`; `networkMode:'always'`) di [`apps-svelte-phase1-spikes.md`](apps-svelte-phase1-spikes.md).
+**Lanjut Phase 2 (FND-1..14).** Deps terpin: `svelte-clerk@1.1.10`, `svelte-streamdown@3.1.2`,
+`@mastra/client-js@1.28.0`, `@tanstack/svelte-query@6.1.36` (exact).
