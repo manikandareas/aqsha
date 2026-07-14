@@ -4,6 +4,7 @@
 	import { useClerkContext } from 'svelte-clerk';
 	import { createQuery } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button';
+	import { SidebarTrigger } from '$lib/components/ui/sidebar';
 	import { createBrowserApiClient } from '$lib/api/client';
 	import { clerkTokenGetter } from '$lib/auth/token';
 
@@ -38,10 +39,15 @@
 </script>
 
 <main class="mx-auto flex min-h-svh max-w-2xl flex-col gap-6 p-8">
-	<header class="flex items-center justify-between">
-		<div>
-			<h1 class="text-xl font-semibold text-foreground">Percakapan</h1>
-			<p class="text-sm text-muted-foreground">Eden Treaty + svelte-query (per-request client).</p>
+	<header class="flex items-center justify-between gap-3">
+		<div class="flex items-center gap-2">
+			<SidebarTrigger />
+			<div>
+				<h1 class="text-xl font-semibold text-foreground">Percakapan</h1>
+				<p class="text-sm text-muted-foreground">
+					Eden Treaty + svelte-query (per-request client).
+				</p>
+			</div>
 		</div>
 		<Button onclick={newThread}>Percakapan baru</Button>
 	</header>

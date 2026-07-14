@@ -3,9 +3,14 @@
 	import type { Snippet } from 'svelte';
 	import { ClerkProvider } from 'svelte-clerk';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { publicEnv } from '$lib/env/public';
 	import { createQueryClient } from '$lib/query';
 	import AppProviders from '$lib/components/layout/AppProviders.svelte';
+	import ThemeProvider from '$lib/components/layout/ThemeProvider.svelte';
+	import OnboardingGate from '$lib/components/layout/OnboardingGate.svelte';
+	import MotionProvider from '$lib/components/layout/MotionProvider.svelte';
+	import AppToaster from '$lib/components/layout/AppToaster.svelte';
 	import type { LayoutData } from './$types';
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
@@ -21,13 +26,24 @@
 	<link rel="apple-touch-icon" href="/apple-icon.png" />
 </svelte:head>
 
-<!-- `{...data}` (not initialState={...}) is the svelte-clerk quickstart pattern: the exported
-     ClerkProvider type omits `initialState`, but the runtime reads it; object spread bypasses the
-     excess-property check the way `<ClerkProvider {...buildClerkProps(...)}>` is meant to. -->
+<!-- Provider order mirrors apps/web/app/layout.tsx exactly:
+     Clerk > Query > (runtime api/viewer + UserSync) > Theme > OnboardingGate > Motion > Tooltip > page.
+     AppToaster is a sibling of OnboardingGate inside ThemeProvider so toasts render during the
+     onboarding-gate loading window (padanan web AppToaster placement). `{...data}` = svelte-clerk
+     initialState spread (Phase 1 finding). -->
 <ClerkProvider {...data} publishableKey={publicEnv.PUBLIC_CLERK_PUBLISHABLE_KEY}>
 	<QueryClientProvider client={queryClient}>
 		<AppProviders>
-			{@render children()}
+			<ThemeProvider>
+				<OnboardingGate>
+					<MotionProvider>
+						<Tooltip.Provider>
+							{@render children()}
+						</Tooltip.Provider>
+					</MotionProvider>
+				</OnboardingGate>
+				<AppToaster />
+			</ThemeProvider>
 		</AppProviders>
 	</QueryClientProvider>
 </ClerkProvider>
