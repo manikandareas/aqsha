@@ -25,7 +25,9 @@
 		'data-slot': 'sidebar-menu-sub-button',
 		'data-sidebar': 'menu-sub-button',
 		'data-size': size,
-		'data-active': isActive,
+		// See sidebar-menu-button.svelte: omit when inactive so the presence selector
+		// `[data-active]` (Tailwind `data-active:`) does not match `data-active="false"`.
+		'data-active': isActive || undefined,
 		...restProps
 	});
 </script>

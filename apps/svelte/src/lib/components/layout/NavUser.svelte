@@ -6,7 +6,7 @@
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import ThemeMenuSub from './ThemeMenuSub.svelte';
 	import { Icon, LogOutIcon, MoreVerticalIcon, SettingsIcon } from '$lib/icons';
-	import { getClerk, viewerContext } from '$lib/auth';
+	import { getSignOut, viewerContext } from '$lib/auth';
 
 	/**
 	 * User menu in the sidebar footer — ported 1:1 from apps/web/components/nav-user.tsx.
@@ -19,8 +19,11 @@
 	const viewer = viewerContext.get();
 	const display = $derived(viewer.display({ name: 'Aqsha user', email: 'Signed in' }));
 
+	// Captured at init (getContext is init-only) so the handler reads a fresh, non-null clerk.
+	const clerkSignOut = getSignOut();
+
 	async function signOut() {
-		await getClerk()?.signOut();
+		await clerkSignOut();
 		await goto(resolve('/sign-in'), { invalidateAll: true });
 	}
 
@@ -86,8 +89,7 @@
 				<DropdownMenu.Separator />
 				<DropdownMenu.Item class={menuItemClass}>
 					{#snippet child({ props })}
-						<!-- Phase 3 → /app/settings (stub); Phase 5 restores web's /app/settings/overview. -->
-						<a href={resolve('/app/settings')} {...props}>
+						<a href={resolve('/app/settings/overview')} {...props}>
 							<Icon icon={SettingsIcon} />
 							<span class="truncate">Pengaturan</span>
 						</a>

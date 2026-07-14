@@ -97,5 +97,18 @@ export default defineConfig(
 		rules: {
 			'svelte/no-navigation-without-resolve': 'off'
 		}
+	},
+	{
+		// SettingsRail nav is data-driven: it maps `settingsMenu` (each item carries an exact
+		// `/app/settings/<section>` href) to `<a href={item.href}>`, so resolve() cannot be inlined
+		// per link (the rule requires a literal arg, Phase 3 gotcha). All settings routes are static
+		// and Aqsha deploys at domain root (base path empty → resolve() is a no-op), and web uses
+		// `<Link href={item.href}>` verbatim — keeping the hrefs literal is the clean 1:1 parity port.
+		// Same precedent as vendored `ui/**` + `features/marketing/**`. Shell-level links into settings
+		// (AppSidebar/NavUser) stay outside this folder and keep the rule ON with inline resolve().
+		files: ['src/lib/features/settings/**'],
+		rules: {
+			'svelte/no-navigation-without-resolve': 'off'
+		}
 	}
 );

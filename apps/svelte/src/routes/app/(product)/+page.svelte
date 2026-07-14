@@ -34,7 +34,7 @@
 	}));
 
 	function newThread() {
-		goto(resolve('/app/threads/[threadId]', { threadId: crypto.randomUUID() }));
+		goto(resolve('/app/(product)/threads/[threadId]', { threadId: crypto.randomUUID() }));
 	}
 </script>
 
@@ -61,7 +61,7 @@
 			{#each threads.data.items as t (t.id)}
 				<li>
 					<a
-						href={resolve('/app/threads/[threadId]', { threadId: t.id })}
+						href={resolve('/app/(product)/threads/[threadId]', { threadId: t.id })}
 						class="flex flex-col gap-1 px-4 py-3 hover:bg-muted/50"
 						data-sveltekit-preload-data="hover"
 					>

@@ -169,7 +169,7 @@
 				value="buka-pengaturan"
 				onSelect={() => {
 					commandOpen = false;
-					goto(resolve('/app/settings'));
+					goto(resolve('/app/settings/overview'));
 				}}
 			>
 				<Icon icon={SettingsIcon} class="size-4" />

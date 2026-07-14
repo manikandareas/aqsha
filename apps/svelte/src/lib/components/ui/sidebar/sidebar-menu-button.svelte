@@ -60,7 +60,11 @@
 		'data-slot': 'sidebar-menu-button',
 		'data-sidebar': 'menu-button',
 		'data-size': size,
-		'data-active': isActive,
+		// Omit the attribute when inactive: Tailwind's `data-active:` compiles to a PRESENCE
+		// selector `[data-active]`, and Svelte renders `data-active={false}` as the string
+		// `"false"` (attribute present) — unlike React, which omits it — so a bare boolean would
+		// light up every item. `|| undefined` drops it when inactive to match web's behavior.
+		'data-active': isActive || undefined,
 		...restProps
 	});
 </script>

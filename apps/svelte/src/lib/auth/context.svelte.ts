@@ -1,5 +1,6 @@
 import { useClerkContext, type ClerkContext } from 'svelte-clerk';
 import { clerkTokenGetter, type TokenGetter } from './token';
+import { runWithReverification } from './reverification';
 
 /**
  * Auth facade sisi CLIENT (plan §Phase 2 task 2). Feature code memakai facade ini, BUKAN
@@ -54,4 +55,49 @@ export function getAuthToken(): TokenGetter {
  */
 export function getClerk(): ClerkContext['clerk'] {
 	return useClerkContext().clerk;
+}
+
+/**
+ * Reactive `{ isLoaded, user }` facade — padanan web `useUser()` (svelte-clerk ships no such
+ * hook). The `user` is the clerk-js `UserResource` (`passwordEnabled`/`totpEnabled`/
+ * `updatePassword`/`createTOTP`/… ) used by the security panels (Phase 5). Getters, so reads in a
+ * reactive scope re-run as clerk-js loads/refreshes the user.
+ */
+export function getClerkUser(): {
+	readonly isLoaded: boolean;
+	readonly user: ClerkContext['user'];
+} {
+	const ctx = useClerkContext();
+	return {
+		get isLoaded() {
+			return ctx.isLoaded;
+		},
+		get user() {
+			return ctx.user;
+		}
+	};
+}
+
+/**
+ * Returns a stable `signOut(opts?)` bound to the current clerk context. Captures the context at
+ * init and reads `ctx.clerk` FRESH on each call — so it is safe to call from an event handler
+ * (unlike `getClerk()`, whose underlying `useClerkContext()`/`getContext()` may only run during
+ * component init) and never holds a stale (null-at-mount) clerk reference.
+ */
+export function getSignOut(): (opts?: { redirectUrl?: string }) => Promise<void> {
+	const ctx = useClerkContext();
+	return async (opts) => {
+		await ctx.clerk?.signOut(opts);
+	};
+}
+
+/**
+ * Returns a `reverify(op)` runner that wraps a sensitive clerk-js call in Clerk's step-up
+ * reverification flow (padanan web `useReverification`). Captures the clerk context here (init
+ * scope) and reads `ctx.clerk` fresh on each call, so a not-yet-loaded clerk at mount still uses
+ * the loaded instance when the user actually triggers the action.
+ */
+export function getReverification(): <T>(op: () => Promise<T>) => Promise<T> {
+	const ctx = useClerkContext();
+	return (op) => runWithReverification(ctx.clerk, op);
 }
