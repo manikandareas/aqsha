@@ -52,6 +52,9 @@
 	import { LIVE_PLAN_KEY } from '../utils/thread-panel-model';
 	import { blockedNotice, deepBlockedMessage } from '../utils/send-status';
 	import ComposerHeroState from './ComposerHeroState.svelte';
+	import HomeBannerCarousel from '$lib/components/HomeBannerCarousel.svelte';
+	import HomeExploreBento from '$lib/features/discovery/components/HomeExploreBento.svelte';
+	import ExploreHandwrittenCue from '$lib/features/discovery/components/ExploreHandwrittenCue.svelte';
 
 	/**
 	 * Mastra chat runtime surface — the V1 composition (rich composer + landing hero) over `ThreadAgent`.
@@ -63,13 +66,20 @@
 		threadId,
 		threadAgentKind = 'lite',
 		compact = false,
-		initialContent
+		initialContent,
+		bindUrlOnSend = true
 	}: {
 		agent: ThreadAgent;
 		threadId: string;
 		threadAgentKind?: 'lite' | 'pro';
 		compact?: boolean;
 		initialContent?: string;
+		/**
+		 * Whether the first send of a NEW thread soft-bumps the URL to /app/threads/<id> (default). The
+		 * Explore/reader chat panel passes `false`: it owns the thread lifecycle inside the panel and must
+		 * NOT overwrite the page URL (which carries the Explore `?q=&topic=` state).
+		 */
+		bindUrlOnSend?: boolean;
 	} = $props();
 
 	const qc = useQueryClient();
@@ -161,7 +171,7 @@
 	// bare resolve() path is sufficient — no query to preserve on the very first send.
 	let bound = untrack(() => page.url.pathname.includes('/threads/'));
 	function bumpUrl(): void {
-		if (bound) return;
+		if (!bindUrlOnSend || bound) return;
 		bound = true;
 		replaceState(resolve('/app/(product)/threads/[threadId]', { threadId }), page.state);
 	}
@@ -295,7 +305,18 @@
 					</ComposerHeroState>
 				</div>
 			</div>
+			{#if !compact}
+				<div class="mx-auto w-full max-w-2xl">
+					<HomeBannerCarousel />
+				</div>
+				<!-- Cue positioned absolute vs the landing column — top-right, diagonal between the open-panel
+				     action and the hero title. -->
+				<ExploreHandwrittenCue />
+			{/if}
 		</div>
+		{#if !compact}
+			<HomeExploreBento />
+		{/if}
 	</main>
 {:else}
 	<div class="flex h-full min-h-0 w-full flex-col">

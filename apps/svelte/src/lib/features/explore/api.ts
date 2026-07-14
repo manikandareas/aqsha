@@ -1,0 +1,24 @@
+// Explore data hooks (driven by the URL `q`).
+//  - useExploreSuggest → typeahead query suggestions (cheap LLM, cached) for the ask-bar.
+// Paper + news search itself uses the discovery feed (`features/discovery/api`).
+// Svelte port of `apps/web/features/explore/api.ts`.
+
+import { createQuery } from '@tanstack/svelte-query';
+import { getApiClient } from '$lib/api';
+import { unwrap } from '$lib/query';
+
+/** Typeahead query suggestions. Enabled only when the term is ≥ 2 chars (the server also gates). */
+export function useExploreSuggest(term: () => string) {
+	const api = getApiClient();
+	return createQuery(() => {
+		const q = term().trim();
+		return {
+			queryKey: ['explore', 'suggest', q],
+			enabled: q.length >= 2,
+			staleTime: 5 * 60_000,
+			queryFn: async () =>
+				(unwrap(await api.explore.suggest.get({ query: { q } })) as { suggestions: string[] })
+					.suggestions
+		};
+	});
+}

@@ -128,5 +128,21 @@ export default defineConfig(
 		rules: {
 			'svelte/no-navigation-without-resolve': 'off'
 		}
+	},
+	{
+		// Explore / discovery (Phase 8) render EXTERNAL research URLs (paper/publisher/DOI/OpenAlex,
+		// house-ad creatives, news source links) opened in a new tab, plus dynamic/query internal deep
+		// links (`/app/explore?topic=…`, `/app/explore/<encoded key>`) and same-page `goto(url)` URL-state
+		// writes (q/topic codec) that resolve() cannot model. Same precedent as vendored `ui/**` +
+		// `marketing/**` + `settings/**` + thread source cards above; the hrefs stay a clean 1:1 diff with
+		// `apps/web/features/{discovery,explore}/**`. Internal-only reader links still use resolve() inline.
+		files: [
+			'src/lib/features/discovery/**',
+			'src/lib/features/explore/**',
+			'src/lib/components/HomeBannerCarousel.svelte'
+		],
+		rules: {
+			'svelte/no-navigation-without-resolve': 'off'
+		}
 	}
 );
