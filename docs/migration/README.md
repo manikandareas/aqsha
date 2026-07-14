@@ -16,6 +16,9 @@ Ini bukan sistem klaim konkuren — eksekusi sequential, satu owner (§0 #2). Le
 | [`manifests/env-manifest.md`](manifests/env-manifest.md) | Env var + scope (public/private/build) + mapping `$env/dynamic/*`. |
 | [`fixtures/`](fixtures/) | Fixtures correctness-critical (timeline, citation export, upload, marquee, BlockNote) tanpa secret/PII. |
 | [`screenshots/`](screenshots/) | Capture manifest reference screenshot per surface (eyeball diff, bukan pixel-gate). |
+| [`manifests/asset-manifest.md`](manifests/asset-manifest.md) | Static asset source→target + spec self-host font (Phase 1). |
+| [`apps-svelte-phase1-decision-record.md`](apps-svelte-phase1-decision-record.md) | **Phase 1** — keputusan scaffold, versi terpin, spike findings, status GO/NO-GO. |
+| [`apps-svelte-phase1-spikes.md`](apps-svelte-phase1-spikes.md) | **Phase 1** — status tiap compatibility spike + langkah OWNER-RUN connected slice. |
 
 ## Cara pakai per phase (§15)
 

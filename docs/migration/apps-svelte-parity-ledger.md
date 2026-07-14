@@ -18,6 +18,9 @@ Kolom **Target** diisi path aktual saat porting (placeholder `apps/svelte/…` s
 
 Route→item: semua URL di [route-manifest](manifests/route-manifest.md) tercakup oleh item Phase 2 (proxy/API), Phase 3 (shell/layout/error/loading), Phase 4 (public/SEO), Phase 5 (onboarding/settings), Phase 7 (`/app`, threads), Phase 8 (explore), Phase 9 (workspaces/artifacts).
 
+**Phase 1 (scaffold + compatibility spikes): gate teknis LULUS — GO/NO-GO produk pending owner.**
+Scaffold `@aqsha/svelte` (SvelteKit `2.63` + adapter-node + shadcn-svelte `nova`/`iconLibrary hugeicons` + Tailwind v4 + Vitest `vitest-browser-svelte`) hijau: sync/typecheck/build/lint/test + adapter-node boot (HTTP 200) + contract rules anti-React/anti-Lucide terverifikasi. Dealbreaker produk (svelte-clerk SSR/2FA, Mastra streaming `FND-11`, svelte-streamdown) = **OWNER-RUN** connected slice. Detail: [decision record](apps-svelte-phase1-decision-record.md) + [spike log](apps-svelte-phase1-spikes.md).
+
 ---
 
 ## Phase 2 — Platform foundation (API, auth, env, observability, proxy)
