@@ -1,0 +1,70 @@
+/**
+ * Default + type env PUBLIC — pure, TANPA zod & TANPA `$env` (aman di client bundle). Nilai default
+ * hidup SEKALI di sini; `schema.ts` (server/test) mem-validasinya dgn zod, `public.ts` (client)
+ * memakainya untuk akses bertipe. Semua nilai runtime → `$env/dynamic/*` (§3.7), bukan `$env/static/*`.
+ */
+
+export const PUBLIC_ENV_DEFAULTS = {
+	PUBLIC_CLERK_SIGN_IN_URL: '/sign-in',
+	PUBLIC_CLERK_SIGN_UP_URL: '/sign-up',
+	PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: '/app',
+	PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: '/app',
+	PUBLIC_API_URL: 'http://localhost:3001',
+	PUBLIC_SENTRY_ENVIRONMENT: 'production'
+} as const;
+
+export type PublicEnv = {
+	PUBLIC_CLERK_PUBLISHABLE_KEY: string;
+	PUBLIC_CLERK_SIGN_IN_URL: string;
+	PUBLIC_CLERK_SIGN_UP_URL: string;
+	PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: string;
+	PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: string;
+	PUBLIC_API_URL: string;
+	/** DSN Sentry klien; `null` = disabled (SDK no-op). */
+	PUBLIC_SENTRY_DSN: string | null;
+	PUBLIC_SENTRY_ENVIRONMENT: string;
+};
+
+function pick(raw: Record<string, string | undefined>, key: string, fallback: string): string {
+	const value = raw[key];
+	return value && value.length > 0 ? value : fallback;
+}
+
+/**
+ * Terapkan default ke record env PUBLIC mentah → `PublicEnv` bertipe (TANPA validasi ketat, agar
+ * client tak crash pada nilai opsional). Validasi keras (required, format URL) dilakukan zod di
+ * `schema.ts` saat boot server (fail-fast); client menerima nilai yang sudah tervalidasi server.
+ */
+export function applyPublicDefaults(raw: Record<string, string | undefined>): PublicEnv {
+	const dsn = raw.PUBLIC_SENTRY_DSN;
+	return {
+		PUBLIC_CLERK_PUBLISHABLE_KEY: raw.PUBLIC_CLERK_PUBLISHABLE_KEY ?? '',
+		PUBLIC_CLERK_SIGN_IN_URL: pick(
+			raw,
+			'PUBLIC_CLERK_SIGN_IN_URL',
+			PUBLIC_ENV_DEFAULTS.PUBLIC_CLERK_SIGN_IN_URL
+		),
+		PUBLIC_CLERK_SIGN_UP_URL: pick(
+			raw,
+			'PUBLIC_CLERK_SIGN_UP_URL',
+			PUBLIC_ENV_DEFAULTS.PUBLIC_CLERK_SIGN_UP_URL
+		),
+		PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: pick(
+			raw,
+			'PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL',
+			PUBLIC_ENV_DEFAULTS.PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+		),
+		PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: pick(
+			raw,
+			'PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL',
+			PUBLIC_ENV_DEFAULTS.PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
+		),
+		PUBLIC_API_URL: pick(raw, 'PUBLIC_API_URL', PUBLIC_ENV_DEFAULTS.PUBLIC_API_URL),
+		PUBLIC_SENTRY_DSN: dsn && dsn.length > 0 ? dsn : null,
+		PUBLIC_SENTRY_ENVIRONMENT: pick(
+			raw,
+			'PUBLIC_SENTRY_ENVIRONMENT',
+			PUBLIC_ENV_DEFAULTS.PUBLIC_SENTRY_ENVIRONMENT
+		)
+	};
+}

@@ -3,8 +3,9 @@
 	import type { Snippet } from 'svelte';
 	import { ClerkProvider } from 'svelte-clerk';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
-	import { env } from '$env/dynamic/public';
-	import { createQueryClient } from '$lib/query/client';
+	import { publicEnv } from '$lib/env/public';
+	import { createQueryClient } from '$lib/query';
+	import AppProviders from '$lib/components/layout/AppProviders.svelte';
 	import type { LayoutData } from './$types';
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
@@ -23,8 +24,10 @@
 <!-- `{...data}` (not initialState={...}) is the svelte-clerk quickstart pattern: the exported
      ClerkProvider type omits `initialState`, but the runtime reads it; object spread bypasses the
      excess-property check the way `<ClerkProvider {...buildClerkProps(...)}>` is meant to. -->
-<ClerkProvider {...data} publishableKey={env.PUBLIC_CLERK_PUBLISHABLE_KEY}>
+<ClerkProvider {...data} publishableKey={publicEnv.PUBLIC_CLERK_PUBLISHABLE_KEY}>
 	<QueryClientProvider client={queryClient}>
-		{@render children()}
+		<AppProviders>
+			{@render children()}
+		</AppProviders>
 	</QueryClientProvider>
 </ClerkProvider>

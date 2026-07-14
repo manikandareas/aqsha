@@ -6,7 +6,13 @@
 // for information about these interfaces
 declare global {
 	namespace App {
-		// interface Error {}
+		// Normalized error payload (plan §"Error handling"): `code` menyertai `message` untuk
+		// `+error.svelte` & branch UI. Diisi `error(status, {message, code})` (expected) atau
+		// `handleError` (unexpected). Selaras bentuk appError `{ message, code, severity?, field? }`.
+		interface Error {
+			message: string;
+			code?: string;
+		}
 		// interface Locals {}  ← provided by svelte-clerk/env
 		// interface PageData {}
 		// interface PageState {}

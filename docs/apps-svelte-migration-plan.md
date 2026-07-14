@@ -207,6 +207,9 @@ apps/svelte/
 │   ├── query/
 │   ├── url-state/
 │   ├── errors/
+│   ├── env/            # ← ditambah Phase 2: env config client-safe + validasi (§3.7)
+│   ├── server/         # ← ditambah Phase 2: server-only ($lib/server enforced) — env/api/auth
+│   ├── plan/           # ← ditambah Phase 2: katalog plan browser-safe (§4.1)
 │   ├── icons/
 │   ├── observability/
 │   └── utils/
@@ -239,6 +242,8 @@ apps/svelte/
 ```
 
 Feature names sengaja mengikuti `apps/web` agar pencarian source→target mudah dan review mismatch dapat dilakukan per folder.
+
+> **Adendum Phase 2 (2026-07-14):** tiga folder `lib/` ditambahkan yang tak terantisipasi di draft §5.1 semula (§5.1 ditulis framework-agnostik): `lib/server/` (satu-satunya boundary server-only yang di-enforce compiler oleh SvelteKit via konvensi `$lib/server` — memuat `env.ts`/`api.ts`/`auth.ts`; §5.1 `api/`+`auth/` datar tak bisa memuat kode server dengan aman), `lib/env/` (env config client-safe + validasi zod, §3.7; §5.1 tak punya rumah env), dan `lib/plan/` (katalog plan browser-safe, §4.1). `utils` TETAP file `lib/utils.ts` (bukan folder) mengikuti konvensi shadcn-svelte (`components.json` `"utils": "$lib/utils"`) — library-first (§3.3), jangan lawan tooling. Detail: [`migration/apps-svelte-phase2-decision-record.md`](migration/apps-svelte-phase2-decision-record.md) §1.
 
 ## 6. Peta library React/Next → Svelte
 

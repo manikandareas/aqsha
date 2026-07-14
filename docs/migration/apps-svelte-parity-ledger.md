@@ -27,20 +27,20 @@ Scaffold `@aqsha/svelte` (SvelteKit `2.63` + adapter-node + shadcn-svelte `nova`
 
 | ID | Scope | Source (`apps/web/`) | Target | Status | Notes |
 |---|---|---|---|---|---|
-| FND-1 | Eden Treaty API client | `lib/api-client.ts`, `lib/api.ts` | `apps/svelte/lib/api/` | not-started | Reuse Eden core; base URL `PUBLIC_API_URL`. |
-| FND-2 | API server helpers / unwrap | `lib/api-server.ts` | `apps/svelte/lib/api/` | not-started | Server fetch via `handleFetch`. |
-| FND-3 | QueryClient per-request | `lib/query-provider.tsx` | `apps/svelte/lib/query/` | not-started | ★ No singleton; `dehydrate`+`<HydrationBoundary>` (§3.5). |
-| FND-4 | Query key registry + policies | `lib/api-query.ts` | `apps/svelte/lib/query/` | not-started | Keys/stale/invalidation identik (contract test). |
-| FND-5 | Error normalization | `lib/api-error.ts` | `apps/svelte/lib/errors/` | not-started | `readableApiErrorMessage`; payload `{message,code,severity,field}`. |
-| FND-6 | Auth facade | `lib/auth-server.ts` | `apps/svelte/lib/auth/` | not-started | `getAuth`/`requireUser`/`getToken`; `svelte-clerk`. |
-| FND-7 | Viewer identity | `lib/use-viewer-identity.ts` | `apps/svelte/lib/auth/` | not-started | ★ No global session cache. |
-| FND-8 | Session hook + protected `/app` + onboarding gate | `proxy.ts`, `components/onboarding-gate.tsx` | `apps/svelte/hooks.server.ts` | not-started | Server gate; `/changelog(.*)` public. |
-| FND-9 | Clerk token via `handleFetch` | `lib/api-server.ts`, `proxy.ts` | `apps/svelte/hooks.server.ts` | not-started | Sekali di boundary `lib/auth`. |
-| FND-10 | Env mapping + boot validation | `.env.example`, config | `apps/svelte/lib/env` | not-started | ★ `$env/dynamic/*` only (§3.7); lihat env-manifest. |
-| FND-11 | Mastra streaming proxy | `app/mastra-api/[...path]/route.ts`, `proxy.ts` | `apps/svelte/routes/mastra-api/[...path]/+server.ts` | not-started | ★ No buffer/compression/idle-timeout; abort propagation. Dealbreaker Phase 1. |
-| FND-12 | Sentry SvelteKit | `sentry.server.config.ts`, `sentry.edge.config.ts`, `instrumentation*.ts`, `lib/sentry-config.ts` | `apps/svelte/hooks.{client,server}.ts` | not-started | Release/env/redaction/source maps/tunnel. |
-| FND-13 | Browser-safe public plan catalog | `features/marketing/**` (impor `@aqsha/services/plan`) | shared pure-data/API | not-started | ★ §4.1 no services/db di bundle. |
-| FND-14 | `handleError` client+server | `app/error.tsx`, `global-error.tsx` | `apps/svelte/hooks.{client,server}.ts` | not-started | → Sentry capture. |
+| FND-1 | Eden Treaty API client | `lib/api-client.ts`, `lib/api.ts` | `lib/api/{client.ts,context.ts,index.ts}` | done | `createBrowserApiClient` + `apiClientContext`/`getApiClient` (padanan `useApi()`); base URL `publicEnv.PUBLIC_API_URL`. |
+| FND-2 | API server helpers / unwrap | `lib/api-server.ts`, `lib/api-query.ts` | `lib/server/api.ts`, `lib/query/unwrap.ts` | done | `createServerApiClient(getToken)`; `unwrap()` (contract test). |
+| FND-3 | QueryClient per-request | `lib/query-provider.tsx` | `lib/query/client.ts` | done | ★ No singleton (dibuat di `+layout.svelte`/request); isolation contract test. `networkMode:'always'`. `dehydrate`+HydrationBoundary tersedia utk SSR-first (Phase 4/7). |
+| FND-4 | Query key registry + policies | `lib/api-query.ts` | `lib/query/keys.ts` | done | Port verbatim; contract test byte-equivalent (§11.2). |
+| FND-5 | Error normalization | `lib/api-error.ts` | `lib/errors/{api-error.ts,svelte.ts}` | done | `readableApiErrorMessage`/`apiErrorCode`/`normalizeApiError`→`{message,code,severity,field}`; `failWithApiError`→`error()`; contract test. |
+| FND-6 | Auth facade | `lib/auth-server.ts` | `lib/server/auth.ts`, `lib/auth/context.svelte.ts` | done | Server: `getAuth`/`requireUser`/`getServerToken`/`serverApiFor`. Client: `getAuthState`/`getAuthToken`/`getClerk`. Findings a/b baked. |
+| FND-7 | Viewer identity + user sync | `lib/use-viewer-identity.ts`, `components/authenticated-user-sync.tsx` | `lib/auth/{viewer-identity.ts,viewer.svelte.ts,UserSync.svelte}` | done | ★ class `$state`+context per-request; pure helpers `.ts` (contract test); `UserSync` dedupe primitif `$derived`. |
+| FND-8 | Session hook + protected `/app` + onboarding gate | `proxy.ts`, `components/onboarding-gate.tsx`, `app/app/layout.tsx` | `hooks.server.ts` | done | Gate SEMUA non-public (mirror `proxy.ts` allow-list); onboarding server gate (mirror `app/app/layout.tsx`, redirect pra-render). `/mastra-api` excluded. Verified: `/app`→303→`/sign-in`. |
+| FND-9 | Clerk token via `handleFetch` | `lib/api-server.ts`, `proxy.ts` | `hooks.server.ts` | done | `handleFetch` inject bearer utk `PUBLIC_API_URL`; `getServerToken` utk Eden dari hooks. |
+| FND-10 | Env mapping + boot validation | `.env.example`, config | `lib/env/{defaults.ts,schema.ts,public.ts}`, `lib/server/env.ts` | done | ★ `$env/dynamic/*` only (§3.7); zod SERVER-only, fail-fast boot (verified: bad env → ZodError, tak serve); public typed tanpa zod di client. Contract test. |
+| FND-11 | Mastra streaming proxy | `app/mastra-api/[...path]/route.ts`, `proxy.ts` | `routes/mastra-api/[...path]/{+server.ts,proxy.ts}` | done | ★ `forwardToAgent` (env-free, testable); origin dari `serverEnv`. Integration test: header rules/first-byte/abort/large-payload. |
+| FND-12 | Sentry SvelteKit | `sentry.server.config.ts`, `sentry.edge.config.ts`, `instrumentation*.ts`, `lib/sentry-config.ts` | `hooks.{client,server}.ts`, `lib/observability/`, `routes/sentry-tunnel/` | done | `initClient/ServerSentry` (env-driven, `sendDefaultPii:false`); tunnel `+server.ts` (SSRF-guard); source-map upload via vite plugin (kondisional trio env). Wiring code-complete (upload perlu token). |
+| FND-13 | Browser-safe public plan catalog | `features/marketing/**` (impor `@aqsha/services/plan`) | `lib/plan/catalog.ts` | done | ★ §4.1: pure-data mirror (dist/plan.js tarik shared chunk → tak boundary-safe); contract test invariant. Consumer marketing = Phase 4. |
+| FND-14 | `handleError` client+server | `app/error.tsx`, `global-error.tsx` | `hooks.{client,server}.ts`, `routes/+error.svelte` | done | `handleErrorWithSentry`→`{message,code}` (App.Error); `+error.svelte` render normalized. |
 
 ## Phase 3 — Design system, theme, shell, layout
 
