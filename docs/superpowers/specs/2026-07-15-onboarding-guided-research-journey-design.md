@@ -1,7 +1,7 @@
 # Redesign Onboarding — Guided Research Journey
 
 - **Tanggal:** 2026-07-15
-- **Status:** Menunggu review user
+- **Status:** Disetujui user
 - **Scope:** `apps/svelte/src/routes/onboarding` dan presentation layer feature onboarding
 
 ## Ringkasan
