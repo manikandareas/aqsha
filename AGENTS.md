@@ -75,6 +75,16 @@ var Langfuse masuk file yang benar-benar dibaca `mastra dev`.
 - For new or touched backend code, return structured application errors from `packages/db/src/appError.ts`: `{ message, code, severity?, field? }`.
 - Preserve return-union flows when failure is part of normal product behavior, such as rate-limit / billing-block results.
 
+## Code Comments
+Comments explain **why**, not what — capture non-obvious intent, gotchas, and constraints the code can't state itself. Keep them concise: prefer one tight sentence over a multi-line paragraph, and don't over-annotate obvious code.
+
+- **No references to planning or process artifacts.** Shipped code must stand on its own. Never cite migration-plan sections (`plan §3.5`), phase or task labels (`Phase 9`, `THX-1`, `FND-8`), decision-record numbers, or ticket IDs in comments. If a comment only makes sense to someone holding the plan doc, rewrite it to state the reason directly — or delete it.
+- **Don't restate the code** or narrate provenance (`port 1:1 of X`, `streamlined port of Y`). Describe the behavior and the reason, not where it came from.
+- **Keep the real gotchas** — layout/ordering hazards, framework quirks, security-sensitive ordering — but phrase them self-containedly so they're useful without any external context.
+- Match the surrounding file's comment style and density.
+
+Example — `// Runes-only mode (plan §3.4) turns legacy syntax into a build error` → `// Runes-only mode turns legacy syntax into a build error`.
+
 ## TypeScript
 - Base config: `tsconfig.base.json` (ES2022, Bundler resolution, strict, noEmit). Each workspace owns its `tsconfig.json`.
 
