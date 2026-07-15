@@ -69,8 +69,8 @@ const TYPE_LABELS: Record<string, string> = {
 
 export const artifactTypeLabel = (t: string): string => TYPE_LABELS[t] ?? t;
 
-// Mirror UPLOAD_ALLOWED_EXTENSIONS/MIME_TYPES dari packages/services (svelte tak boleh
-// import @aqsha/services). Dipakai sebagai `accept` input upload.
+// Client-boundary copy of upload accept rules — browser must not import `@aqsha/services`.
+// Used as the `accept` attribute on upload inputs.
 export const UPLOAD_ACCEPT = [
 	'.pdf',
 	'.docx',

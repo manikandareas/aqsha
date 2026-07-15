@@ -2,9 +2,7 @@
 	import { fly } from 'svelte/transition';
 	import { motionContext } from '$lib/motion';
 
-	// PriceOdometer — total harga berganti dengan slide saat periode billing berubah. Web memakai
-	// AnimatePresence per-karakter; di sini crossfade-slide seluruh label via `{#key}` + `fly` (feel
-	// setara §3.2, tanpa jitter width). Reduced-motion → ganti instan. Port `price-odometer`.
+	// Crossfade-slide the whole label on billing-period change (`{#key}` + `fly`) — avoids per-character width jitter. Reduced-motion → instant swap.
 	let { label }: { label: string } = $props();
 
 	const motion = motionContext.get();

@@ -1,8 +1,7 @@
 /**
- * Metadata helper — padanan `apps/web/lib/metadata.ts` `createPageMetadata`. Menghasilkan objek
- * `PageSeo` bertipe yang di-render `SeoHead.svelte` ke `<svelte:head>` (SvelteKit tak menyuntik
- * metadata otomatis seperti Next). Nilai (title/desc/canonical/OG/Twitter) di-set agar identik dgn
- * output Next `createPageMetadata` (§11.2 contract). Konstanta OG/site/locale/card diisi `SeoHead`.
+ * Metadata helper — menghasilkan objek `PageSeo` bertipe yang di-render `SeoHead.svelte` ke
+ * `<svelte:head>` (SvelteKit tak menyuntik metadata otomatis seperti Next). Konstanta
+ * OG/site/locale/card diisi `SeoHead`.
  */
 import { defaultDescription, siteName, siteUrl } from './config';
 
@@ -10,7 +9,7 @@ export { siteName };
 
 export type OgType = 'website' | 'article';
 
-/** Metadata artikel (blog detail) — padanan `openGraph.type:"article"` web. */
+/** Metadata artikel (blog detail) — `openGraph.type:"article"`. */
 export type ArticleMeta = {
 	publishedTime: string;
 	modifiedTime: string;

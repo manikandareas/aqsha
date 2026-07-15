@@ -3,10 +3,8 @@
 	import { fly } from 'svelte/transition';
 
 	/**
-	 * Deliberately not a progress bar. A quiet monospace counter ("01 / 03") with the active
-	 * number lit and the current section named. Port from
-	 * apps/web/features/onboarding/components/onboarding-step-indicator.tsx — framer AnimatePresence
-	 * on the number → Svelte `{#key}` + `fly` (collapses to no motion when reduced).
+	 * Deliberately not a progress bar. A quiet monospace counter ("01 / 03") with the active number lit
+	 * and the current section named. Number transitions use `{#key}` + `fly` (no motion when reduced).
 	 */
 	let { index, total, label }: { index: number; total: number; label: string } = $props();
 

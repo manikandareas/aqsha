@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildRobotsTxt, buildSitemapXml, buildWebManifest, type SitemapUrl } from './handlers';
 
 describe('buildRobotsTxt', () => {
-	it('allowIndexing=true → parity web robots.ts (allow /, disallow app/auth/onboarding, host+sitemap)', () => {
+	it('allowIndexing=true → allow /, disallow app/auth/onboarding, host+sitemap', () => {
 		const out = buildRobotsTxt({ siteUrl: 'https://aqshara.com', allowIndexing: true });
 		expect(out).toBe(
 			[
@@ -57,7 +57,7 @@ describe('buildSitemapXml', () => {
 });
 
 describe('buildWebManifest', () => {
-	it('parity web manifest.ts (name/short_name/display/theme/icons)', () => {
+	it('manifest shape (name/short_name/display/theme/icons)', () => {
 		const m = buildWebManifest();
 		expect(m.name).toBe('Aqsha');
 		expect(m.short_name).toBe('Aqsha');

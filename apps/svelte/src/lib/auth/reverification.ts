@@ -1,17 +1,12 @@
 /**
- * Reverification handler — Svelte port of `@clerk/shared`'s `createReverificationHandler`
- * (the engine behind React's `useReverification`). `svelte-clerk@1.1.10` ships no
- * `useReverification`, so we replicate the essential loop: run the operation; if Clerk
- * signals that step-up verification is required, open Clerk's built-in reverification modal
- * via `clerk.__internal_openReverification` (the same internal method React wires as
- * `openUIComponent`), wait for the user to verify (or cancel), then retry the operation once.
+ * Step-up reverification for sensitive Clerk operations (`updatePassword`, `createTOTP`,
+ * `disableTOTP`, …). Run the operation; if clerk-js signals that reverification is required,
+ * open Clerk's built-in modal via `clerk.__internal_openReverification`, wait for the user to
+ * verify (or cancel), then retry the operation once. If Clerk does not require reverification,
+ * this is a transparent passthrough.
  *
- * Sensitive user actions (`updatePassword`, `createTOTP`, `disableTOTP`, …) go through this so
- * they mirror web's `useReverification(...)` wrapping. If the Clerk instance does not require
- * reverification for an operation, this is a transparent passthrough.
- *
- * Pure (takes the clerk instance as an argument) → no runes, unit-reasonable. The runes-scoped
- * facade that captures the clerk context lives in `context.svelte.ts` (`getReverification`).
+ * Pure (takes the clerk instance as an argument) — no runes, unit-testable. The runes-scoped
+ * facade lives in `context.svelte.ts` (`getReverification`).
  */
 
 /**
@@ -26,7 +21,7 @@ type ReverifiableClerk = {
 	}) => void;
 } | null;
 
-/** Thrown when the user dismisses the reverification modal (mirror Clerk's cancel path). */
+/** Thrown when the user dismisses the reverification modal. */
 export class ReverificationCancelledError extends Error {
 	readonly code = 'reverification_cancelled';
 	constructor() {
@@ -80,7 +75,6 @@ export async function runWithReverification<T>(
 				afterVerificationCancelled: () => reject(new ReverificationCancelledError())
 			});
 		});
-		// Verified: retry the original request one more time (parity with @clerk/shared).
 		return await op();
 	}
 }

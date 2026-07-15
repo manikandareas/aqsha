@@ -5,9 +5,9 @@
 	import { readableApiErrorMessage } from '$lib/errors';
 
 	/**
-	 * Confirm dialog — port 1:1 from apps/web/components/confirm-dialog.tsx. Controlled `open`, runs
-	 * an async `onConfirm`, shows a normalized error on failure and closes on success. `children`
-	 * (optional) render extra body content between the description and the footer.
+	 * Confirm dialog. Controlled `open`, runs an async `onConfirm`, shows a normalized error on
+	 * failure and closes on success. `children` (optional) render extra body content between the
+	 * description and the footer.
 	 */
 	let {
 		open,

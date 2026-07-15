@@ -4,9 +4,8 @@
 	import { Icon, CheckIcon } from '$lib/icons';
 
 	/**
-	 * Full-width single-select row (background + source). Border-only so the page stays card-less
-	 * and clean; selection shows the accent border + a filled check. Port 1:1 from
-	 * apps/web/features/onboarding/components/onboarding-controls.tsx (SelectableOption).
+	 * Full-width single-select row (background + source). Border-only so the page stays card-less and
+	 * clean; selection shows the accent border + a filled check.
 	 */
 	let {
 		selected,

@@ -4,10 +4,9 @@
 	import { DOCUMENT_AUTHORING_ENABLED } from '$lib/features/workspaces/document-authoring';
 
 	/**
-	 * Centered empty-state for the workspace library board — port of
-	 * `apps/web/features/workspaces/components/workspace-library-empty.tsx`. A category pill (icon +
-	 * context label) on top, a short message, a hairline connector, then the create actions stacked
-	 * below. Vertically + horizontally centered inside the board body.
+	 * Centered empty-state for the workspace library board. A category pill (icon + context label) on top,
+	 * a short message, a hairline connector, then the create actions stacked below. Vertically +
+	 * horizontally centered inside the board body.
 	 */
 	let {
 		variant,
@@ -43,7 +42,7 @@
 				: 'Tambahkan dokumen atau URL ke folder ini.')
 	);
 
-	// Authored blank document deferred to editor redesign (§0 #9) — hidden until an editor exists.
+	// Authored blank document deferred to editor redesign — hidden until an editor exists.
 	const showDocument = $derived(
 		DOCUMENT_AUTHORING_ENABLED && showActions && Boolean(onCreateDocument)
 	);

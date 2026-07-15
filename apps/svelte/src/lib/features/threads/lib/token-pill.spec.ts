@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { splitTokenLabel, tokenPillClass } from './token-pill';
 import { originMeta, sourceDomain, sourceHref, faviconUrl } from './source-card';
 
-// Contract tests for the composer/source presentation models (THC-8).
+// Contract tests for the composer/source presentation models.
 
 describe('splitTokenLabel', () => {
 	it('splits the known prefix glyphs', () => {

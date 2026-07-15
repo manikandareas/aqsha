@@ -1,6 +1,4 @@
-// Integration contract from @aqsha/api (IntegrationService). apps/svelte does not
-// import services — types mirrored manually (same pattern as features/citations/types).
-// Port 1:1 from apps/web/features/settings/lib/integrations.ts.
+// Integration types aligned with @aqsha/api — duplicated here because apps/svelte must not import @aqsha/services.
 
 export type IntegrationProviderKey = 'mendeley' | 'zotero';
 

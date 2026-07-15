@@ -3,9 +3,8 @@ import https from 'node:https';
 import { Readable } from 'node:stream';
 
 /**
- * Core streaming Mastra proxy — dipisah dari `+server.ts` agar `agentOrigin` bisa disuntik (test) &
- * unit-testable tanpa `$env`/`$types`. Port `apps/web/app/mastra-api/[...path]/route.ts`.
- *
+ * Core streaming Mastra proxy — split from `+server.ts` so `agentOrigin` can be injected (tests) and
+ * unit-tested without `$env`/`$types`.
  * `@mastra/client-js` dikonfigurasi `apiPrefix:'/mastra-api'` (same-origin) → di sini prefix
  * `/mastra-api` → `/api` (default apiPrefix Mastra) lalu forward ke `agentOrigin`.
  *

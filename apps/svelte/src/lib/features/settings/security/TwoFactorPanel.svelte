@@ -15,13 +15,12 @@
 	} from '../components/settings-card';
 
 	/**
-	 * Two-factor verification (TOTP authenticator app). Enrollment MUST be frontend-SDK (the Clerk
-	 * Backend has no generate-secret + verify endpoint). Flow: createTOTP → scan QR / manual entry →
-	 * verifyTOTP → show backup codes. Sensitive ops wrapped in `reverify`. Disable via disableTOTP.
-	 * Status is reactive from `user.totpEnabled`. Port 1:1 from
-	 * apps/web/features/settings/security/two-factor-panel.tsx (`qrcode.react` → `@svelte-put/qr`).
+	 * TOTP two-factor via authenticator app. Enrollment runs through Clerk's client SDK — the backend
+	 * has no generate-secret + verify endpoint. Flow: createTOTP → scan QR / manual entry → verifyTOTP
+	 * → backup codes. Sensitive ops wrapped in `reverify`. Disable via disableTOTP. Status from
+	 * `user.totpEnabled`.
 	 *
-	 * NOTE: like web, this panel is currently NOT mounted in SecurityPage (kept ready). See SET-6.
+	 * NOTE: not mounted in SecurityPage yet (kept ready for re-enable).
 	 */
 	const clerkUser = getClerkUser();
 	const reverify = getReverification();

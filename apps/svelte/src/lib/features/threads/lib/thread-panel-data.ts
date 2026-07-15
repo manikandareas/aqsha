@@ -1,8 +1,7 @@
-// Lookups for the thread-detail side panels (message sources / search step / step / plan). Verbatim
-// port of `apps/web/features/threads/lib/thread-panel-data.ts` (pure, framework-agnostic). The panels
-// live in the thread shell ABOVE the message list but resolve detail by id from the URL. This builder
-// turns the parsed timeline + persisted `research_sources` + live `/deep` plan gate into id-keyed
-// lookups the surface registers into the panel controller.
+// Lookups for the thread-detail side panels (message sources / search step / step / plan). Pure,
+// framework-agnostic. The panels live in the thread shell ABOVE the message list but resolve detail by
+// id from the URL. This builder turns the parsed timeline + persisted `research_sources` + live `/deep`
+// plan gate into id-keyed lookups the surface registers into the panel controller.
 
 import type { AskQuestionsResumeData } from '@aqsha/chat-core';
 import type { StatsGroup } from '@aqsha/chat-core/stats-viz';

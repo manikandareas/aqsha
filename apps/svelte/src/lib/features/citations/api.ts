@@ -33,9 +33,8 @@ import type {
 } from './types';
 
 /**
- * Citation query/mutation hooks — Svelte port of `apps/web/features/citations/api.ts` (ART-2..5).
- * Reactive scalar inputs (`workspaceId`, `citationId`, `filters`, `params`, `enabled`) are getters
- * (§3.6). Query keys, invalidation and toast copy byte-equivalent with web (§11.2).
+ * Citation query/mutation hooks. Reactive scalar inputs (`workspaceId`, `citationId`, `filters`, `params`,
+ * `enabled`) are getters. Query keys, invalidation, and toast copy match the product contract.
  */
 
 const LIST_PAGE_SIZE = 50;
@@ -251,7 +250,7 @@ export function useBulkDeleteCitations(workspaceId: () => string) {
 	}));
 }
 
-/** "Tambahkan ke Sitasi" dari artifact paper (Fase 2 bridge). */
+/** "Tambahkan ke Sitasi" dari artifact paper. */
 export function useCreateCitationFromArtifact(workspaceId: () => string) {
 	const api = getApiClient();
 	const invalidate = useInvalidateCitations(workspaceId);
@@ -265,7 +264,7 @@ export function useCreateCitationFromArtifact(workspaceId: () => string) {
 	}));
 }
 
-/** Perbarui metadata referensi dari DOI-nya (quality workflow Fase 2). */
+/** Perbarui metadata referensi dari DOI-nya (quality workflow). */
 export function useResolveCitation(workspaceId: () => string) {
 	const api = getApiClient();
 	const invalidate = useInvalidateCitations(workspaceId);
@@ -316,7 +315,7 @@ export function useImportCommit(workspaceId: () => string) {
 
 type IntegrationProviderKey = 'mendeley' | 'zotero';
 
-/** Folder/collection provider untuk picker penarikan (Fase 5). Account-level. */
+/** Folder/collection provider untuk picker penarikan. Account-level. */
 export function useProviderFolders(
 	provider: () => IntegrationProviderKey,
 	enabled: () => boolean = alwaysTrue
@@ -330,7 +329,7 @@ export function useProviderFolders(
 	}));
 }
 
-/** Preview penarikan folder provider → reuse UI wizard import (Fase 5). */
+/** Preview penarikan folder provider → reuse UI wizard import. */
 export function useProviderSyncPreview(
 	workspaceId: () => string,
 	provider: () => IntegrationProviderKey
@@ -347,7 +346,7 @@ export function useProviderSyncPreview(
 	}));
 }
 
-/** Commit hasil sync provider — reuse pipeline commit import (Fase 5). */
+/** Commit hasil sync provider — reuse pipeline commit import. */
 export function useProviderSyncCommit(
 	workspaceId: () => string,
 	provider: () => IntegrationProviderKey
@@ -397,7 +396,7 @@ export function useCitationRender(
 }
 
 /**
- * Render sitasi in-text seluruh dokumen + bibliography used-in-document (Fase 3).
+ * Render sitasi in-text seluruh dokumen + bibliography used-in-document.
  * Keyed pada signature stabil dari `{ styleId, clusters }` supaya hanya refetch saat
  * himpunan sitasi/locator berubah, bukan tiap keystroke. `placeholderData` menahan
  * hasil lama agar marker tak berkedip saat mengetik.

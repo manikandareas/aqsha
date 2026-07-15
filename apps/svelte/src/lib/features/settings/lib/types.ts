@@ -1,6 +1,5 @@
-// Settings view types — port 1:1 from apps/web/features/settings/lib/types.ts.
-// Mirrored manually (like features/citations/types) so the browser bundle never
-// imports @aqsha/services / @aqsha/db (§4.1).
+// Mirrored manually (like features/citations/types) so the browser bundle never imports @aqsha/services
+// / @aqsha/db.
 
 export type ProductKey =
 	| 'starterMonthly'

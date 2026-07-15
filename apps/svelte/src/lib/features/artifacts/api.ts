@@ -10,9 +10,8 @@ import { readableApiErrorMessage } from '$lib/errors';
 import { queryKeys, unwrap } from '$lib/query';
 
 /**
- * Artifact query/mutation hooks — Svelte port of `apps/web/features/artifacts/api.ts` (ART-1, WSP-9).
- * Reactive scalar inputs (`id`, `workspaceId`, `folderId`) are getters (§3.6). Query keys, stale
- * policy, invalidation and toast copy byte-equivalent with web (§11.2).
+ * Artifact query/mutation hooks. Reactive scalar inputs (`id`, `workspaceId`, `folderId`) are getters.
+ * Query keys, stale policy, invalidation, and toast copy match the product contract.
  */
 
 const LIST_PAGE_SIZE = 30;

@@ -3,7 +3,7 @@
 	import ProviderSyncWizardContent from './ProviderSyncWizardContent.svelte';
 
 	/**
-	 * Wizard "Tarik dari Mendeley/Zotero" (Fase 5): pilih folder → preview → commit.
+	 * Wizard "Tarik dari Mendeley/Zotero": pilih folder → preview → commit.
 	 * Reuse `CitationImportPreviewStep` (checkbox + policy + commit) dari wizard import file — satu
 	 * pipeline preview→commit. Koneksi provider dikelola di Settings → Integrasi.
 	 */

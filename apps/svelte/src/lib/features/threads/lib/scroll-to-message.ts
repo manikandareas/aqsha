@@ -1,8 +1,7 @@
 /**
  * Scroll the transcript to an assistant message by id — the "Lihat di percakapan" bridge from the
  * Statistik panel back to a run's tool call. Anchors are `data-message-id` on each assistant row
- * (`message-list`). No-op when the element isn't mounted (message paged out / SSR). Verbatim port of
- * `apps/web/features/threads/lib/scroll-to-message.ts`.
+ * (`message-list`). No-op when the element isn't mounted (message paged out / SSR).
  */
 export function scrollToMessage(messageId: string): void {
 	if (typeof document === 'undefined') return;

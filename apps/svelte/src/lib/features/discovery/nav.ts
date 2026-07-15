@@ -1,6 +1,5 @@
-// Discovery nav constants — topic categories. Reuses the feed topic taxonomy from
-// ./types so the nav and the `/feed` topic filter agree. Ported verbatim from
-// `apps/web/features/discovery/nav.ts`.
+// Discovery nav constants — topic categories. Reuses the feed topic taxonomy from ./types so the nav
+// and the `/feed` topic filter agree.
 
 import { FEED_TOPIC_LABELS, type FeedTopic } from './types';
 

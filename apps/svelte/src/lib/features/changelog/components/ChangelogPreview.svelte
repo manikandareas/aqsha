@@ -3,8 +3,7 @@
 	import GenerativeCover from '$lib/components/GenerativeCover.svelte';
 	import type { ChangelogEntry } from '../types';
 
-	// `sizes` diterima untuk paritas API dgn web (`next/image`); di sini `<img>` biasa tak memakainya
-	// untuk seleksi srcset (satu sumber) tapi tetap diteruskan supaya call-site identik.
+	// `sizes` forwarded for call-site API consistency; a plain `<img>` does not use it for srcset selection.
 	let {
 		entry,
 		class: className,

@@ -4,10 +4,10 @@ import { buildSitemapXml, type SitemapUrl } from '$lib/seo/handlers';
 import { publishedPosts } from '$lib/features/blog/lib/posts';
 import { publishedEntries } from '$lib/features/changelog/lib/entries';
 
-// Runtime-rendered (BUKAN prerender): `loc` memakai `PUBLIC_SITE_URL` runtime (§3.7).
+// Runtime-rendered (not prerendered): `loc` uses runtime `PUBLIC_SITE_URL`.
 export const prerender = false;
 
-/** Padanan `apps/web/app/sitemap.ts`. Urutan/priority/changefreq/lastmod di-mirror persis. */
+/** Sitemap — static routes plus blog/changelog entries. */
 export const GET: RequestHandler = () => {
 	const posts = publishedPosts();
 	const entries = publishedEntries();

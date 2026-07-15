@@ -3,9 +3,8 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Text shimmer — a moving highlight sweeping across the text (Astra "working" labels). Port of
-	 * `ai-elements/shimmer.tsx`; the web version animated `background-position` via motion, here it is a
-	 * pure CSS keyframe (`--spread` scales with text length) so it needs no motion runtime and honours
+	 * Text shimmer — a moving highlight sweeping across the text (Astra "working" labels). Pure CSS
+	 * keyframe (`--spread` scales with text length) so it needs no motion runtime and honours
 	 * `prefers-reduced-motion` (the animation is disabled under reduced motion via the utility class).
 	 */
 	let {

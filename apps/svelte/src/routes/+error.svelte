@@ -3,9 +3,8 @@
 	import ErrorStatePage from '$lib/components/ErrorStatePage.svelte';
 	import { siteName } from '$lib/seo/config';
 
-	// Root error boundary (plan §Phase 2 task 7, diperkaya Phase 4). Merender ErrorStatePage:
-	// 404 (padanan `not-found.tsx`) vs gangguan generik (padanan `error.tsx`/`global-error.tsx`).
-	// `App.Error` dinormalisasi `{ message, code }` dari `error()` / `handleError`→Sentry.
+	// Root error boundary. Renders ErrorStatePage: 404 vs generic failure.
+	// `App.Error` is normalized `{ message, code }` from `error()` / `handleError`→Sentry.
 	const isNotFound = $derived(page.status === 404);
 	const title = $derived(isNotFound ? 'Halaman tidak ditemukan' : 'Terjadi gangguan');
 	const code = $derived(page.error?.code);

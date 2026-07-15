@@ -6,7 +6,6 @@
 	 * Single file card — document icon in a blue tile + file name (bold). `onRemove` → round X button
 	 * (composer, staged). `onOpen` (message row, mutually exclusive with `onRemove`) → the whole chip
 	 * is a button opening the artifact reader. Neither = read-only. `pending` (async index) → spinner.
-	 * Mirror of web `file-chip.tsx`.
 	 */
 	let {
 		id,

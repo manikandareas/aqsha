@@ -12,7 +12,7 @@
 	 * (status running/selesai) berisi daftar kartu sumber sebagai PREVIEW. Daftar tak di-scroll inline:
 	 * di-bungkus `ScrollDetailTrigger` → klik membuka panel langkah pencarian (sumber → URL). Sumber
 	 * di-resolve LIVE dari yang dipancarkan step (`sub.sources`); fallback ke `research_sources` (DB,
-	 * di-join `subQuestionIndex`). Pure presentation: tak fetch sendiri. Port `deep-search-cards.tsx`.
+	 * di-join `subQuestionIndex`). Pure presentation: tak fetch sendiri.
 	 */
 	let {
 		subSearches,

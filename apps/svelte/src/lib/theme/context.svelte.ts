@@ -1,21 +1,18 @@
 import { mode, userPrefersMode, setMode, toggleMode, resetMode } from 'mode-watcher';
 import { createContext } from '$lib/context';
 
-/** Theme preference union — mirrors mode-watcher's internal `Mode` (not exported
- *  from its public entry, so declared here to avoid a deep import). */
+/** Theme preference union — mode-watcher doesn't export `Mode` from its public entry,
+ *  so declared here to avoid a deep import. */
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 /**
- * Theme control seam (§10 Phase 3 "ThemeProvider seam via context"). Wraps
- * mode-watcher's browser-local theme API so the appearance toggle (Phase 5) and
- * any theme-aware UI depend on our boundary, not the library directly — the
- * padanan of web wrapping next-themes' `useTheme`.
+ * Theme control seam. Wraps mode-watcher's browser-local theme API so the appearance toggle and
+ * any theme-aware UI depend on our boundary, not the library directly.
  *
- * mode-watcher's `mode`/`userPrefersMode` are module-level reactive stores.
- * Unlike auth/user state (§3.5 — banned at module scope for SSR cross-user
- * leakage), theme is browser-local (localStorage, per-device) and NOT
- * request-scoped: during SSR it is simply undefined until the client hydrates,
- * so it cannot leak between users. This is the sanctioned module-state exception.
+ * mode-watcher's `mode`/`userPrefersMode` are module-level reactive stores. Unlike auth/user state
+ * (banned at module scope for SSR cross-user leakage), theme is browser-local (localStorage,
+ * per-device) and NOT request-scoped: during SSR it is simply undefined until the client hydrates,
+ * so it cannot leak between users.
  */
 export class ThemeState {
 	/** Resolved active mode ('light' | 'dark'); `undefined` during SSR / before hydration. */

@@ -3,7 +3,7 @@ import { bucketMessageAttachments } from './attachment-buckets';
 import type { Artifact } from '../types';
 import type { TimelineMessage } from './timeline-types';
 
-// Contract tests for the attachment bucketing model (THC-8): explicit (live) vs time-window (rehydrate).
+// Contract tests for the attachment bucketing model: explicit (live) vs time-window (rehydrate).
 
 const upload = (id: string, createdAt: number, extra: Partial<Artifact> = {}): Artifact =>
 	({

@@ -11,8 +11,8 @@
 	/**
 	 * Frame figur ala artikel ilmiah (referensi Consensus): judul tebal di atas, konten flush
 	 * (tanpa kotak card — hairline dibawa masing-masing blok), caption "Gambar n" + deskripsi
-	 * kecil di bawah. Port `VizFigure` + `VizBlockBody` dari `viz-block.tsx`. Peta sitasi
-	 * diteruskan ke blok yang butuh (timeline, kontributor, klaim) sebagai prop `citations`.
+	 * kecil di bawah. Peta sitasi diteruskan ke blok yang butuh (timeline, kontributor, klaim)
+	 * sebagai prop `citations`.
 	 */
 
 	/** Judul seksi di ATAS konten (ala Consensus) — meter konsensus tanpa judul generik

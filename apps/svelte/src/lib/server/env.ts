@@ -3,7 +3,7 @@ import { env as publicEnvRaw } from '$env/dynamic/public';
 import { parsePrivateEnv, parsePublicEnv, type PrivateEnv } from '$lib/env/schema';
 
 /**
- * Env PRIVATE tervalidasi (server-only, §3.7). Berada di `$lib/server` → SvelteKit MEMBLOKIR impor
+ * Env PRIVATE tervalidasi (server-only). Berada di `$lib/server` → SvelteKit MEMBLOKIR impor
  * dari client (compile error), jadi rahasia (CLERK_SECRET_KEY, DSN) tak pernah bocor ke bundle.
  *
  * BOOT VALIDATION fail-fast: modul ini diimpor pertama kali oleh `hooks.server.ts` saat server start.

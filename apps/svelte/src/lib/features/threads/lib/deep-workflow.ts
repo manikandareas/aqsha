@@ -3,9 +3,8 @@ import type { MastraChunk } from './mastra-timeline';
 
 /**
  * Pure `/deep` Workflow helpers — types, stall detection, terminal-notice/failure derivation, stream
- * iteration, and the thread→runId localStorage map. Extracted from the deep half of
- * `apps/web/features/threads/lib/use-mastra-agent.ts` (verbatim logic); the imperative driver that
- * consumes these lives on `ThreadAgent` (THX-5). Framework-agnostic (no runes) — browser DOM only.
+ * iteration, and the thread→runId localStorage map. The imperative driver that consumes these lives on
+ * `ThreadAgent`. Framework-agnostic (no runes) — browser DOM only.
  */
 
 export const DEEP_WORKFLOW_ID = 'deep-research';

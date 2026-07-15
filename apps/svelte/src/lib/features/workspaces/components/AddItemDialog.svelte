@@ -2,10 +2,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import AddItemDialogContent from './AddItemDialogContent.svelte';
 
-	/**
-	 * Add-item dialog — port `apps/web/features/workspaces/components/workspace-dialogs.tsx`
-	 * `AddItemDialog`. Content mounted only while open so the URL draft resets each open.
-	 */
+	/** Content mounted only while open so the URL draft resets each open. */
 	let {
 		open,
 		folderName,

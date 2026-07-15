@@ -8,7 +8,7 @@ import {
 	statsRunDetailFromArgs
 } from './stats-run-detail';
 
-// Contract tests for the stats transforms (THC-3): marker parse + run-detail builders + profile parse.
+// Contract tests for the stats transforms: marker parse + run-detail builders + profile parse.
 
 describe('statsMarkersInText', () => {
 	it('extracts runKeys in document order', () => {

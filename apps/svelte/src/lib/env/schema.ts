@@ -1,5 +1,5 @@
 /**
- * Skema validasi env — zod, fail-fast (§3.7). Diimpor HANYA oleh kode server (`$lib/server/env`) &
+ * Skema validasi env — zod, fail-fast. Diimpor HANYA oleh kode server (`$lib/server/env`) &
  * test, jadi zod tak pernah masuk client bundle. `parsePublicEnv`/`parsePrivateEnv` = fungsi pure
  * (menerima record) → unit-testable tanpa `$env`. Default nilai PUBLIC hidup di `defaults.ts`.
  */

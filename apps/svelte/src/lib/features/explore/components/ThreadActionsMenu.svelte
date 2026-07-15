@@ -5,9 +5,8 @@
 	import { Icon, MoreHorizontalIcon, Trash2Icon } from '$lib/icons';
 
 	/**
-	 * Per-thread action menu (delete) for the compact chat panel header. Streamlined port of
-	 * `apps/web/features/thread-experience/components/thread-actions-menu.tsx` (the `header` variant —
-	 * delete only; the sidebar-row pin variant is handled elsewhere).
+	 * Per-thread action menu (delete) for the compact chat panel header. Delete only; the sidebar-row pin
+	 * variant is handled elsewhere.
 	 */
 	let { description, onDelete }: { description: string; onDelete: () => Promise<void> } = $props();
 

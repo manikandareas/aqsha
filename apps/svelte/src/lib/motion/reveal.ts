@@ -2,10 +2,9 @@ import { prefersReducedMotion } from 'svelte/motion';
 import type { Attachment } from 'svelte/attachments';
 
 /**
- * `reveal` — padanan `whileInView` framer (`apps/web/features/marketing/**`). IntersectionObserver
- * menandai `data-inview` saat elemen masuk viewport → kelas Tailwind `data-[inview]:*` melakukan
- * transisi masuk. Reduced-motion / no-JS: elemen langsung terlihat (varian `motion-reduce:*` + set
- * `data-inview` segera). `once` default true (padanan `viewport:{once:true}`).
+ * `reveal` — IntersectionObserver menandai `data-inview` saat elemen masuk viewport → kelas Tailwind
+ * `data-[inview]:*` melakukan transisi masuk. Reduced-motion / no-JS: elemen langsung terlihat
+ * (varian `motion-reduce:*` + set `data-inview` segera). `once` default true.
  *
  * Dipakai `{@attach reveal()}` pada elemen ber-kelas preset `revealUp`/`revealFade`.
  */
@@ -37,7 +36,7 @@ export function reveal(
 }
 
 // Preset kelas (didefinisikan sebagai string literal supaya scanner Tailwind v4 memindainya dari .ts).
-// `revealUp` = fade + rise (padanan initial {opacity:0,y:20}); `revealFade` = fade saja.
+// `revealUp` = fade + rise; `revealFade` = fade saja.
 export const revealUp =
 	'translate-y-5 opacity-0 transition-[opacity,transform] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] data-[inview]:translate-y-0 data-[inview]:opacity-100 motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none';
 

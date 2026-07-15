@@ -1,7 +1,7 @@
 import { getContext, setContext } from 'svelte';
 
 /**
- * Factory context bertipe (plan §3.5 — pakai `createContext`, bukan `setContext/getContext` telanjang).
+ * Factory context bertipe — pakai `createContext`, bukan `setContext/getContext` telanjang.
  * Scope per-tree/per-request (bukan module-level mutable state → tak bocor lintas user saat SSR).
  * `get()` throw bila belum di-`set` di parent; `getOptional()` untuk kasus opsional.
  */

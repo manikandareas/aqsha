@@ -4,9 +4,7 @@
 // HOUSE_ADS until exhausted → adding entries to that array shows them automatically
 // (non-search only). The hero (items[0]) is rendered separately above.
 //
-// Extracted PURE from `apps/web/features/explore/components/explore-findings.tsx`
-// (`buildFeedBlocks`) so the block layout is contract-testable byte-for-byte
-// (`feed-blocks.spec.ts` — feed fixture output must match web).
+// (`buildFeedBlocks`) so the block layout is contract-testable (`feed-blocks.spec.ts`).
 
 import { discoveryItemKey, type DiscoveryItem } from '$lib/features/discovery/model';
 import { HOUSE_ADS, type HouseAd } from '$lib/features/discovery/house-ads';

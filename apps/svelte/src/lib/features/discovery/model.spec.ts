@@ -9,9 +9,7 @@ import {
 } from './model';
 import type { ExplorePaper, FeedItem } from './types';
 
-// Feed fixture → DiscoveryItem mapping contract (§11.2 "feed fixture output byte-equivalent").
-// These outputs must match `apps/web/features/discovery/model.ts` field-for-field so the two apps
-// render identical cards + reference the same save/hide handles.
+// Feed fixture → DiscoveryItem mapping contract. Field-for-field stability keeps cards + save/hide handles consistent.
 
 const paperFeed: FeedItem = {
 	_id: 'f1',

@@ -187,7 +187,7 @@ export function mastraMessagesToTimeline(
 				const inv = (p.toolInvocation ?? {}) as ToolInvocationLike;
 				const toolName = str(inv.toolName);
 				const toolCallId = str(inv.toolCallId) || `${m.id}:${i}`;
-				// propose_artifact/execute_artifact sukses → kartu artifact (parity live).
+				// propose_artifact/execute_artifact sukses → kartu artifact (bukan tool-row generik).
 				const artifact = artifactFromResult(toolName, toolCallId, inv.result);
 				if (artifact) {
 					parts.push({ kind: 'artifact', id: `artifact:${toolCallId}`, model: artifact });
@@ -403,7 +403,7 @@ function ensureActiveAssistant(state: MastraTimelineState): [MastraTimelineState
 }
 
 /**
- * Reduksi satu chunk Mastra ke state timeline. Immutable (aman untuk React state).
+ * Reduksi satu chunk Mastra ke state timeline. Immutable (safe for incremental state updates).
  *
  * Durable-thread: satu langganan `subscribeToThread` panjang menerima banyak run (chunk membawa
  * `runId`). Status diturunkan dari chunk di sini (bukan per-promise di hook): `start`→streaming,
@@ -861,7 +861,7 @@ export function reduceWorkflowChunk(
 			const stepId = str(payload.stepName);
 			if (!stepId) return state;
 			const [s, idx] = ensureActiveAssistant(streaming(state));
-			// Ringkasan penalaran sintesis → blok reasoning (mengambang ke atas, parity chat),
+			// Ringkasan penalaran sintesis → blok reasoning (mengambang ke atas, seperti chat biasa),
 			// BUKAN detail step. Sisanya = detail proses biasa.
 			const out = asRecord(payload.output);
 			if (str(out.kind) === 'reasoning') {

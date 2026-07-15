@@ -11,8 +11,7 @@
 	import WorkspaceUploadToastStatusIcon from './WorkspaceUploadToastStatusIcon.svelte';
 
 	/**
-	 * Presentational upload-queue card — port of `workspace-upload-toast-view.tsx` (exported there as
-	 * `WorkspaceUploadToast`). Rendered inside a sonner toast by `WorkspaceUploadToast.svelte`.
+	 * Presentational upload-queue card. Rendered inside a sonner toast by `WorkspaceUploadToast.svelte`.
 	 */
 	let {
 		items,

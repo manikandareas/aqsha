@@ -1,8 +1,7 @@
 <script lang="ts" module>
 	/**
-	 * Shape of the raw artifact record surfaced to the metadata panel — mirror of web
-	 * `artifact-detail-sidebar.tsx`'s `ArtifactSidebarRecord` (the `.artifact` sub-object of the
-	 * artifact detail query).
+	 * Raw artifact record surfaced to the metadata panel (the `.artifact` sub-object of the artifact
+	 * detail query).
 	 */
 	export type ArtifactSidebarRecord = {
 		artifactType: string;
@@ -45,11 +44,10 @@
 	} from '$lib/features/workspaces/utils/paper-metadata-model';
 
 	/**
-	 * Full artifact metadata panel (About / Cite / Details) — port of web `artifact-detail-sidebar.tsx`
-	 * `ArtifactMetadataPanel`, with the inline extraction banner (`PaperStatusBanner`) and the shared
-	 * `PropertyRow` / `PropertyLink` render shapes inlined as snippets. Retry actions are pre-bound to
-	 * the active artifact by the data hook (§ `useArtifactDetailData`), so — unlike web — no `artifactId`
-	 * needs threading through.
+	 * Full artifact metadata panel (About / Cite / Details), with the inline extraction banner
+	 * (`PaperStatusBanner`) and shared `PropertyRow` / `PropertyLink` render shapes inlined as snippets.
+	 * Retry actions are pre-bound to the active artifact by the data hook (`useArtifactDetailData`), so
+	 * no `artifactId` needs threading through.
 	 */
 	type NonMarkdownPayload = Exclude<ArtifactRenderPayload, { artifactType: 'markdown' }>;
 	type PaperMetadata = NonNullable<NonNullable<PaperExtractionStatus>['metadata']>;
@@ -92,7 +90,7 @@
 	);
 	const formatValue = $derived(artifact.mimeType ?? artifact.language);
 
-	// Extraction banner state (mirror of web `PaperStatusBanner`).
+	// Extraction banner state (`PaperStatusBanner`).
 	const urlFailed = $derived(payload.artifactType === 'url' && payload.status === 'failed');
 	const showBanner = $derived(view.paperPending || view.paperFailed || urlFailed);
 

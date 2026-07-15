@@ -1,6 +1,4 @@
-// Settings navigation model — port 1:1 from
-// apps/web/features/settings/lib/settings-menu.ts. Icons are Hugeicons glyph DATA
-// (`IconSvgElement`) rather than React components (§Phase 3 icon adapter).
+// Settings navigation model. Icons are Hugeicons glyph data (`IconSvgElement`).
 
 import {
 	CreditCardIcon,

@@ -31,7 +31,7 @@
 	/**
 	 * "Temuan untukmu" — the real combined paper + news feed, using the editorial discovery cards +
 	 * infinite scroll. Scoped by the active interest pill (topic). Empty `q` → personal/topic feed
-	 * (Jelajah); non-empty `q` → live paper search (Selidiki). Port of `explore-findings.tsx`.
+	 * (Jelajah); non-empty `q` → live paper search (Selidiki).
 	 */
 	let {
 		topic,
@@ -92,7 +92,7 @@
 	const hero = $derived(items[0]);
 	const blocks = $derived(buildFeedBlocks(items.slice(1), !searchMode));
 
-	// Infinite-scroll budget (mirror discovery-page.tsx). Refs = non-reactive across effect runs.
+	// Cap auto-fetches per session so a run of locally-hidden items can't spin forever. Refs stay non-reactive across effect runs.
 	let sentinelEl = $state<HTMLDivElement | null>(null);
 	let autoLoadCount = 0;
 	let prevRaw = 0;

@@ -1,6 +1,6 @@
 /**
- * Helper pure untuk pricing landing — dipisah dari komponen agar contract-testable. Angka di-derive
- * dari `$lib/plan/catalog` (SSOT, §4.1) — jangan duplikat. Port `for-you-section.tsx`.
+ * Pure pricing helpers for the landing page — separated for contract tests. Amounts derived from
+ * `$lib/plan/catalog` (SSOT); do not duplicate catalog values here.
  */
 import { PLAN_CATALOG, UNLIMITED, type PublicPlanKey } from '$lib/plan/catalog';
 

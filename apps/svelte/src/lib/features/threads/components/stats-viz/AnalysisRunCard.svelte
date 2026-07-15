@@ -23,14 +23,14 @@
 
 	/**
 	 * Kartu run analisis statistik — identitas momen analisis di chat, menggantikan tool-row
-	 * generik `run_analysis`/`run_python_analysis` (fase A plan statistik-panel):
+	 * generik `run_analysis`/`run_python_analysis`:
 	 * - Running: judul uji + ringkasan mapping + badge kredit + elapsed berdetak; uji berat
 	 *   (SEM/mediasi) memakai copy bertahap supaya bootstrap 1–2 menit tak terasa hang.
 	 * - Sukses: "struk" ringkas — chip verdict agregat + jumlah tabel/gambar, dihitung dari grup
 	 *   blok DB (`statsGroupsByToolCallId`, D10 — BUKAN parsing output tool; anti-forgery gratis).
 	 *   Grup belum ter-fetch (jendela invalidasi) → struk tanpa chip, degrade mulus.
 	 * - Gagal / `ok:false`: kartu error dengan note ramah tool (blocked kredit / mapping kolom).
-	 * `onOpen` (fase B: buka panel Statistik scoped) → struk bisa diklik. Port `analysis-run-card.tsx`.
+	 * `onOpen` → struk bisa diklik untuk membuka panel Statistik scoped.
 	 */
 	let {
 		model,
@@ -42,7 +42,7 @@
 		detail: AnalysisDetail;
 		/** Grup blok DB milik toolCallId ini — sumber judul final + chip verdict. */
 		group?: StatsGroup;
-		/** Fase B: buka panel Statistik scoped runKey ini. Absen → struk non-interaktif. */
+		/** Buka panel Statistik scoped runKey ini. Absen → struk non-interaktif. */
 		onOpen?: () => void;
 	} = $props();
 

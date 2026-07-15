@@ -5,7 +5,7 @@
 	/**
 	 * Empty state tab Sitasi — anatomi `WorkspaceLibraryEmpty` (badge pill → title +
 	 * deskripsi → hairline connector → stacked pill actions). Footnote koneksi provider
-	 * kini tautan ke Settings → Integrasi (Fase 5 live).
+	 * kini tautan ke Settings → Integrasi.
 	 */
 	let {
 		onImportFile,

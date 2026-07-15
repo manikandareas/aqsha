@@ -8,10 +8,9 @@
 	import { settingsItemForPath, settingsMenu, type SettingsMenuItem } from '../lib/settings-menu';
 
 	/**
-	 * Settings navigation rail — port 1:1 from apps/web/features/settings/components/settings-rail.tsx.
-	 * Offcanvas + flush variant (distinct from the product AppSidebar), "Kembali ke chat" header, two
-	 * nav groups (Pribadi / Riset), NavUser footer (viewer resolves from `viewerContext`, so no prop —
-	 * same as the product sidebar). Active section derives from the current pathname.
+	 * Settings navigation rail. Offcanvas + flush variant (distinct from the product AppSidebar),
+	 * "Kembali ke chat" header, two nav groups (Pribadi / Riset), NavUser footer (viewer resolves from
+	 * `viewerContext`). Active section derives from the current pathname.
 	 */
 	const active = $derived(settingsItemForPath(page.url.pathname).key);
 

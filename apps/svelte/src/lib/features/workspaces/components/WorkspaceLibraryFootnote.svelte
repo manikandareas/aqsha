@@ -4,11 +4,10 @@
 	import * as Tooltip from '$lib/components/ui/tooltip';
 
 	/**
-	 * Quiet footnote pinned to the bottom of the board — port of
-	 * `apps/web/features/workspaces/components/workspace-library-footnote.tsx`. Teaches the gesture
-	 * (1× context, 2× open); when items are selected the right side flips to a count + clear action.
-	 * `@container` (not viewport) drives which hints hide on a narrow panel; the 3rd hint + the
-	 * supplementary copy are delegated to the InfoIcon tooltip.
+	 * Quiet footnote pinned to the bottom of the board. Teaches the gesture (1× context, 2× open); when
+	 * items are selected the right side flips to a count + clear action. `@container` (not viewport)
+	 * drives which hints hide on a narrow panel; the 3rd hint + the supplementary copy are delegated to
+	 * the InfoIcon tooltip.
 	 */
 	type Hint = { chip: string; label: string };
 

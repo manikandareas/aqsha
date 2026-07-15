@@ -12,10 +12,9 @@
 	import SettingsHeader from '../components/SettingsHeader.svelte';
 
 	/**
-	 * Settings → Integrasi (Fase 5) — port 1:1 from
-	 * apps/web/features/settings/components/integrations-page.tsx. Per-provider card: status +
-	 * connect (OAuth redirect) / connect-with-key (Zotero) / disconnect / sync. Connection lifecycle
-	 * is account-level; per-workspace data pulls live in the Sitasi tab. Additive-only, no redesign.
+	 * Settings → Integrasi. Per-provider card: status + connect (OAuth redirect) / connect-with-key
+	 * (Zotero) / disconnect / sync. Connection lifecycle is account-level; per-workspace data pulls live
+	 * in the Sitasi tab.
 	 */
 	const integrations = useIntegrations();
 

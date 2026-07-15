@@ -3,9 +3,9 @@
 	import { cn } from '$lib/utils';
 	import { useSmoothText } from '$lib/features/threads/lib/smooth-text.svelte';
 
-	// Reasoning summary — port of `apps/web/components/ai-elements/reasoning.tsx`. Plain markdown (NO
-	// citation/stats/viz custom tags — reasoning never carries them), same security config as `Response`.
-	// Smooth-revealed while thinking (`useSmoothText`, enabled = isThinking).
+	// Reasoning summary. Plain markdown (NO citation/stats/viz custom tags — reasoning never carries
+	// them), same security config as `Response`. Smooth-revealed while thinking (`useSmoothText`,
+	// enabled = isThinking).
 
 	let {
 		text,

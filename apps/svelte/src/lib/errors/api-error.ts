@@ -1,11 +1,10 @@
 /**
- * Normalisasi error API klien. Port dari `apps/web/lib/api-error.ts` (+ struktur `appError` di
- * `packages/db/src/appError.ts`). Eden Treaty tak pernah throw: ia mengembalikan `{ data, error }`
- * dengan `error` berbentuk `{ status, value }`, di mana `value` = body terstruktur backend
- * `{ message, code, severity?, field? }`. Modul ini mengubah bentuk-bentuk itu menjadi satu
- * `NormalizedApiError` yang stabil untuk UI, plus dua getter primitif (`readableApiErrorMessage`,
- * `apiErrorCode`) yang identik contract dengan web agar branch UI (mis. soft-cap `pin_limit_reached`)
- * tetap sama.
+ * Normalisasi error API klien (struktur `appError` di `packages/db/src/appError.ts`). Eden Treaty
+ * tak pernah throw: ia mengembalikan `{ data, error }` dengan `error` berbentuk `{ status, value }`,
+ * di mana `value` = body terstruktur backend `{ message, code, severity?, field? }`. Modul ini
+ * mengubah bentuk-bentuk itu menjadi satu `NormalizedApiError` yang stabil untuk UI, plus dua getter
+ * primitif (`readableApiErrorMessage`, `apiErrorCode`) agar branch UI (mis. soft-cap
+ * `pin_limit_reached`) tetap konsisten.
  *
  * Modul pure (tanpa `$env`, tanpa `@aqsha/*` runtime) → aman di browser bundle & unit-testable.
  */
@@ -54,7 +53,7 @@ function readString(value: unknown, key: string): string | null {
 
 /**
  * Pesan human-readable dari error Eden. Prefer `value.message` terstruktur; fallback ke `fallback`.
- * Identik contract dengan `apps/web/lib/api-error.ts` — jangan render `error.message` mentah di UI.
+ * Jangan render `error.message` mentah di UI.
  */
 export function readableApiErrorMessage(error: unknown, fallback: string): string {
 	return readString(edenErrorValue(error), 'message') ?? fallback;
@@ -62,7 +61,7 @@ export function readableApiErrorMessage(error: unknown, fallback: string): strin
 
 /**
  * Kode error terstruktur (`value.code`), atau `null` bila bukan appError. Untuk mem-branch UI
- * (mis. `pin_limit_reached` → toast warning, bukan error). Identik contract dengan web.
+ * (mis. `pin_limit_reached` → toast warning, bukan error).
  */
 export function apiErrorCode(error: unknown): string | null {
 	return readString(edenErrorValue(error), 'code');

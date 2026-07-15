@@ -29,10 +29,8 @@
 	import SaveToWorkspaceButton from './SaveToWorkspaceButton.svelte';
 
 	/**
-	 * Editorial discovery card — the single Svelte component covering all three web exports:
-	 * `DiscoveryHeroCard` (variant="hero"), `DiscoveryFeatureCard` (variant="feature" + imageSide) and
-	 * `DiscoveryStandardCard` (variant="standard"). Port of `apps/web/features/discovery/components/
-	 * discovery-item-card.tsx`. `handlers` = ask-astra / saved (interest) / hide (record & remove).
+	 * Editorial discovery card — hero, feature (+ imageSide), and standard variants. `handlers` =
+	 * ask-astra / saved (interest) / hide (record & remove).
 	 */
 	let {
 		item,
@@ -53,8 +51,7 @@
 	const title = $derived(item.title);
 	const tldr = $derived(item.tldr ?? item.summary);
 
-	// Internal reader href (null → external only). Same string as web `feedDetailHref` (rule off in this
-	// glob; byte-identical to apps/web — see eslint override). SvelteKit intercepts same-origin `<a>`.
+	// Internal reader href (null → external only). SvelteKit intercepts same-origin `<a>`.
 	const detailHref = $derived(feedDetailHref(item));
 
 	const titleClass = $derived(

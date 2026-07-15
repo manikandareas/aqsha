@@ -3,8 +3,7 @@ import type { StatsVerdict } from '@aqsha/chat-core/stats-viz';
 /**
  * Label + color class per verdict (light+dark, not color-alone — always has a text label). A
  * non-component module so the decision card (`stats-decision`) AND the aggregate verdict chip of the
- * run card (`analysis-run-card`) share one color source. Verbatim port of
- * `apps/web/features/threads/components/stats-viz/verdict-meta.ts`.
+ * run card (`analysis-run-card`) share one color source.
  */
 export const STATS_VERDICT_META: Record<
 	StatsVerdict,

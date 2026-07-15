@@ -5,10 +5,9 @@
 	import { createPersistentCollapse } from './persistent-collapse.svelte';
 
 	/**
-	 * Collapsible sidebar section header + animated body — port of web `SidebarSection`
-	 * (`app-sidebar.tsx`). Persisted collapse via `createPersistentCollapse`; the open/close
-	 * animation is enabled only after the first client frame so a restored-collapsed state appears
-	 * instantly instead of animating on load.
+	 * Collapsible sidebar section header + animated body. Persisted collapse via
+	 * `createPersistentCollapse`; the open/close animation is enabled only after the first client
+	 * frame so a restored-collapsed state appears instantly instead of animating on load.
 	 */
 	let {
 		label,

@@ -1,11 +1,10 @@
 import { cn } from '$lib/utils';
 
 /**
- * Shared panel/surface class contract — ported 1:1 from apps/web/lib/panel-surface.ts.
- * Pure class-name constants (framework-agnostic); the reactive inline breakpoint lives
- * in `$lib/hooks/panel-inline.svelte.ts`. Container-query variants (`@2xl`/`@3xl`/`@5xl`)
- * are preserved verbatim — layout inside these columns adapts to the COLUMN width, not
- * the viewport (see memory: "layout WAJIB @2xl bukan sm/md").
+ * Shared panel/surface class contract. Pure class-name constants (framework-agnostic); the reactive
+ * inline breakpoint lives in `$lib/hooks/panel-inline.svelte.ts`. Container-query variants
+ * (`@2xl`/`@3xl`/`@5xl`) are preserved verbatim — layout inside these columns adapts to the COLUMN
+ * width, not the viewport.
  */
 
 /**

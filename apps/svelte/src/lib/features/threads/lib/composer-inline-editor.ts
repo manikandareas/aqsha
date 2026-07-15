@@ -15,11 +15,10 @@ import {
 } from './token-pill';
 
 /**
- * Pure composer DOM logic for the tokenized composer (port from apps/web). Manages the slash-command
- * chip + `@mention` context chip inside a single `contentEditable`. SSOT for commands + context refs =
- * `@aqsha/chat-core`; SSOT for chip visual classes = `token-pill.ts` (shared with the user message
- * bubble). Framework-agnostic browser DOM — no runes (the Svelte contenteditable wiring = Phase 7,
- * THX-3). Verbatim port of `apps/web/features/threads/lib/composer-inline-editor.ts`.
+ * Pure composer DOM logic for the tokenized composer. Manages the slash-command chip + `@mention`
+ * context chip inside a single `contentEditable`. Command definitions + context refs come from
+ * `@aqsha/chat-core`; chip visual classes are shared with the user message bubble via `token-pill.ts`.
+ * Framework-agnostic browser DOM — no runes (Svelte contenteditable wiring lives in the composer).
  */
 
 const CHIP_SELECTOR = '[data-chip="command"]';

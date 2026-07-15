@@ -12,13 +12,12 @@ import {
 } from '../utils/thread-panel-model';
 
 /**
- * Thread-detail side-panel controller (Svelte port of `thread-panel-context.tsx` +
- * `useRegisterThreadPanelData`). The open mode lives in the URL (`?panel=` query param) so panels are
- * deep-linkable and survive refresh; the codec is `thread-panel-model.ts` (byte-equivalent with web).
- * `mode` derives reactively from `page.url` (SvelteKit `$app/state`); openers navigate via `goto`
- * (preserving the rest of the URL). The surface registers id-keyed detail lookups here. A per-tree
- * class via `createContext` (§3.5 — never a module singleton). Null outside the full shell (compact
- * panels) → in-message cards keep their default behaviour.
+ * Thread-detail side-panel controller. The open mode lives in the URL (`?panel=` query param) so panels
+ * are deep-linkable and survive refresh; the codec is `thread-panel-model.ts`. `mode` derives reactively
+ * from `page.url` (SvelteKit `$app/state`); openers navigate via `goto` (preserving the rest of the
+ * URL). The surface registers id-keyed detail lookups here. A per-tree class via `createContext` (never
+ * a module singleton). Null outside the full shell (compact panels) → in-message cards keep their
+ * default behaviour.
  */
 export class ThreadPanelController {
 	#lookups = $state<ThreadPanelLookups>(EMPTY_THREAD_PANEL_LOOKUPS);

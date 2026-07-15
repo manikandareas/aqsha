@@ -3,11 +3,10 @@
 	import { mode } from 'mode-watcher';
 
 	/**
-	 * Global toast host — ported 1:1 from apps/web/components/app-toaster.tsx (`sonner`
-	 * → `svelte-sonner`). Same copy/duration/action surface, same layout knobs
-	 * (closeButton, expand, gap 10, offset 20, bottom-right, visibleToasts 4) and the
-	 * Aqsha toast card class. Theme follows the resolved mode-watcher mode (web read
-	 * next-themes `resolvedTheme`); `undefined` during SSR falls back to `light`.
+	 * Global toast host (`svelte-sonner`). Same copy/duration/action surface, same layout knobs
+	 * (closeButton, expand, gap 10, offset 20, bottom-right, visibleToasts 4) and the Aqsha toast
+	 * card class. Theme follows the resolved mode-watcher mode; `undefined` during SSR falls back to
+	 * `light`.
 	 */
 </script>
 

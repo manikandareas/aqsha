@@ -21,7 +21,7 @@
 	 * artifact injected as an ambient `paper` ContextRef via the shared `ComposerMentions` channel — so
 	 * sending a message auto-pins the document as context and archives the new thread to its workspace.
 	 * The workspace-scoped thread switcher is not used here; `ExploreChatSidePanel` shows the global
-	 * thread list. Chat-about-this-artifact parity holds via the ambient ref.
+	 * thread list. Chat-about-this-artifact works via the ambient ref.
 	 */
 	let { workspaceId, artifactId }: { workspaceId: string; artifactId: string } = $props();
 

@@ -4,8 +4,8 @@ import { feedItemToDiscoveryItem, type DiscoveryItem } from '$lib/features/disco
 import { HOUSE_ADS } from '$lib/features/discovery/house-ads';
 import type { FeedItem } from '$lib/features/discovery/types';
 
-// Feed block rhythm contract (§11.2 "feed fixture output"): grid(6) → feature → grid → ad → …
-// Must match `buildFeedBlocks` in `apps/web/features/explore/components/explore-findings.tsx`.
+// Feed block rhythm contract: grid(6) → feature → grid → ad → …
+// Must stay aligned with `buildFeedBlocks` output (see `feed-blocks.spec.ts`).
 
 function items(n: number): DiscoveryItem[] {
 	return Array.from({ length: n }, (_, i) =>

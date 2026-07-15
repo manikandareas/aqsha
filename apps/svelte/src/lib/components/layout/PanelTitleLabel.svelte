@@ -2,8 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { cn } from '$lib/utils';
 
-	/** Plain panel title label — ported from apps/web/components/panel-title-dropdown-trigger.tsx
-	 *  (`PanelTitleLabel`). The richer dropdown-trigger variant is ported with its consumer (Phase 7). */
+	/** Plain panel title label. The richer dropdown-trigger variant ships with its consumer. */
 	let { class: className, children }: { class?: string; children: Snippet } = $props();
 </script>
 

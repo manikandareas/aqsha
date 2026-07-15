@@ -19,8 +19,7 @@
 	 * id-keyed lookups and renders it: Sumber (aggregate / message-scoped), Statistik (aggregate /
 	 * run-scoped), a `/deep` plan (+ gate actions), a clarification form, a search sub-step, or a generic
 	 * tool step, or a read-only artifact preview (opened from an in-chat artifact card). The Workspace
-	 * (context) tab remains a deferred sub-feature — see the `context` branch. Streamlined port of the
-	 * `thread-detail-shell` panel slot + its detail panels.
+	 * (context) tab remains a deferred sub-feature — see the `context` branch.
 	 */
 	let { controller }: { controller: ThreadPanelController } = $props();
 

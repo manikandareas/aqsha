@@ -6,8 +6,8 @@
 	import { readableApiErrorMessage } from '$lib/errors';
 
 	/**
-	 * Inner content of {@link NameDialog}. Mounted only while open (padanan web `NameDialogContent`
-	 * keyed on `initialName`), so `name` seeds fresh from `initialName` at each mount.
+	 * Inner content of {@link NameDialog}. Mounted only while open (keyed on `initialName`), so `name`
+	 * seeds fresh from `initialName` at each mount.
 	 */
 	let {
 		title,

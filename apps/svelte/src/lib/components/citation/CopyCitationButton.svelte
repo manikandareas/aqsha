@@ -2,8 +2,8 @@
 	import { CheckIcon, CopyIcon, Icon } from '$lib/icons';
 
 	/**
-	 * Copy-to-clipboard citation chip — port 1:1 of apps/web/components/citation/copy-citation-button.tsx.
-	 * `children` is a plain string label (matches the web prop shape). Shows a check for 1.2s after copy.
+	 * Copy-to-clipboard citation chip. `children` is a plain string label. Shows a check for 1.2s
+	 * after copy.
 	 */
 	let { value, children }: { value: string; children: string } = $props();
 

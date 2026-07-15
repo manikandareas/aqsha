@@ -9,7 +9,7 @@
 	 * Sumber per-turn di bawah jawaban. Bila ada slot panel (`onOpen`) → tampil sebagai TRIGGER
 	 * tunggal "N sumber" yang membuka panel daftar sumber (tiap item → URL aslinya). Tanpa slot
 	 * (panel chat compact) → fallback collapsible inline lama (`SourcesPanel`). Pemanggil menyiapkan
-	 * kartu; kosong → tak render. Port `sources-panel.tsx` (`InlineSources`).
+	 * kartu; kosong → tak render.
 	 */
 	let {
 		sources,

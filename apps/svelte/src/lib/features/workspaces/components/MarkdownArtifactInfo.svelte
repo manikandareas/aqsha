@@ -3,10 +3,7 @@
 	import { Icon, Loader2Icon } from '$lib/icons';
 	import { type ArtifactSidebarRecord } from './ArtifactDetailSidebar.svelte';
 
-	/**
-	 * Inner metadata content for a markdown document (popover/menu-agnostic) — port of web
-	 * `artifact-detail-sidebar.tsx` `MarkdownArtifactInfo`.
-	 */
+	/** Inner metadata content for a markdown document (popover/menu-agnostic). */
 	let { artifact }: { artifact: ArtifactSidebarRecord } = $props();
 
 	function markdownSourceLabel(source: string | undefined) {

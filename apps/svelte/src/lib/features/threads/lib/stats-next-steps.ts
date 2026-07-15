@@ -1,10 +1,8 @@
 /**
- * Analysis next-step ritual map (stats-panel plan phase C) — the test-order guidance à la
- * `analisis-statistik/SKILL.md` (profile → descriptive → validity → reliability → classic
- * assumptions → regression/correlation). Tapping a chip prefills the composer with a natural-language
- * prompt (OQ3 default), WITHOUT auto-send: the agent stays free to deviate when the user types their
- * own. Deterministic & instant — no model dependency. Verbatim port of
- * `apps/web/features/threads/lib/stats-next-steps.ts`.
+ * Analysis next-step ritual map — the test-order guidance à la `analisis-statistik/SKILL.md` (profile →
+ * descriptive → validity → reliability → classic assumptions → regression/correlation). Tapping a chip
+ * prefills the composer with a natural-language prompt (OQ3 default), WITHOUT auto-send: the agent stays
+ * free to deviate when the user types their own. Deterministic & instant — no model dependency.
  *
  * Only tests with a clear follow-up are filled. `custom` (run_python_analysis) & Tier 3 tests
  * (SEM/factor/mediation/moderation/advanced-difference) are DELIBERATELY empty — don't presume the

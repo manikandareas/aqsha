@@ -9,7 +9,7 @@
 	/**
 	 * Explore command bar (Row 0). Short greeting + wide ask-bar (page anchor) + interest pills. A pill
 	 * is a real FeedTopic → clicking scopes the feed. Analytics widgets (Pulse/Constellation…) live in the
-	 * page-level bento below, not here. Port of `apps/web/features/explore/components/explore-hero.tsx`.
+	 * page-level bento below, not here.
 	 */
 	let {
 		activeTopic,

@@ -16,7 +16,6 @@
 	 * to navigate) a source `<a>` inside the preview instead of opening the panel.
 	 * Falls back to a capped, scrollable preview when no opener is provided (compact chat
 	 * panels, no detail slot) — keeping long tool output bounded there too.
-	 * Port of `scroll-detail-trigger.tsx`.
 	 */
 	let {
 		onOpen,

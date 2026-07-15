@@ -1,8 +1,6 @@
-// Discovery item model for the editorial mosaic (Fase 8). `DiscoveryItem` is the
-// wire `FeedItem` carrying a precomputed `itemRef` (the save/hide handle). Feed
-// rows ref by feedItemId; live external papers (search augmentation) ref by
-// paperKey — see `paperToDiscoveryItem` in Fase 8.2. Ported verbatim from
-// `apps/web/features/discovery/model.ts`.
+// Discovery item model for the editorial mosaic. `DiscoveryItem` is the wire `FeedItem` carrying a
+// precomputed `itemRef` (the save/hide handle). Feed rows ref by feedItemId; live external papers
+// (search augmentation) ref by paperKey — see `paperToDiscoveryItem`.
 
 import type { DiscoveryItemRef, ExplorePaper, FeedItem } from './types';
 
@@ -12,7 +10,7 @@ export function feedItemToDiscoveryItem(item: FeedItem): DiscoveryItem {
 	return { ...item, itemRef: { kind: 'feed', feedItemId: item._id } };
 }
 
-// Live external paper (search augmentation, Fase 8) → DiscoveryItem. Refs by
+// Live external paper (search augmentation) → DiscoveryItem. Refs by paperKey (not yet materialized
 // paperKey (not yet materialized into a feed row), synthetic `_id` for list keys.
 export function paperToDiscoveryItem(paper: Omit<ExplorePaper, 'lastSeenAt'>): DiscoveryItem {
 	return {

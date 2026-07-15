@@ -3,8 +3,7 @@ import type { Attachment } from 'svelte/attachments';
 
 /**
  * `magnetic` — elemen bergeser ke arah kursor selama dalam `radius`, lalu balik ke rest saat kursor
- * keluar. Padanan `useMagneticButton` (`apps/web/lib/motion.ts`): web memakai spring framer; di sini
- * transisi CSS transform (feel setara §3.2). No-op saat reduced-motion (padanan `reduce` guard web).
+ * keluar. Transisi CSS transform (bukan spring). No-op saat reduced-motion.
  */
 export function magnetic(
 	options: { radius?: number; strength?: number } = {}

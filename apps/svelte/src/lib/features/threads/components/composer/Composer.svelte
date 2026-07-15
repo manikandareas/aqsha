@@ -97,7 +97,7 @@
 	let attachments = $state<ComposerAttachment[]>([]);
 	// @mention workspace picker: the workspace list feeds the top-level palette; drilling into a
 	// workspace fetches its context-picker artifacts on demand (query dormant until `drillWorkspaceId`
-	// is set by the tokenized editor's `onRequestWorkspaceItems`). Mirrors web `composer.tsx`.
+	// is set by the tokenized editor's `onRequestWorkspaceItems`).
 	let drillWorkspaceId = $state<string | null>(null);
 	const workspacesQuery = useWorkspacesList(() => false);
 	const contextItemsQuery = useContextPickerArtifacts(() => drillWorkspaceId);
@@ -128,7 +128,7 @@
 	const billing = useBillingCurrent();
 
 	// D5: large attachments index async (initial `pending`). Poll the thread artifact list ONLY while a
-	// pending upload exists; the live chip status is derived from the poll (no mirror into state) +
+	// pending upload exists; the live chip status is derived from the poll (not duplicated in local state) +
 	// a one-time toast per artifact if indexing fails.
 	const hasPendingUpload = $derived(attachments.some((a) => a.indexingStatus === 'pending'));
 	const threadArtifacts = useThreadArtifacts(() => (hasPendingUpload ? (threadId ?? null) : null), {
@@ -154,7 +154,7 @@
 	/**
 	 * Merge-pin reconciler shared by the two epoch merges (ambient + library selection): drop `removeKeys`
 	 * from the current set, then prepend `addRefs` not already present (dedup by key). One place so a fix
-	 * (e.g. key/order comparison) never misses a path. Pure — ported from web `reconcilePinnedRefs`.
+	 * (e.g. key/order comparison) never misses a path. Pure reconciler.
 	 */
 	function reconcilePinnedRefs(
 		current: ContextRef[],
@@ -240,7 +240,7 @@
 		}
 	});
 
-	// Prefill composer text (stats next-step chip, phase C) — overwrite `content` when the draft epoch
+	// Prefill composer text (stats next-step chip) — overwrite `content` when the draft epoch rises.
 	// rises. Plain text → also set `richContent` so it doesn't drift before edit.
 	let seenDraftEpoch = mentions.draftEpoch;
 	$effect(() => {

@@ -1,17 +1,14 @@
 import { createContext } from '$lib/context';
 
-// THC-7 — follow-bottom / scroll-anchoring engine. Port of the `use-stick-to-bottom` behavior used by
-// `apps/web/components/ai-elements/conversation*.tsx` (Conversation / Content / ScrollButton). Svelte
-// hand-roll (no mature `stick-to-bottom-svelte` at pin time; a hand-roll avoids virtualization that
-// would change behavior — §6). Follows the transcript bottom as content streams in, UNLESS the user
-// has scrolled up; a floating button reappears while not at bottom. Reduced-motion → instant jumps.
+// Follow-bottom / scroll-anchoring engine. Follows the transcript bottom as content streams in,
+// UNLESS the user has scrolled up; a floating button reappears while not at bottom. No virtualization —
+// that would change scroll behavior. Reduced-motion → instant jumps.
 //
-// A class with `$state` (§3.5 — not module-level mutable state); the scroller/content elements are
-// wired via `{@attach}` (§3.4 — sync external DOM with cleanup, NOT `$effect` reflex). Exposes
-// `isAtBottom` + `scrollToBottom()` via context for the scroll button (mirror
-// `useStickToBottomContext`).
+// A class with `$state` (not module-level mutable state); the scroller/content elements are wired via
+// `{@attach}` (sync external DOM with cleanup, NOT `$effect` reflex). Exposes `isAtBottom` +
+// `scrollToBottom()` via context for the scroll button.
 
-/** Distance (px) from the bottom still counted as "at bottom" (mirror the library's slack). */
+/** Distance (px) from the bottom still counted as "at bottom". */
 const BOTTOM_THRESHOLD = 24;
 
 export class StickToBottom {
@@ -68,7 +65,7 @@ export class StickToBottom {
 		};
 		el.addEventListener('scroll', onScroll, { passive: true });
 
-		// Initial pin (mirror `initial="smooth"`; instant on first paint to avoid a visible jump).
+		// Initial pin: instant on first paint to avoid a visible jump.
 		this.scrollToBottom(false);
 
 		return () => {
@@ -78,7 +75,7 @@ export class StickToBottom {
 		};
 	};
 
-	/** `{@attach}` for the inner content. Follows the bottom as the content grows (`resize="smooth"`). */
+	/** `{@attach}` for the inner content. Follows the bottom as the content grows. */
 	attachContent = (el: HTMLElement): (() => void) => {
 		const ro =
 			typeof ResizeObserver !== 'undefined'
@@ -92,6 +89,6 @@ export class StickToBottom {
 	};
 }
 
-/** Per-tree context (mirror `useStickToBottomContext`) — the scroll button reads `isAtBottom`/scroll. */
+/** Per-tree context — the scroll button reads `isAtBottom` and `scrollToBottom()`. */
 export const stickToBottomContext = createContext<StickToBottom>('stick-to-bottom');
 export const getStickToBottom = (): StickToBottom => stickToBottomContext.get();

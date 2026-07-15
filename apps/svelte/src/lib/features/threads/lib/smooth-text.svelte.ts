@@ -1,7 +1,7 @@
 import { untrack } from 'svelte';
 
 /**
- * Reveal streaming text character-by-character (Svelte port of `use-smooth-text.tsx`). Append-only: the
+ * Reveal streaming text character-by-character. Append-only: the target is read each
  * target is read each `requestAnimationFrame` from a non-reactive field, so growing text stays smooth
  * without restarting the loop. When `enabled` is false (part done / history) the full text shows at
  * once. Starts from the text already present (not "") so a cold-load mid-turn doesn't crawl from 0.

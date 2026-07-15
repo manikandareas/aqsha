@@ -13,7 +13,7 @@
 	/**
 	 * Message timeline — FLAT per-message render following `defaultMessageReducer` order. User = bubble;
 	 * assistant = reasoning → "Proses" block → answer → artifact → inline sources → actions. HITL cards
-	 * awaiting an answer render above the composer (in the shell), not here. Port of `MessageList`.
+	 * awaiting an answer render above the composer (in the shell), not here.
 	 */
 	let {
 		messages,
@@ -60,7 +60,7 @@
 		return undefined;
 	}
 
-	// Next-step chip ritual (phase C): only the LAST analysis run of the thread + settled turn.
+	// Next-step chip ritual: only the LAST analysis run of the thread + settled turn.
 	const nextStepAnalysis = $derived(
 		!busy && last?.role === 'assistant' ? lastSuccessfulAnalysisId(last) : undefined
 	);

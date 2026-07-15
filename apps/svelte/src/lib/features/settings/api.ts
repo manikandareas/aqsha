@@ -10,10 +10,9 @@ import {
 } from './lib/integrations';
 
 /**
- * Settings query/mutation hooks — Svelte port of apps/web/features/settings/api.ts. Each is a
- * function that must be called during component init (uses the query + api-client context). The
- * `create*` argument is wrapped in a function (§3.6). Query keys, stale policy, invalidation and
- * toast copy are identical to web so the cache contract is byte-equivalent (§11.2).
+ * Settings query/mutation hooks. Each must be called during component init (uses the query + api-client
+ * context). The `create*` argument is wrapped in a function so TanStack Query stays reactive. Query keys,
+ * stale policy, invalidation, and toast copy match the shared cache contract.
  */
 
 type ProductKey =

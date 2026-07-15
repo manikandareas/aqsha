@@ -7,9 +7,8 @@
 	import { useConnectApiKeyIntegration } from '../api';
 
 	/**
-	 * Connect via API key (Zotero — no OAuth). Port 1:1 from the ApiKeyConnectDialog in
-	 * apps/web/features/settings/components/integrations-page.tsx. Key validated server-side against
-	 * Zotero before being stored encrypted; the secret never persists in client state after submit.
+	 * Connect via API key (Zotero — no OAuth). Key validated server-side against Zotero before being
+	 * stored encrypted; the secret never persists in client state after submit.
 	 */
 	let {
 		provider,

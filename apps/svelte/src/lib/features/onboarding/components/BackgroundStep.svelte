@@ -3,7 +3,6 @@
 	import SelectableOption from './SelectableOption.svelte';
 	import StepHeading from './StepHeading.svelte';
 
-	// Port 1:1 from apps/web/features/onboarding/components/onboarding-steps.tsx (BackgroundStep).
 	let { value, onselect }: { value: string | null; onselect: (id: string) => void } = $props();
 </script>
 

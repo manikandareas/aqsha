@@ -1,5 +1,4 @@
-// Shared option types for the composer palettes + the tokenized editor (mirror of the inline React
-// prop types in tokenized-prompt-input.tsx / context-mention-palette.tsx).
+// Shared option types for the composer palettes and the tokenized editor.
 
 export type ContextWorkspaceOption = {
 	workspaceId: string;

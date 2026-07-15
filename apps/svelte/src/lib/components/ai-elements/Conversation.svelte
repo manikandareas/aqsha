@@ -3,10 +3,9 @@
 	import { cn } from '$lib/utils';
 	import { StickToBottom, stickToBottomContext } from './conversation-state.svelte';
 
-	// THC-7 — the transcript viewport. Port of `apps/web/components/ai-elements/conversation-root.tsx`
-	// (`<StickToBottom initial="smooth" resize="smooth" role="log">`). Owns the follow-bottom engine and
-	// provides it via context; `children` is the scrollable transcript, `overlay` is the fixed layer
-	// (place `<ConversationScrollButton/>` there). No virtualization (§6 — must not change behavior).
+	// The transcript viewport. Owns the follow-bottom engine and provides it via context; `children`
+	// is the scrollable transcript, `overlay` is the fixed layer (place `<ConversationScrollButton/>`
+	// there). No virtualization — must not change scroll behavior.
 
 	let {
 		class: klass,

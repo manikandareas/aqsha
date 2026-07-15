@@ -1,10 +1,8 @@
 // Thread-detail right-panel mode (clickable message-part detail panels).
 //
-// Svelte port of `apps/web/features/thread-experience/utils/thread-panel-model.ts`. The web version
-// wrapped the codec in a nuqs `createParser`; here the codec is PURE and wired to the URL via
-// SvelteKit navigation (`page.url.searchParams` + `goto`) in `thread-panel-context.svelte.ts`. The
-// serialize/parse functions are byte-IDENTICAL to web so the `panel` query param round-trips exactly
-// across both apps (§11.2 contract — pinned by `thread-panel-model.spec.ts`).
+// The codec is PURE and wired to the URL via SvelteKit navigation (`page.url.searchParams` + `goto`) in
+// `thread-panel-context.svelte.ts`. Serialize/parse must stay stable so the `panel` query param
+// round-trips on deep links (pinned by `thread-panel-model.spec.ts`).
 //
 // The thread-detail shell has ONE side-panel slot behind a tab strip (Workspace · Sumber · Statistik ·
 // Pratinjau). Every mode maps to one tab (`threadPanelTabOf`); the message-part detail modes share the
@@ -121,7 +119,7 @@ export function parseThreadPanelMode(raw: string): ThreadPanelMode {
 
 /**
  * Parse the raw `panel` query param into a mode (absent/invalid → closed). Pairs with
- * `panelParamFor` for wiring to `page.url.searchParams` (the nuqs `parseAsThreadPanelMode` analogue).
+ * `panelParamFor` for wiring to `page.url.searchParams`.
  */
 export function panelModeFromParam(raw: string | null | undefined): ThreadPanelMode {
 	if (raw == null || raw === '') return CLOSED_PANEL;

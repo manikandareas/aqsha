@@ -5,12 +5,11 @@
 
 	/**
 	 * Page-1 PDF thumbnail for an Explore card. Rendered directly via `pdfjs-dist` (no react-pdf) to a
-	 * `<canvas>` — the Svelte equivalent of `apps/web/features/discovery/components/pdf-thumb.tsx`. arXiv/
-	 * publisher PDFs hit CORS, so the file is fetched through the API proxy `/papers/pdf-proxy`
-	 * (provenance-checked, Range passthrough → pdf.js only pulls the first page's chunks). Lazy in-view;
-	 * on failure/timeout → `onFail()` so the card falls back to its GenerativeCover. Browser-only:
-	 * `pdfjs-dist` touches `DOMMatrix`/`OffscreenCanvas`, so it's dynamically imported behind `browser`
-	 * (SSR never evaluates it). The parent keys this component by `pdfUrl` (remount per URL).
+	 * `<canvas>`. arXiv/publisher PDFs hit CORS, so the file is fetched through the API proxy
+	 * `/papers/pdf-proxy` (provenance-checked, Range passthrough → pdf.js only pulls the first page's
+	 * chunks). Lazy in-view; on failure/timeout → `onFail()` so the card falls back to its GenerativeCover.
+	 * Browser-only: `pdfjs-dist` touches `DOMMatrix`/`OffscreenCanvas`, so it's dynamically imported behind
+	 * `browser` (SSR never evaluates it). The parent keys this component by `pdfUrl` (remount per URL).
 	 *
 	 * A cheap dev-only PROBE (1 byte) runs first: a paywalled/broken PDF (502/HTML/404) is caught here so
 	 * pdf.js never sees a failing URL → zero console noise. In prod the probe is skipped (saves a
@@ -40,7 +39,7 @@
 
 	const file = $derived(`${API_BASE}/papers/pdf-proxy?u=${encodeURIComponent(pdfUrl)}`);
 
-	// Measure card width + lazy in-view (imperative external source → valid $effect, §3.4).
+	// Measure card width + lazy in-view (imperative external source → valid $effect).
 	$effect(() => {
 		if (!browser) return;
 		const el = containerEl;

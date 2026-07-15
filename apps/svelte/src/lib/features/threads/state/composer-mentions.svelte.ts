@@ -8,9 +8,8 @@ import {
 import { createContext } from '$lib/context';
 
 /**
- * Composer mention channels (Svelte port of `apps/web/features/thread-experience/components/
- * composer-context-mentions.tsx`). Three independent epoch-driven channels the composer consumes and
- * explore/workspace pages (Phase 8/9) publish to:
+ * Composer mention channels. Three independent epoch-driven channels the composer consumes and
+ * explore/workspace pages publish to:
  *
  *  - **ambient**: page-level context (workspace/artifact/paper/news) auto-injected as a composer pill;
  *    replace-on-nav. `ambientEpoch` bumps on every set (incl. same value) so re-clicking "Tanya Astra"
@@ -20,9 +19,9 @@ import { createContext } from '$lib/context';
  *  - **draft**: imperative composer-text prefill (e.g. a stats next-step chip) — overwrites text via an
  *    epoch merge, never auto-sends.
  *
- * A runes state class held per-tree via `createContext` (§3.5 — never a module singleton, so nothing
- * leaks across users under SSR). Instantiate once in the product providers; publishers (Phase 8/9)
- * mutate it; the composer merges by epoch. Safe with no publishers: every channel starts empty.
+ * A runes state class held per-tree via `createContext` (never a module singleton, so nothing
+ * leaks across users under SSR). Instantiate once in the product providers; publishers mutate it;
+ * the composer merges by epoch. Safe with no publishers: every channel starts empty.
  */
 export class ComposerMentions {
 	// ── ambient ──────────────────────────────────────────────────────────────────────────────────
@@ -45,8 +44,8 @@ export class ComposerMentions {
 
 	/**
 	 * Sync ambient refs from the active page (reader/artifact data arriving). Guarded by signature so a
-	 * page re-render with the same refs is a no-op; a genuine change bumps the epoch (mirror the web
-	 * "adjust state during render" guard). Called from the surface when its page context changes.
+	 * page re-render with the same refs is a no-op; a genuine change bumps the epoch. Called from
+	 * the surface when its page context changes.
 	 */
 	syncAmbientFromPage(refs: ContextRef[]): void {
 		const signature = contextRefsSignature(refs);
@@ -124,7 +123,6 @@ export function getComposerMentions(): ComposerMentions {
 /**
  * Adapter for the library board/grid ("click-once = context") — builds a `paper` ref from an
  * artifactId and syncs card highlight with the selection channel (the same one the composer pins).
- * Ported from web `usePanelContextSelection`; consumed by Phase 9 workspace grids.
  */
 export function panelContextSelection(
 	mentions: ComposerMentions,

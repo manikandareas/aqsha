@@ -30,11 +30,10 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Left navigation rail — full port of `apps/web/components/app-sidebar.tsx` (Phase 9 addendum).
-	 * Fetches sidebar data via `useWorkspaceIndexData()` (reactive getters) instead of receiving props
-	 * (web threads them from `AppShell`); selection derives from the route. Renders the workspace tree
-	 * + thread groups (pinned / recent / older) with per-row `ThreadActionsMenu`, `CreateWorkspacePopover`,
-	 * collapsible sections, and the ⌘K command palette.
+	 * Left navigation rail. Fetches sidebar data via `useWorkspaceIndexData()` (reactive getters);
+	 * selection derives from the route. Renders the workspace tree + thread groups (pinned / recent /
+	 * older) with per-row `ThreadActionsMenu`, `CreateWorkspacePopover`, collapsible sections, and the
+	 * ⌘K command palette.
 	 */
 	const MOBILE_THREAD_TITLE_MAX_CHARS = 42;
 	const THREADS_COLLAPSED_STORAGE_KEY = 'aqsha:sidebar:threads-collapsed';

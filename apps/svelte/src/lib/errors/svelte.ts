@@ -2,8 +2,8 @@ import { error } from '@sveltejs/kit';
 import { normalizeApiError } from './api-error';
 
 /**
- * Petakan error API (Eden/appError) ke SvelteKit `error()` untuk `load`/`+server` — expected error
- * (plan §"Error handling"). `error()` melempar `HttpError`, jadi ini tak pernah return; SvelteKit
+ * Petakan error API (Eden/appError) ke SvelteKit `error()` untuk `load`/`+server` — expected error.
+ * `error()` melempar `HttpError`, jadi ini tak pernah return; SvelteKit
  * merender `+error.svelte` dengan `$page.error = { message, code }` (App.Error, lihat `app.d.ts`).
  * `handleError` (Sentry) TIDAK menerima ini — hanya unexpected error yang lolos ke sana.
  */

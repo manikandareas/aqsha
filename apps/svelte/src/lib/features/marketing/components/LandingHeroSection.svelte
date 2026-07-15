@@ -135,7 +135,7 @@
 </section>
 
 <style>
-	/* Hero headline clipPath sweep reveal (padanan framer clipPath inset). */
+	/* Hero headline clipPath sweep reveal. */
 	@keyframes hero-clip {
 		from {
 			clip-path: inset(0 100% 0 0);
@@ -150,7 +150,7 @@
 		animation: hero-clip 0.95s cubic-bezier(0.22, 1, 0.36, 1) both;
 	}
 
-	/* Hero frame 3D drop-in (padanan framer rotateX + y spring). */
+	/* Hero frame 3D drop-in. */
 	@keyframes hero-frame-in {
 		from {
 			opacity: 0;

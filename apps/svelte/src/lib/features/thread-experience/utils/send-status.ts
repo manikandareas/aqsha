@@ -1,10 +1,9 @@
 import type { ComposerNotice } from '$lib/features/threads/components/composer';
 
 /**
- * Send-status → composer notice / `/deep` block message (THX-7). Send-status is a RETURN UNION from the
+ * Send-status → composer notice / `/deep` block message. Send-status is a RETURN UNION from the
  * non-consuming pre-check (`GET /threads/send-status`), NOT a thrown error: `{ canSend, reason?, retryAt? }`.
- * The authoritative backstop is the server billing precheck; these map the reason to UX copy. Ported
- * from the helpers in `mastra-chat-thread-surface.tsx`.
+ * The authoritative backstop is the server billing precheck; these map the reason to UX copy.
  */
 export type SendStatus = {
 	canSend: boolean;

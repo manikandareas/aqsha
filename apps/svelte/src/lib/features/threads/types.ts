@@ -1,10 +1,9 @@
 // Local thread/message/artifact types for the thread feature (structural — matches the shape Eden
 // infers from the API). Intentionally does NOT import `@aqsha/db` so drizzle never reaches the
-// client bundle (§4.1). Mirror of `apps/web/features/threads/types.ts`.
+// client bundle.
 //
-// `Artifact` / `FileChipData` are mirrored here for the attachment-buckets model (THC-8). The
-// canonical `Artifact` type lands in `features/artifacts` in Phase 9; this structural copy keeps
-// the thread engine self-contained meanwhile (same field set as web).
+// `Artifact` / `FileChipData` re-declared here for the attachment-buckets model. The full artifact
+// type lives in `features/artifacts`; this structural subset keeps the thread engine self-contained.
 
 export type ChatThread = {
 	id: string;
@@ -58,7 +57,7 @@ export type FileChipData = {
 	indexingStatus?: string | null;
 };
 
-/** Structural mirror of the artifact row (subset used by the thread engine). Canonical type = Phase 9. */
+/** Structural subset of the artifact row used by the thread engine (attachments, cards). */
 export type Artifact = {
 	_id: string;
 	workspaceId: string | null;

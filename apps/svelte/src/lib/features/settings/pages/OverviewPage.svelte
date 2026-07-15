@@ -13,7 +13,6 @@
 		SettingsPill
 	} from '../components/settings-card';
 
-	// Port 1:1 from apps/web/features/settings/components/overview-page.tsx.
 	const billing = useBillingCurrent();
 	const usage = useUsageActivity(() => 365);
 	const profile = useProfile();

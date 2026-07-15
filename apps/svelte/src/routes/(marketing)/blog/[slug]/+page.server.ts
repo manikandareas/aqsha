@@ -3,7 +3,7 @@ import type { PageServerLoad } from './$types';
 import { createPageMetadata, siteUrl, type PageSeo } from '$lib/seo';
 import { getPublishedPost } from '$lib/features/blog/lib/posts';
 
-/** Padanan `apps/web/app/blog/[slug]/page.tsx` (generateMetadata + BlogPosting JSON-LD). */
+/** Blog post detail — page metadata + BlogPosting JSON-LD. */
 export const load: PageServerLoad = ({ params }) => {
 	const post = getPublishedPost(params.slug);
 	if (!post) error(404, { message: 'Halaman tidak ditemukan', code: 'not_found' });

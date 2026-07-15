@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { queryKeys } from './keys';
 
-// Kontrak §11.2: query key harus byte-equivalent dgn `apps/web/lib/api-query.ts` agar cache konsisten
-// lintas app. Test ini mengunci bentuk key (deteksi drift).
+// Query key registry — test mengunci bentuk key (deteksi drift).
 describe('queryKeys registry', () => {
 	it('workspaces', () => {
 		expect(queryKeys.workspaces.all).toEqual(['workspaces']);

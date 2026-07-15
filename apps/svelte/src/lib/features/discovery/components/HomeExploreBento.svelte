@@ -19,7 +19,7 @@
 	/**
 	 * Discovery teaser on /app (below the composer). One short beat — a sliver of the real feed (1 hero +
 	 * 2 grid) using the same editorial cards as Explore + topic pills (deep-links) — enough to bait a
-	 * scroll then funnel to /app/explore. Port of `home-explore-bento.tsx`.
+	 * scroll then funnel to /app/explore.
 	 */
 	const PILLS = [
 		{ label: 'Semua', href: '/app/explore' },

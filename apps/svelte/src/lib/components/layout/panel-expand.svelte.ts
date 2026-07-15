@@ -2,8 +2,8 @@ import { createContext } from '$lib/context';
 
 /**
  * Panel width control (normal vs expanded 30:70 split), provided by `DetailSplitLayout`
- * and consumed by `PanelExpandButton`. Padanan web `PanelExpandContext`. `getOptional()`
- * returns undefined outside a `DetailSplitLayout` (expand button then renders nothing).
+ * and consumed by `PanelExpandButton`. `getOptional()` returns undefined outside a
+ * `DetailSplitLayout` (expand button then renders nothing).
  *
  * `canExpand`/`expanded` are exposed as getters so the provider can back them with
  * reactive `$state`/`$derived` while the context value reference stays stable.

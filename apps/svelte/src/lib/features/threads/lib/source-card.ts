@@ -1,11 +1,10 @@
 // Source → card adapter (consistent favicon). One `SourceCardData` shape shared by both paths:
 // (1) `search_*` tool results streaming/rehydrated (normal & deep live), and (2) `research_sources`
 // rows from the DB (numbered `[n]` deep panel). Pure: no fetch, no DB — only maps to the neutral
-// presentation contract. Port of `apps/web/features/threads/lib/source-card.ts`.
+// presentation contract.
 //
-// Svelte divergence: `@hugeicons/svelte` renders glyphs as DATA (`IconSvgElement`) via one
-// `HugeiconsIcon`, so `originMeta` returns the glyph `icon` (not a component). Same glyph mapping
-// as web (`$lib/icons` mirrors `@aqsha/ui/icons`).
+// `@hugeicons/svelte` renders glyphs as DATA (`IconSvgElement`) via one `HugeiconsIcon`, so `originMeta`
+// returns the glyph `icon` (not a component).
 
 import { BookOpenIcon, FileTextIcon, GlobeIcon, type IconSvgElement } from '$lib/icons';
 import type { ResearchSource } from '../types';

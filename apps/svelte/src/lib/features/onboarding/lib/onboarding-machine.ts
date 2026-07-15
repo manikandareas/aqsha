@@ -1,9 +1,6 @@
-// Pure onboarding step machine — extracted from apps/web
-// (features/onboarding/lib/use-onboarding-flow.ts + pages/onboarding-page.tsx).
-// No runes, no imports beyond options: framework-agnostic + unit-testable
-// (§3.6 pure-first). The Svelte state layer (`state.svelte.ts`) and the page
-// component drive UI from these constants + predicates so validation timing,
-// progress, and back/next targets stay byte-identical to web.
+// Pure onboarding step machine. No runes, no imports beyond options: framework-agnostic +
+// unit-testable. The Svelte state layer (`state.svelte.ts`) and the page component drive UI from
+// these constants + predicates for validation timing, progress, and back/next targets.
 
 import { MIN_INTERESTS, SOURCE_OTHER } from './onboarding-options';
 
@@ -27,7 +24,6 @@ export const EMPTY_ANSWERS: OnboardingAnswers = {
 	sourceOther: ''
 };
 
-/** Route home after onboarding completes (mirror web `HOME_AFTER_ONBOARDING`). */
 export const HOME_AFTER_ONBOARDING = '/app/explore';
 
 /** Where the "Kembali" button goes per step. Absent → no back button. */
@@ -37,7 +33,6 @@ export const BACK_TARGET: Partial<Record<OnboardingStep, OnboardingStep>> = {
 	source: 'interests'
 };
 
-/** Primary-button label per step (mirror web `PRIMARY_LABEL`). */
 export const PRIMARY_LABEL: Record<OnboardingStep, string> = {
 	welcome: 'Mulai',
 	background: 'Lanjut',
@@ -46,7 +41,6 @@ export const PRIMARY_LABEL: Record<OnboardingStep, string> = {
 	finish: 'Mulai jelajah'
 };
 
-/** Section name shown next to the counter (mirror web `STEP_LABEL`). */
 export const STEP_LABEL: Partial<Record<OnboardingStep, string>> = {
 	background: 'Latar belakang',
 	interests: 'Minat',
@@ -91,9 +85,8 @@ export function toggleInterest(interests: string[], id: string): string[] {
 }
 
 /**
- * Build the `onboarding.complete` request body from answers. `heardAboutOther`
- * is only sent when the source is "lainnya" (mirror web). Returns null when the
- * required single-selects are missing (submit is a no-op — mirror web guard).
+ * Build the `onboarding.complete` request body. `heardAboutOther` is sent only when source is
+ * "lainnya". Returns null when required single-selects are missing (submit is a no-op).
  */
 export function buildCompletePayload(answers: OnboardingAnswers): {
 	background: string;

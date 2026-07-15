@@ -1,9 +1,9 @@
 import { browser } from '$app/environment';
 
 /**
- * Persisted collapse state for a sidebar section — Svelte port of web `usePersistentCollapse`
- * (`app-sidebar.tsx`). Backed by `localStorage[storageKey]` ("1"/"0") + a window `storage` event and
- * a custom broadcast so multiple sections (and tabs) stay in sync. Call during component init.
+ * Persisted collapse state for a sidebar section. Backed by `localStorage[storageKey]` ("1"/"0") +
+ * a window `storage` event and a custom broadcast so multiple sections (and tabs) stay in sync.
+ * Call during component init.
  */
 export const SIDEBAR_SECTION_EVENT = 'aqsha:sidebar-section-toggle';
 

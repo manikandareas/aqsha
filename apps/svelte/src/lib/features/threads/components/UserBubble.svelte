@@ -23,8 +23,8 @@
 	 * User message bubble — text (with `@mention` / `/command` pills) + upload attachments. Mention
 	 * markers (U+E000/E001) are injected by the composer on send and persisted; `parseMentionSegments`
 	 * splits them back here. Commands serialize as a plain slug → `parseCommandSegments` matches by slug
-	 * so old messages pill too. Visual treatment shares ONE SSOT with the composer (`token-pill.ts`),
-	 * bubble tone (over `bg-primary`). Port of `UserBubble`/`UserMessageText` in `message-list.tsx`.
+	 * so old messages pill too. Visual treatment shares chip classes with the composer (`token-pill.ts`),
+	 * bubble tone (over `bg-primary`).
 	 */
 	let { parts, attachments }: { parts: TimelinePart[]; attachments?: MessageAttachment[] } =
 		$props();

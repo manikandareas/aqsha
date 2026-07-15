@@ -1,17 +1,15 @@
 /**
  * Pure builders untuk handler SEO (robots/sitemap/manifest) — dipisah dari `+server.ts` agar
- * unit-testable (contract byte-equivalent §11.2) tanpa HTTP. Output menyamai `MetadataRoute.*` Next
- * (`apps/web/app/{robots,sitemap,manifest}.ts`) secara SEMANTIK (rules/urls/priority/kunci sama).
- * Serialisasi XML/robots ditulis eksplisit di sini (SvelteKit tak punya generator metadata Next).
+ * unit-testable tanpa HTTP. Serialisasi XML/robots ditulis eksplisit di sini (SvelteKit tak punya
+ * generator metadata Next).
  */
 import { backgroundColor, defaultDescription, siteName, themeColor } from './config';
 
 // ── robots.txt ──────────────────────────────────────────────────────────────
 
 /**
- * Padanan `app/robots.ts`. `allowIndexing=true` → parity web (allow /, disallow app/auth/onboarding,
- * host + sitemap). `false` (preview, §10 Phase 4) → disallow-all supaya mesin telusur tak meng-index
- * subdomain preview sebelum cutover.
+ * `allowIndexing=true` → allow /, disallow app/auth/onboarding, host + sitemap.
+ * `false` (preview) → disallow-all supaya mesin telusur tak meng-index subdomain preview.
  */
 export function buildRobotsTxt({
 	siteUrl,
@@ -41,7 +39,7 @@ export function buildRobotsTxt({
 
 export type SitemapUrl = {
 	loc: string;
-	/** ISO datetime (`Date.toISOString()`), padanan `lastModified` Next. */
+	/** ISO datetime (`Date.toISOString()`). */
 	lastmod?: string;
 	changefreq: 'always' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'never';
 	priority: number;
@@ -72,7 +70,7 @@ export function buildSitemapXml(urls: SitemapUrl[]): string {
 
 // ── manifest.webmanifest ──────────────────────────────────────────────────────
 
-/** Padanan `app/manifest.ts` (`MetadataRoute.Manifest`). Objek stabil → di-`JSON.stringify` di route. */
+/** Web app manifest object — di-`JSON.stringify` di route. */
 export function buildWebManifest(): Record<string, unknown> {
 	return {
 		name: siteName,

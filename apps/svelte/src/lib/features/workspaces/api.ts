@@ -10,9 +10,8 @@ import { readableApiErrorMessage } from '$lib/errors';
 import { queryKeys, unwrap } from '$lib/query';
 
 /**
- * Workspace query/mutation hooks — Svelte port of `apps/web/features/workspaces/api.ts` (WSP-1/4).
- * Reactive scalar inputs (`id`, `workspaceId`) are getters (§3.6 svelte-query idiom). Query keys,
- * stale policy, invalidation and toast copy are byte-equivalent with web (§11.2).
+ * Workspace query/mutation hooks. Reactive scalar inputs (`id`, `workspaceId`) are getters
+ * (svelte-query idiom). Query keys, stale policy, invalidation, and toast copy match the product contract.
  */
 
 const LIST_PAGE_SIZE = 25;
@@ -32,7 +31,7 @@ export type WorkspaceListPage = {
 
 /**
  * List workspaces (infinite/keyset). `nextCursor` null = halaman terakhir. `enabled` gate = Clerk
- * `isLoaded` dari composite hooks (temuan a Phase 1/2): firing SEBELUM clerk-js load = 401 tokenless
+ * `isLoaded` dari composite hooks: firing SEBELUM clerk-js load = 401 tokenless
  * → data kosong sesaat pada hard-reload rute authed dalam.
  */
 export function useWorkspacesList(

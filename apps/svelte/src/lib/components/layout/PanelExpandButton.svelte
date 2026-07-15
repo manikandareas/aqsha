@@ -6,7 +6,7 @@
 	/**
 	 * Expand toggle for the panel header — widens the inline panel to the 30:70 split.
 	 * Renders nothing in the narrow-viewport drawer (already full-width) or outside a
-	 * `DetailSplitLayout`. Padanan web `PanelExpandButton`.
+	 * `DetailSplitLayout`.
 	 */
 	const expand = panelExpandContext.getOptional();
 </script>

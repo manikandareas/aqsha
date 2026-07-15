@@ -2,7 +2,6 @@
 	import type { Snippet } from 'svelte';
 
 	// Full-viewport, card-less canvas: the page background only, content centered.
-	// Port 1:1 from apps/web/features/onboarding/components/onboarding-layout.tsx.
 	let { children }: { children: Snippet } = $props();
 </script>
 

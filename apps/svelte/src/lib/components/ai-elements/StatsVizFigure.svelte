@@ -3,12 +3,11 @@
 	import { getMessageInteractions } from '$lib/features/threads/components/message-interactions';
 	import StatsBlock from '$lib/features/threads/components/stats-viz/StatsBlock.svelte';
 
-	// `<statsviz runkey>` gate — port of `StatsVizMarkdownComponent` / `stats-block.tsx`. ANTI-FORGERY
-	// DOUBLE GATE: renders NOTHING unless the `stats` gate prop is present AND `groups.get(runKey)`
-	// returns a REAL group (blocks fetched from DB `analysis_result_blocks`). The marker is only a key;
-	// a forged/invented runKey never becomes a table. Verbatim gate semantics; the rich block bodies
-	// (SPSS-style table / verdict chips / figure) render via THX-4 `StatsBlock`. A per-group error
-	// boundary keeps one bad block from tearing down the report.
+	// `<statsviz runkey>` gate — ANTI-FORGERY DOUBLE GATE: renders NOTHING unless the `stats` gate prop
+	// is present AND `groups.get(runKey)` returns a REAL group (blocks fetched from DB
+	// `analysis_result_blocks`). The marker is only a key; a forged/invented runKey never becomes a table.
+	// Rich block bodies (SPSS-style table / verdict chips / figure) render via `StatsBlock`. A per-group
+	// error boundary keeps one bad block from tearing down the report.
 
 	let { token, stats }: { token: { runKey?: string }; stats?: StatsVizContextValue } = $props();
 

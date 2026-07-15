@@ -8,19 +8,17 @@ import { createServerApiClient } from '$lib/server/api';
 import { initServerSentry } from '$lib/observability';
 import { seoAllowIndexing } from '$lib/seo/config';
 
-// Boot (§3.7 fail-fast): mengimpor `$lib/server/env` sudah menjalankan validasi zod SEMUA env
-// (PUBLIC + PRIVATE); env salah → throw saat server start. Lalu init Sentry server SDK.
+// Boot: importing `$lib/server/env` runs zod validation for all env (PUBLIC + PRIVATE);
+// invalid env throws at server start. Then init Sentry server SDK.
 initServerSentry(serverEnv);
 
-// Auth boundary (plan §2 `lib/auth`). svelte-clerk membaca CLERK_SECRET_KEY /
-// PUBLIC_CLERK_PUBLISHABLE_KEY via `$env/dynamic/*` internal — selaras §3.7 (Infisical runtime).
+// Auth boundary via svelte-clerk (reads CLERK_SECRET_KEY / PUBLIC_CLERK_PUBLISHABLE_KEY).
 const clerk = withClerkHandler();
 
 /**
- * Public routes — mirror `apps/web/proxy.ts` `isPublicRoute`. proxy.ts memproteksi SEMUA route
- * kecuali allow-list ini; kita menegakkan hal sama di `guard`. `/mastra-api` di-EXCLUDE dari gate:
- * ia proxy ke server agent Mastra yang punya auth sendiri (MastraAuthClerk) — meng-gate di sini akan
- * 303-redirect stream (bukan 401). Biarkan runtime agent yang auth.
+ * Public routes — unauthenticated allow-list. `/mastra-api` is excluded from the gate: it proxies to
+ * the Mastra agent server which has its own auth (MastraAuthClerk). Gating here would 303-redirect
+ * streams instead of returning 401.
  */
 const PUBLIC_PATTERNS: RegExp[] = [
 	/^\/$/,
@@ -43,9 +41,9 @@ function isAgentProxyPath(pathname: string): boolean {
 }
 
 /**
- * Gate auth + onboarding (mirror `proxy.ts` + `app/app/layout.tsx`). Runs AFTER `clerk` → `locals.auth`
- * terisi. Semua route non-public butuh sesi; `/app` juga butuh onboarding selesai (redirect SEBELUM
- * render, no flash). `/onboarding` di luar `/app` → hanya butuh sesi, tak ter-gate onboarding (cegah loop).
+ * Auth + onboarding gate. Runs AFTER `clerk` → `locals.auth` is populated. Non-public routes require
+ * a session; `/app` also requires completed onboarding (redirect before render, no flash). `/onboarding`
+ * sits outside `/app` → session only, not onboarding-gated (prevents redirect loop).
  */
 const guard: Handle = async ({ event, resolve }) => {
 	const path = event.url.pathname;
@@ -61,8 +59,7 @@ const guard: Handle = async ({ event, resolve }) => {
 			const { data } = await api.onboarding.status.get();
 			needsOnboarding = Boolean(data && !data.completed);
 		} catch {
-			// Transient error (API blip) → jangan blok /app; render (parity web gate: redirect HANYA
-			// saat positif `!completed`). `needsOnboarding` tetap false → tak redirect.
+			// Transient error (API blip) → do not block /app; redirect only on positive `!completed`.
 		}
 		// redirect() di luar try agar throw-nya tak tertelan catch.
 		if (needsOnboarding) redirect(303, '/onboarding');
@@ -72,11 +69,9 @@ const guard: Handle = async ({ event, resolve }) => {
 };
 
 /**
- * Security headers + preview-noindex (§10 Phase 4 task 7). `apps/web` tak menyetel header/CSP/redirect
- * (next.config.ts kosong dari itu) → tak ada yang di-port; ini hardening baseline additif + gate index.
- * Innermost supaya berjalan atas respons yang benar-benar dirender (redirect guard tak butuh header ini).
- * CSP tak diperketat (parity web yang tak punya CSP; risiko pecah Clerk/Sentry/streamdown). Sanitasi
- * konten = MDX build-time trusted (Content Collections) + escaping default Svelte.
+ * Security headers + preview noindex. Innermost so headers apply to the final rendered response
+ * (redirects from guard do not need these). CSP is not tightened (Clerk/Sentry/streamdown risk).
+ * Content sanitization = trusted MDX build-time (Content Collections) + Svelte default escaping.
  */
 const securityHeaders: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
@@ -92,8 +87,8 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 export const handle = sequence(Sentry.sentryHandle(), clerk, guard, securityHeaders);
 
 /**
- * Server-side authenticated fetch (§3.6): suntik token Clerk untuk panggilan `event.fetch` ke origin
- * API kita dari `load`/`+*.server.ts`. Sisi SSR dari getToken-per-request (sisi client = `getAuthToken`).
+ * Server-side authenticated fetch: inject Clerk token for `event.fetch` calls to our API origin from
+ * `load`/`+*.server.ts`. SSR counterpart to client `getAuthToken`.
  */
 export const handleFetch: HandleFetch = async ({ event, request, fetch }) => {
 	const apiBase = publicEnv.PUBLIC_API_URL;
@@ -104,7 +99,7 @@ export const handleFetch: HandleFetch = async ({ event, request, fetch }) => {
 	return fetch(request);
 };
 
-/** Unexpected server error → Sentry + shape `App.Error` untuk `+error.svelte`. Plan §Phase 2 task 7. */
+/** Unexpected server error → Sentry + shape `App.Error` for `+error.svelte`. */
 const handleServerError: HandleServerError = ({ error }) => {
 	console.error('[svelte:server] unexpected error', error);
 	return { message: 'Terjadi kesalahan tak terduga.', code: 'unexpected' };

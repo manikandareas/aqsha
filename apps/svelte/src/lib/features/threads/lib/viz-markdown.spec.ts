@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isVizFence, VIZ_LANGUAGE, vizPayloadFromCode } from './viz-markdown';
 
-// Contract tests for the deep-viz fence transform (THC-4). The render path is a marked block extension
+// Contract tests for the deep-viz fence transform. The render path is a marked block extension
 // in the Streamdown adapter; the fence/payload extraction is pinned here.
 
 describe('isVizFence', () => {

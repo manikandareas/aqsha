@@ -13,10 +13,9 @@ import { triggerArtifactDownload, triggerBase64Download } from './lib/artifact-d
 import type { Artifact, ChatThread, ResearchSource } from './types';
 
 /**
- * Thread query/mutation hooks — Svelte port of `apps/web/features/threads/api.ts` (THX-1/2/4/7).
- * Each must be called during component init (uses the query + api-client context). Reactive inputs
- * (`threadId`, `enabled`) are passed as getters (§3.6 svelte-query idiom, see settings/api.ts). Query
- * keys, stale policy, invalidation and toast copy are byte-equivalent with web (§11.2).
+ * Thread query/mutation hooks. Each must be called during component init (uses the query + api-client
+ * context). Reactive inputs (`threadId`, `enabled`) are passed as getters (svelte-query idiom, see
+ * settings/api.ts).
  */
 
 const LIST_PAGE_SIZE = 30;
@@ -108,7 +107,7 @@ export function useThreadSources(id: () => string, enabled: () => boolean = alwa
 export type ThreadStatsGroup = { toolCallId: string; group: StatsGroup };
 
 /**
- * Thread statistical result blocks (phase 3) — SPSS-style tables + verdict cards + PNG figures
+ * Thread statistical result blocks — SPSS-style tables + verdict cards + PNG figures persisted
  * persisted outside message text. Used by the FE to resolve `{{stats:<runKey>}}` markers into figures.
  * Invalidated when a turn transitions to `ready` (like `useThreadSources`). Payload parsed with zod
  * (chat-core contract) → corrupt groups are dropped, not fatal to render.
@@ -163,7 +162,7 @@ export function useDownloadThreadReferences(threadId: () => string) {
 }
 
 /**
- * Export thread analysis results (stats panel phase C) — docx (Bab 4) / xlsx (raw tables) built
+ * Export thread analysis results — docx (Bab 4) / xlsx (raw tables) built server-side from
  * server-side from `analysis_result_blocks`, delivered base64 → decode to blob → anchor. Mutation with
  * NO retry (heavy sandbox, expensive non-idempotent); loading state on the panel button. `ok:false`
  * unions (thread with no results, etc.) are already structured appErrors → `readableApiErrorMessage`.
@@ -295,8 +294,7 @@ export function useRemoveThreadAttachment(threadId: () => string) {
 
 /**
  * 3-step thread attachment (Slice 6.7): presign → PUT object storage → finalize (inline extract + RAG
- * index, headless). Mirrors `useUploadArtifact` but thread-scoped: ownership = thread (assertOwner
- * route-side), not workspace.
+ * index, headless). Thread-scoped variant: ownership = thread (assertOwner route-side), not workspace.
  */
 export function useThreadAttachments(threadId: () => string) {
 	const api = getApiClient();

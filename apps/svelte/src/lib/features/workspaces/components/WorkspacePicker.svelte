@@ -5,10 +5,9 @@
 	import { workspaceEmoji } from '../utils/workspace-emoji';
 
 	/**
-	 * Reusable active-workspace picker — Svelte port of
-	 * `apps/web/features/workspaces/components/workspace-picker.tsx`. Lists active workspaces (excludes
-	 * `excludeId`), fetches its own data via `useWorkspacesList`. Picks a workspace only (no folder step),
-	 * matching web. Consumed by the save-to-workspace Dialog (discovery) and Popover (chat artifact card).
+	 * Reusable active-workspace picker. Lists active workspaces (excludes `excludeId`), fetches its own
+	 * data via `useWorkspacesList`. Picks a workspace only (no folder step). Consumed by the
+	 * save-to-workspace Dialog (discovery) and Popover (chat artifact card).
 	 */
 	let {
 		excludeId,

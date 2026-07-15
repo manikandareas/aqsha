@@ -23,19 +23,18 @@
 	 * Explore surface — paper + news discovery. Sticky glass header (breadcrumb left + Chat toggle right)
 	 * over the scrolling feed. Empty `q` → personal/topic feed (Jelajah); non-empty `q` → search results
 	 * (Selidiki). Opening Chat splits into `DetailSplitLayout` with a workspace-less Astra panel. `q` +
-	 * `topic` live in the URL (pure codec + `page.url`/`goto`, byte-equivalent — §2.3/THX-6). Port of
-	 * `apps/web/features/explore/components/explore-page.tsx`.
+	 * `topic` live in the URL (pure codec + `page.url`/`goto`).
 	 */
 
 	// Left-nav sidebar (AppShell provider) — read at init, before DetailSplitLayout opens its own provider.
 	const leftSidebar = Sidebar.useSidebar();
 
-	// Per-tree composer mentions (§3.5) — shared by the feed cards (publisher) + the chat panel composer
+	// Per-tree composer mentions — shared by the feed cards (publisher) + the chat panel composer
 	// (consumer), so "Tanya Astra" ambient refs reach the composer as a pill.
 	const mentions = new ComposerMentions();
 	setComposerMentions(mentions);
 
-	// URL state (q/topic) — single source of truth, byte-equivalent with the web nuqs setup.
+	// URL state (q/topic) — single source of truth.
 	const urlState = $derived(readExploreUrl(page.url.searchParams));
 	const q = $derived(urlState.q);
 	const topic = $derived<FeedTopic | null>(urlState.topic);
@@ -48,7 +47,7 @@
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient URL builder, not reactive state
 		const url = new URL(page.url);
 		url.search = applyExploreUrl(url.searchParams, patch).toString();
-		// Same-page URL-state write (nuqs default = replace). resolve() can't model an edited search param.
+		// Replace history entry — same-page URL patch; resolve() can't model an edited search param.
 		void goto(url, { replaceState: true, noScroll: true, keepFocus: true });
 	}
 

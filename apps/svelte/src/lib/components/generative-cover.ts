@@ -1,6 +1,6 @@
 // Cover generatif deterministik untuk kartu paper/berita/changelog. Warna brand dipilih dari hash
 // judul + inisial ghost besar + chip label. Helpers pure (hash/initial/gradient) dipisah dari
-// komponen agar contract-testable (deterministik). Port `apps/web/components/generative-cover.tsx`.
+// komponen agar contract-testable (deterministik).
 
 // Palet gradien brand — indeks dipilih deterministik dari hash judul.
 export const COVER_GRADIENTS = [

@@ -3,7 +3,6 @@
 
 	// LedgerRow — satu baris ledger perbandingan. Signature "masalah dicoret": garis rambut menyeret
 	// melewati keluhan (scaleX 0→1, scroll-linked) sambil jawaban Aqsha menyala ke opacity penuh.
-	// Port `LedgerRow` di `why-aqsha-section.tsx`.
 	let { row, index }: { row: { problem: string; others: string; aqsha: string }; index: number } =
 		$props();
 

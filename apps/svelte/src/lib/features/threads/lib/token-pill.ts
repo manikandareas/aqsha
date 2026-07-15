@@ -1,13 +1,13 @@
 import { cn } from '$lib/utils';
 
 /**
- * SSOT for the inline token pill visual classes (`/command` chip + `@mention`) — used by the composer
+ * Shared visual classes for the inline token pill (`/command` chip + `@mention`) — used by the composer
  * (`composer-inline-editor.ts`, pure DOM chip) and the user message bubble (`message-list`) so both
  * speak ONE visual language: a true pill chip (soft bg + border + rounded, no underline), colored per
  * token KIND — command = lavender, mention = mint (theme-aware accent tokens in `globals.css`). Tone
  * differs per SURFACE because the background differs: composer over `bg-card` (the `-soft` variant
  * mixed into the card), bubble over `bg-primary` (direct hue alpha overlay; text inherits the bubble's
- * `text-primary-foreground`). Verbatim port of `apps/web/features/threads/lib/token-pill.ts`.
+ * `text-primary-foreground`).
  */
 
 /**

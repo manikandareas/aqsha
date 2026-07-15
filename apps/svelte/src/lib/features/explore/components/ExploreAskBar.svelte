@@ -6,8 +6,7 @@
 	/**
 	 * Hero ask-bar. Typing → LLM query suggestions (typeahead, /explore/suggest). Enter / click a
 	 * suggestion → set the page URL `q` → every section below reacts to it. Full search results live in
-	 * the feed. Port of `apps/web/features/explore/components/explore-ask-bar.tsx` — the React
-	 * `useDebounced` + "adjust state during render" value-sync become guarded `$effect`s (§3.4).
+	 * the feed. Debounced suggest + URL sync use guarded `$effect`s.
 	 */
 	let { value, onSubmit }: { value: string; onSubmit: (q: string) => void } = $props();
 

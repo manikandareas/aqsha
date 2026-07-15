@@ -59,7 +59,7 @@
 	/**
 	 * Mastra chat runtime surface — the V1 composition (rich composer + landing hero) over `ThreadAgent`.
 	 * Mastra Memory (server) = message SoT; the thread id is client-chosen so the URL is bumped on first
-	 * send without waiting for a server round-trip. Port of `MastraChatThreadSurface`/`MastraChatInner`.
+	 * send without waiting for a server round-trip.
 	 */
 	let {
 		agent,
@@ -85,7 +85,7 @@
 	const qc = useQueryClient();
 	const panel = getThreadPanel();
 
-	// Bridge the panel controller's openers to in-message cards (§ MessageInteractions).
+	// Bridge the panel controller's openers to in-message cards (MessageInteractions).
 	setMessageInteractions(
 		panel
 			? {
@@ -139,7 +139,7 @@
 	);
 
 	// Id-keyed detail lookups for the side panels — built here + published to the controller. While a
-	// plan/ask gate is live, inject its Setujui/Tolak / resolve-skip so the panel mirrors the gate card.
+	// plan/ask gate is live, inject its Setujui/Tolak / resolve-skip so the panel matches the gate card.
 	$effect(() => {
 		if (!panel) return;
 		const lookups = buildThreadPanelLookups(

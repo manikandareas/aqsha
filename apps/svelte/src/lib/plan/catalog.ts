@@ -1,13 +1,11 @@
 /**
- * Katalog plan publik — kontrak data MURNI, browser-safe (plan §4.1).
+ * Katalog plan publik — kontrak data MURNI, browser-safe.
  *
- * SoT = `packages/services/src/plan.ts`. `apps/svelte` DILARANG mengimpor `@aqsha/services` runtime
- * ke browser bundle: subpath `@aqsha/services/plan` di-bundle tsup ke shared chunk yang menarik kode
- * lain, jadi bukan boundary-safe. Sesuai §4.1 ("prefer shared pure-data export"), nilai + copy
- * di-mirror manual di sini (pola sama seperti `apps/web/features/<x>/types.ts` yang mencermin
- * kontrak service). Drift dijaga `catalog.spec.ts` (invariant internal).
+ * Browser must not import `@aqsha/services`: subpath `@aqsha/services/plan` di-bundle tsup
+ * ke shared chunk yang menarik kode lain, jadi bukan boundary-safe. Nilai + copy duplikat
+ * di sini; drift dijaga `catalog.spec.ts` (invariant internal).
  *
- * Cakupan = HANYA yang dibutuhkan surface browser (marketing plan cards + JSON-LD, §8.2): katalog +
+ * Cakupan = HANYA yang dibutuhkan surface browser (marketing plan cards + JSON-LD): katalog +
  * selektor pure. Logika server-only (estimateCredits, billing status, admin env allowlist) SENGAJA
  * tidak dibawa — itu tetap di `@aqsha/services/plan` dan hanya dipanggil backend.
  */
@@ -37,7 +35,7 @@ export type PlanDefinition = {
 	features: string[];
 };
 
-/** Batas tak-terhingga (admin + Ultra non-credit). Mirror sentinel `@aqsha/services/plan`. */
+/** Batas tak-terhingga (admin + Ultra non-credit). Sentinel must match `@aqsha/services/plan`. */
 export const UNLIMITED = Number.MAX_SAFE_INTEGER;
 
 export const PLAN_ORDER: Record<PlanKey, number> = {

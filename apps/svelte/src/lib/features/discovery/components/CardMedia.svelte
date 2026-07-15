@@ -3,11 +3,7 @@
 	import type { DiscoveryItem } from '../model';
 	import PaperCover from './PaperCover.svelte';
 
-	/**
-	 * Card media: a direct photo for news / OG-image items, else the generative cover (paper open-access
-	 * items overlay a PDF page-1 preview). Ported from `CardMedia` in web `discovery-item-card.tsx`
-	 * (`next/image fill` → an absolutely-positioned `<img>`).
-	 */
+	/** Card media: direct photo for news/OG items; otherwise generative cover (open-access papers may overlay a PDF page-1 preview). */
 	let {
 		item,
 		title,

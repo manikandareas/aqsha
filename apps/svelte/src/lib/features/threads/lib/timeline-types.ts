@@ -1,7 +1,6 @@
 // Timeline presentation types — runtime-NEUTRAL (not tied to a specific adapter). Shared by the
 // render components (message-list, tool-row, chat-artifact-card) and the per-runtime adapter
-// (mastra-timeline), so the render layer never needs to know the runtime chunk shape. Verbatim
-// port of `apps/web/features/threads/lib/timeline-types.ts` (framework-agnostic, no runes).
+// (mastra-timeline), so the render layer never needs to know the runtime chunk shape.
 
 /** Display status of a single tool-call. */
 export type ToolStatus = 'running' | 'pending' | 'completed' | 'failed' | 'denied';
@@ -65,7 +64,7 @@ export type DatasetProfileSummary = {
  * a `workflow-step-output` chunk (live), a step-output snapshot (refresh poll), or
  * `metadata.deepProcess` (history). `kind:"search"` (deep) carries live sources per sub-question +
  * DB fallback via `subQuestionIndex`; `kind:"search-flat"` (normal chat) = result cards of one
- * `search_*` tool. `kind:"analysis"`/`"dataset-profile"` (normal chat, stats phase A) = analysis
+ * `search_*` tool. `kind:"analysis"`/`"dataset-profile"` (normal chat stats tools) = analysis run card /
  * run card / dataset card replacing the generic tool-row (union name is historical `/deep`, used
  * across chat).
  */
@@ -85,7 +84,7 @@ export type DeepStepDetail =
 			argsSummary?: string;
 			artifactId?: string;
 			credits: number;
-			/** Sanitized runKey (`toRunKey`, mirror agent) — link to the scoped panel (phase B). */
+			/** Sanitized runKey (`toRunKey`, same sanitizer as agent) — link to the run-scoped stats panel. */
 			runKey: string;
 			/** Tool settled with `ok:false` → error card (friendly note from the tool). */
 			failed?: boolean;

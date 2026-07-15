@@ -4,13 +4,12 @@
 	import AppSidebar from './AppSidebar.svelte';
 
 	/**
-	 * Persistent shell for every authenticated product surface — ported from
-	 * apps/web/components/app-shell.tsx. Hoists the left navigation so it stays mounted
+	 * Persistent shell for every authenticated product surface. Hoists the left navigation so it stays mounted
 	 * across navigations (no remount/flicker). Pages render into `Sidebar.Inset`, which is
 	 * `relative` so a route-level loading overlay (variant="absolute") fills just the content
 	 * area, not the nav. `open` is the cookie-persisted initial state (read server-side in
 	 * `routes/app/+layout.server.ts`); `Sidebar.Provider` writes the `sidebar_state` cookie on
-	 * toggle. The `--sidebar-width*` overrides mirror web (16.5rem / 17.5rem mobile).
+	 * toggle. `--sidebar-width*` overrides set the rail width (16.5rem / 17.5rem mobile).
 	 */
 	let { open = true, children }: { open?: boolean; children: Snippet } = $props();
 </script>

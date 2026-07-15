@@ -2,7 +2,7 @@
 	import { motionContext } from '$lib/motion';
 
 	// CountUp — angka menghitung naik 0→`to` saat masuk viewport (sekali). Reduced-motion → tampil
-	// `to` langsung. Port `CountUp` di `why-aqsha-section.tsx` (`animate` framer → rAF + IO).
+	// `to` langsung.
 	let {
 		to,
 		suffix = '',

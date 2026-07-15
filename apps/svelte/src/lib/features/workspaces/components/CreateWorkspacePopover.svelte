@@ -6,8 +6,7 @@
 	import { readableApiErrorMessage } from '$lib/errors';
 
 	/**
-	 * Sidebar "new workspace" affordance — port `apps/web/features/workspaces/components/
-	 * create-workspace-popover.tsx`. Hovering the plus opens a card that stays interactive while the
+	 * Sidebar "new workspace" affordance. Hovering the plus opens a card that stays interactive while the
 	 * pointer is over the trigger or card; leaving both closes it while pristine. A dirty card (typed
 	 * name / in-flight / error) only closes via Escape or click-outside.
 	 */

@@ -7,9 +7,8 @@ import {
 	TOPIC_VALUES
 } from './explore-url-model';
 
-// Explore URL codec contract (§11.2 / EXP-1 ★ "URL state byte-equivalent"). Parity target = the web
-// nuqs setup: default `q` ("") and `null` topic OMIT their param; an invalid topic → null; other params
-// preserved; round-trip stable. Drives Back/Forward/refresh correctness.
+// Explore URL codec contract. Default `q` ("") and `null` topic OMIT their param; an invalid topic →
+// null; other params preserved; round-trip stable. Drives Back/Forward/refresh correctness.
 
 describe('parseTopicParam', () => {
 	it('accepts only the known literals', () => {

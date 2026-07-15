@@ -5,14 +5,12 @@ import * as core from '@hugeicons/core-free-icons';
 import * as aqshaIcons from './index';
 
 /**
- * Icon-map completeness contract (§9.2 "icon-map completeness", risk register
- * "React-only @aqsha/ui"). The Svelte `$lib/icons` adapter MUST mirror the React
- * source of truth `packages/ui/src/icons.tsx` byte-for-glyph: every Aqsha-facing
- * name resolves to the identical `@hugeicons/core-free-icons` glyph in both apps.
+ * Icon-map completeness contract. `$lib/icons` must stay glyph-identical to
+ * `packages/ui/src/icons.tsx`: every Aqsha-facing name resolves to the identical
+ * `@hugeicons/core-free-icons` glyph.
  *
- * The expected map is derived by parsing the React source (not hand-copied) so
- * this test tracks the SoT automatically — adding/renaming an icon in web without
- * mirroring it here is a red test, not a silent drift.
+ * The expected map is parsed from the shared source (not hand-copied) so this test tracks
+ * drift automatically — adding/renaming an icon without updating the adapter fails loudly.
  */
 const reactSourcePath = fileURLToPath(
 	new URL('../../../../../packages/ui/src/icons.tsx', import.meta.url)
@@ -51,8 +49,8 @@ function parseExpectedMap(src: string): Map<string, string> {
 
 const expected = parseExpectedMap(source);
 
-describe('icon adapter mirrors @aqsha/ui/icons', () => {
-	it('parses a non-trivial number of icons from the React source', () => {
+describe('icon adapter matches @aqsha/ui/icons', () => {
+	it('parses a non-trivial number of icons from the shared source', () => {
 		// Guards against a parser regression silently reducing coverage to zero.
 		expect(expected.size).toBeGreaterThan(120);
 	});

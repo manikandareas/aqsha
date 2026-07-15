@@ -5,7 +5,6 @@
 
 	/**
 	 * Compact usage timeseries bar chart (credits per day, normalized to max).
-	 * Port from apps/web/features/settings/components/bits.tsx (UsageChart).
 	 */
 	let { days }: { days: UsageDay[] } = $props();
 

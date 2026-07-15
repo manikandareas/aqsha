@@ -2,8 +2,7 @@
 	import { Progress as ProgressPrimitive } from 'bits-ui';
 	import { cn, type WithoutChildrenOrChild } from '$lib/utils.js';
 
-	// Port of @aqsha/ui/components/progress (Radix Progress). `value` is 0–100; the
-	// indicator slides in via translateX with the same formula the React card used.
+	// Radix Progress via bits-ui. `value` is 0–100; the indicator slides in via translateX.
 	let {
 		ref = $bindable(null),
 		class: className,

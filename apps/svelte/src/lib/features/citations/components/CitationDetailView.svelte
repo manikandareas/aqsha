@@ -43,7 +43,7 @@
 		workspaceId: string;
 		citationId: string;
 		onBack: () => void;
-		/** Fase 4 — sematkan referensi ini sebagai konteks chip di composer chat Astra. */
+		/** Sematkan referensi ini sebagai konteks chip di composer chat Astra. */
 		onAddToChat?: (citation: { id: string; title: string }) => void;
 	} = $props();
 

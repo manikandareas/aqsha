@@ -11,8 +11,7 @@
 	/**
 	 * Compact interactive tool card above the composer (Klarifikasi, Rencana riset, `/deep` notices, tool
 	 * approvals). When `onOpenPanel` is given, the whole header becomes an open-panel button with an
-	 * expand (⤢) affordance; otherwise a static header. Body (form / action row) follows. Port of
-	 * `tool-card.tsx`.
+	 * expand (⤢) affordance; otherwise a static header. Body (form / action row) follows.
 	 */
 	let {
 		icon,

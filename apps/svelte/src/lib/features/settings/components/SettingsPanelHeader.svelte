@@ -2,7 +2,6 @@
 	import type { Snippet } from 'svelte';
 	import { cn } from '$lib/utils';
 
-	// Port from apps/web/features/settings/components/settings-card.tsx (SettingsPanelHeader).
 	// `action` (React ReactNode) → optional Snippet rendered on the right.
 	let {
 		title,

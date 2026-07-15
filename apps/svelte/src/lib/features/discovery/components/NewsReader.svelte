@@ -19,8 +19,7 @@
 
 	/**
 	 * News reader: getFeedItem(id) + related. Header + media reveal + lead + article body. `onAskAstra`
-	 * (provided by the shell) opens the chat panel. Port of the `NewsReader` half of
-	 * `apps/web/features/discovery/components/news-reader.tsx`.
+	 * (provided by the shell) opens the chat panel.
 	 */
 	let { id, onAskAstra }: { id: string; onAskAstra: () => void } = $props();
 

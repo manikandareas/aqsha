@@ -4,9 +4,8 @@
 	import { Icon, ArrowDownIcon } from '$lib/icons';
 	import { getStickToBottom } from './conversation-state.svelte';
 
-	// Port of `conversation-scroll-button.tsx` — the floating "jump to latest" button, shown ONLY while
-	// not at the bottom (reads `isAtBottom` from the follow-bottom context). Place inside `Conversation`'s
-	// `overlay` snippet.
+	// Floating "jump to latest" button, shown ONLY while not at the bottom (reads `isAtBottom` from the
+	// follow-bottom context). Place inside `Conversation`'s `overlay` snippet.
 
 	let { class: klass }: { class?: string } = $props();
 

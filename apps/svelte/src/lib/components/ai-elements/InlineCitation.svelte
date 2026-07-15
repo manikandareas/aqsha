@@ -12,14 +12,13 @@
 	} from '$lib/features/threads/lib/source-card';
 	import type { SourceCardData } from '$lib/features/threads/lib/timeline-types';
 
-	// `<citation>` → source pill. Port of `apps/web/components/ai-elements/inline-citation.tsx`
-	// (`CitationMarkdownComponent` + `InlineCitation`). Rendered from the svelte-streamdown NATIVE
-	// `inlineCitation` snippet, which passes the citation token (`{ keys, text }`). Resolves keys via
-	// the citation `map` prop (passed down from `Response`); graceful degradation → the literal `[n]`
-	// fallback text when the map is absent or unresolved.
+	// `<citation>` → source pill. Rendered from the svelte-streamdown NATIVE `inlineCitation` snippet,
+	// which passes the citation token (`{ keys, text }`). Resolves keys via the citation `map` prop
+	// (passed down from `Response`); graceful degradation → the literal `[n]` fallback text when the map
+	// is absent or unresolved.
 	//
-	// NOTE: the rich hover LinkPreview (microlink screenshot card) is a Phase 7 enhancement; Phase 6
-	// renders the pill + a native `title`, preserving the link + `+N` affordance.
+	// NOTE: the rich hover LinkPreview (microlink screenshot card) is not yet implemented; renders the
+	// pill + a native `title`, preserving the link + `+N` affordance.
 
 	let {
 		token,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lastTurnMessageIds } from './thread-agent.svelte';
 
-// Regenerate helper (THC-5): the last [user, assistant] pair to delete from server memory, matched
+// Regenerate helper: the last [user, assistant] pair to delete from server memory, matched
 // POSITIONALLY (durable-thread stores user input as a `signal`, not `role:"user"`). Importing this from
 // the `.svelte.ts` module also asserts the state class module compiles + all deps resolve.
 

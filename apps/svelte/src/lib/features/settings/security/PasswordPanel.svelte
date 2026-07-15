@@ -16,9 +16,7 @@
 	/**
 	 * Change/set a password via the Clerk frontend SDK (browser→Clerk directly, not our server).
 	 * Sensitive action → wrapped in `reverify` (Clerk shows a step-up modal if required). OAuth-only
-	 * accounts (`!passwordEnabled`) get the "set" mode without the current-password field. Port 1:1 from
-	 * apps/web/features/settings/security/password-panel.tsx (`useUser` → `getClerkUser`,
-	 * `useReverification` → `getReverification`).
+	 * accounts (`!passwordEnabled`) get the "set" mode without the current-password field.
 	 */
 	const clerkUser = getClerkUser();
 	const reverify = getReverification();

@@ -1,6 +1,5 @@
-// Pure billing/usage formatters — extracted from apps/web/features/settings/components/bits.tsx
-// (the format functions; CreditMeter/UsageChart become .svelte components). Unit-testable,
-// no DOM. id-ID currency grouping uses NBSP → stripped for the plain "Rp49.000" form.
+// Pure billing/usage formatters (format functions; CreditMeter/UsageChart are .svelte components).
+// Unit-testable, no DOM. id-ID currency grouping uses NBSP → stripped for the plain "Rp49.000" form.
 
 const IDR = new Intl.NumberFormat('id-ID');
 

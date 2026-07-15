@@ -40,14 +40,11 @@
 	} from '$lib/features/workspaces/utils/workspace-marquee-selection';
 
 	/**
-	 * Presentational library grid — port of `apps/web/features/workspaces/components/
-	 * workspace-library-grid.tsx` (folders + artifact cards + marquee overlay). The dnd-kit
-	 * per-tile draggable / per-folder droppable is NOT ported (no dnd-kit in Svelte); instead the
-	 * board wires drag/drop through the `gridAttach` / `foldersAttach` attachment seams, the
-	 * `getFolderDropState` highlight callback, `draggingArtifactIds` (card dimming), and the
-	 * `data-artifact-tile-id` / `data-folder-tile-id` hooks. The marquee (pointer logic + hit-test +
-	 * overlay) is self-contained here (uses the ported `workspace-marquee-selection` utils); set
-	 * `enableMarquee={false}` to fully own selection from the board and drive the overlay via
+	 * Presentational library grid (folders + artifact cards + marquee overlay). Drag/drop is wired
+	 * through the `gridAttach` / `foldersAttach` attachment seams, the `getFolderDropState` highlight
+	 * callback, `draggingArtifactIds` (card dimming), and the `data-artifact-tile-id` /
+	 * `data-folder-tile-id` hooks. The marquee (pointer logic + hit-test + overlay) is self-contained
+	 * here; set `enableMarquee={false}` to fully own selection from the board and drive the overlay via
 	 * `marqueeRect`.
 	 */
 	const MIN_MARQUEE_SIZE = 6;
@@ -73,7 +70,7 @@
 		onMoveArtifact,
 		onMoveArtifactToWorkspace,
 		onAddToCitations,
-		// Board seam (Phase 9 DnD + optional board-driven marquee).
+		// Board seam (native DnD + optional board-driven marquee).
 		enableMarquee = true,
 		gridAttach,
 		foldersAttach,
@@ -144,7 +141,7 @@
 		return artifact.indexingStatus === 'pending' || artifact.indexingStatus === 'failed';
 	}
 
-	// --- Single-vs-double click (mirror of web `useLibraryItemClick`) ------------------------------
+	// --- Single-vs-double click --------------------------------------------------------------
 	// Per-card debounce timers; a plain registry (not reactive state).
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient timer registry, never rendered
 	const clickTimers = new Map<string, ReturnType<typeof setTimeout>>();

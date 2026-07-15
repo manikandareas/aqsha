@@ -11,7 +11,7 @@
 	 * dengan chevron; snippet + judul penuh baru tampil saat dibuka. Tautan keluar = ikon
 	 * terpisah di kanan header (bukan seluruh kartu) supaya tak bertabrakan dengan toggle.
 	 * Anti-overflow: `min-w-0` di tiap lapis flex + `[overflow-wrap:anywhere]` untuk token
-	 * panjang tanpa spasi (URL/DOI di snippet). Port `thread-experience/components/source-link-list.tsx`.
+	 * panjang tanpa spasi (URL/DOI di snippet).
 	 */
 	let { sources }: { sources: SourceCardData[] } = $props();
 </script>

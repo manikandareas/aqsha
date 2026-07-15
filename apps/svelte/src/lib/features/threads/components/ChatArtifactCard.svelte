@@ -12,8 +12,7 @@
 	 * Agent-created document card (Slice 6.5) — a successful `propose_artifact`. Artifact is
 	 * BORN-HEADLESS (`workspaceId=null`): offer Save-to-workspace (FolderIcon → picker →
 	 * `linkToWorkspace`). Once saved → static "Tersimpan" badge. Clicking the title opens the artifact
-	 * reader in the right panel (`openArtifact`); in compact chat panels (no slot) it is static. Port of
-	 * `chat-artifact-card.tsx`.
+	 * reader in the right panel (`openArtifact`); in compact chat panels (no slot) it is static.
 	 */
 	let { model }: { model: ArtifactCardModel } = $props();
 

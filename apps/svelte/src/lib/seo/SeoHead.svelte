@@ -12,7 +12,7 @@
 
 	let { seo }: { seo: PageSeo } = $props();
 
-	// Document title pakai template Next `%s | Aqsha`; og/twitter title = mentah (padanan Next).
+	// Document title pakai template `%s | Aqsha`; og/twitter title = mentah.
 	const documentTitle = $derived(`${seo.title} | ${siteName}`);
 	const ogType = $derived(seo.ogType ?? 'website');
 	// Gambar OG/Twitter absolut: override per-halaman (cover blog) atau kartu situs default.
@@ -33,7 +33,7 @@
 	<link rel="canonical" href={seo.canonical} />
 
 	{#if !seoAllowIndexing}
-		<!-- Preview deployment: noindex sampai cutover (§10 Phase 4). robots.txt juga disallow-all. -->
+		<!-- Preview deployment: noindex sampai indexing diaktifkan. robots.txt juga disallow-all. -->
 		<meta name="robots" content="noindex, nofollow" />
 	{/if}
 

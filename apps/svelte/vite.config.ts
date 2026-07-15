@@ -8,9 +8,9 @@ import contentCollections from '@content-collections/vite';
 // SvelteKit/Svelte config (adapter, runes, preprocess) lives in svelte.config.js
 // so shadcn-svelte CLI / Sentry / editor tooling read one source of truth.
 
-// Sentry vite plugin = HANYA upload source map saat build (SDK runtime di hooks.{client,server}.ts,
-// mandiri dari plugin). Aktif hanya bila trio token+org+project ada (mirror web `sourcemapUploadEnabled`);
-// absen → build SvelteKit normal, tak tersentuh. Build-time env via process.env (bukan $env/*).
+// Sentry vite plugin uploads source maps at build time only (SDK runtime lives in hooks.{client,server}.ts).
+// Active only when SENTRY_AUTH_TOKEN + SENTRY_ORG + SENTRY_PROJECT are set; otherwise the SvelteKit
+// build is untouched. Build-time env via process.env (not $env/*).
 const sentrySourcemapUpload = Boolean(
 	process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
 );

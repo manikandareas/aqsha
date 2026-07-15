@@ -2,10 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { cn } from '$lib/utils';
 
-	/**
-	 * Pill toggle for multi-select interests. Port 1:1 from
-	 * apps/web/features/onboarding/components/onboarding-controls.tsx (InterestChip).
-	 */
+	/** Pill toggle for multi-select interests. */
 	let {
 		selected,
 		onclick,

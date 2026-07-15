@@ -1,9 +1,8 @@
 /**
- * Registry query key terpusat untuk TanStack Query. Port VERBATIM dari `apps/web/lib/api-query.ts`
- * agar cache key byte-equivalent lintas app (kontrak §11.2). Feature hooks (`features/<x>/api.ts` di
- * fase berikut) memakai key ini untuk `createQuery`/`createMutation` + `queryClient.invalidateQueries`.
+ * Registry query key terpusat untuk TanStack Query. Feature hooks (`features/<x>/api.ts`) memakai key
+ * ini untuk `createQuery`/`createMutation` + `queryClient.invalidateQueries`.
  *
- * Konvensi invalidation (§3.6): invalidasi Query lewat `queryClient.invalidateQueries({ queryKey })`;
+ * Konvensi invalidation: invalidasi Query lewat `queryClient.invalidateQueries({ queryKey })`;
  * `load`/`depends`/`invalidate` HANYA untuk data yang di-load SSR-first — jangan campur dua sumber
  * kebenaran untuk data yang sama.
  *

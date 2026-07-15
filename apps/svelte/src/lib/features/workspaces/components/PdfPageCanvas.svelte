@@ -27,7 +27,7 @@
 	// A4 portrait aspect keeps the scroll height stable before a page paints.
 	const estimatedHeight = $derived(Math.round(width * 1.414));
 
-	// Lazy in-view (imperative external source → valid $effect, §3.4).
+	// Lazy in-view (imperative external source → valid $effect).
 	$effect(() => {
 		if (!browser || visible) return;
 		const el = containerEl;

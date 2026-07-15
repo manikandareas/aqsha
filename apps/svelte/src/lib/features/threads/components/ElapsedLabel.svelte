@@ -6,7 +6,7 @@
 	 * task-mode subagent can sit idle for minutes with no event; a running timer reassures "still
 	 * working", not frozen. `startedAt` (durable epoch-ms: `steps[id].startedAt` snapshot / user
 	 * message `createdAt`) makes the timer survive refresh; without it, mount time. Clamped ≥0 for
-	 * client/server clock skew. Port of `elapsed-label.tsx`.
+	 * client/server clock skew.
 	 */
 	let { base, startedAt }: { base: string; startedAt?: number } = $props();
 

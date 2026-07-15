@@ -2,11 +2,10 @@ import type { Extension } from 'svelte-streamdown';
 import { VIZ_LANGUAGE } from '$lib/features/threads/lib/viz-markdown';
 
 // Marked extensions that tokenize Aqsha's custom answer markers into custom tokens, rendered by the
-// `Response` adapter's `children` catch-all snippet. This REPLACES the web rehype plugin
-// (`reportRehypePlugin`), which is not portable because svelte-streamdown is marked-based (documented
-// in the Phase 6 decision record + §13 risk register). Citations `[n]` are handled by svelte-streamdown's
-// NATIVE `markedCitations` extension (rendered via the `inlineCitation` snippet), so only the stats
-// marker + viz fence need custom extensions here.
+// `Response` adapter's `children` catch-all snippet. Replaces a rehype plugin pipeline because
+// svelte-streamdown is marked-based. Citations `[n]` are handled by svelte-streamdown's NATIVE
+// `markedCitations` extension (rendered via the `inlineCitation` snippet), so only the stats marker +
+// viz fence need custom extensions here.
 //
 // SECURITY: these produce OUR own token types rendered by OUR gated components — no HTML injection,
 // no sanitize allowlist widening. svelte-streamdown never emits raw HTML (`renderHtml` off).
@@ -30,7 +29,7 @@ const STATS_AT_START = /^\{\{stats:([a-z0-9-]{1,64})\}\}/;
 // A fenced block ```aqsha:viz\n<payload>\n``` — info line may carry trailing chars; payload is opaque.
 const VIZ_FENCE = /^```aqsha:viz[^\n]*\n([\s\S]*?)\n```(?:\n|$)/;
 
-/** Inline extension: `{{stats:<runKey>}}` → `aqsha-stats` token (mirror of web `splitStatsMarkers`). */
+/** Inline extension: `{{stats:<runKey>}}` → `aqsha-stats` token. */
 export const aqshaStatsExtension: Extension = {
 	name: 'aqsha-stats',
 	level: 'inline',
@@ -46,7 +45,7 @@ export const aqshaStatsExtension: Extension = {
 };
 
 /**
- * Block extension: a ` ```aqsha:viz ` fence → `aqsha-viz` token (mirror of web `vizElementFromPre`).
+ * Block extension: a ` ```aqsha:viz ` fence → `aqsha-viz` token.
  * `applyInBlockParsing:true` so the fence is recognized during block splitting; runs BEFORE marked's
  * core code tokenizer, so normal ```lang fences still fall through to native Shiki highlighting.
  */

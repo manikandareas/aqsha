@@ -24,7 +24,7 @@
 	] as const;
 
 	// LandingFooter — struktur dipertahankan, motion diringkas jadi satu fade-in. Tagline Caveat di
-	// bawah brand line. Port `landing-footer.tsx`.
+	// bawah brand line.
 	const revealOnce = reveal();
 </script>
 

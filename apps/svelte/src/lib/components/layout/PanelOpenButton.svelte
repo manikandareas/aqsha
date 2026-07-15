@@ -5,7 +5,7 @@
 	/**
 	 * Open affordance for a closed side panel — the pill on the page/main header. Hidden while
 	 * the panel is open (closing lives on the panel's own close toggle). After opening, hands
-	 * focus to the panel's `[data-panel-close]` toggle. Padanan web `PanelOpenButton`.
+	 * focus to the panel's `[data-panel-close]` toggle.
 	 */
 	let {
 		open,

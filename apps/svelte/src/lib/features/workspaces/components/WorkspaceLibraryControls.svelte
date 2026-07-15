@@ -10,7 +10,6 @@
 		WorkspaceArtifactType
 	} from '$lib/features/workspaces/utils/workspace-library-model';
 
-	/** Port of `apps/web/features/workspaces/components/workspace-library-controls.tsx`. */
 	const workspaceArtifactTypeOptions = [
 		{ value: 'pdf', label: 'PDF' },
 		{ value: 'plain_text', label: 'TXT' },

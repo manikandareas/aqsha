@@ -7,7 +7,7 @@ import { useBillingCurrent } from '$lib/features/settings/api';
 export type ComposerAgentKind = AgentKind;
 
 /**
- * Composer agent selection (Svelte port of `useComposerAgentSelection`). Default follows the stored
+ * Composer agent selection. Default follows the stored thread tier (`chat_threads.agent_kind`);
  * thread tier (`chat_threads.agent_kind`); `override` is the explicit per-session choice (null = follow
  * default). Pro is locked unless the plan is paid — clicking Pro while locked routes to billing and
  * `agentKind` is forced "lite" for free plans. Must be called during component init (uses the billing

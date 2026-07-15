@@ -5,10 +5,7 @@
 	import MarkdownArtifactInfo from './MarkdownArtifactInfo.svelte';
 	import { type ArtifactSidebarRecord } from './ArtifactDetailSidebar.svelte';
 
-	/**
-	 * Header "Details" trigger + popover for a markdown document — port of web
-	 * `artifact-detail-sidebar.tsx` `MarkdownArtifactDetails`.
-	 */
+	/** Header "Details" trigger + popover for a markdown document. */
 	let { artifact }: { artifact: ArtifactSidebarRecord } = $props();
 </script>
 

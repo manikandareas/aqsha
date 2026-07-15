@@ -7,9 +7,7 @@ import {
 } from './citation-markdown';
 import type { SourceCardData } from './timeline-types';
 
-// Contract tests for the citation transform semantics (THC-2). The RENDER goes through
-// svelte-streamdown's native citation tokenizer, but the DATA transform (which numbers a marker
-// carries, and number→cards resolution) is pinned here byte-for-byte against the web behavior.
+// Contract tests for citation transform semantics — marker numbering and number→cards resolution.
 
 const card = (n: number, key: string): SourceCardData => ({
 	key,
@@ -27,9 +25,8 @@ describe('citationMarkersInText', () => {
 	});
 
 	it('does not match non-numeric brackets or markdown links', () => {
-		// `[ref]` (non-numeric) and `[teks](url)` never match. NOTE: a numeric bracket in prose like
-		// `arr[0]` DOES match by design (web `CITATION_RE` parity) — array indexing is protected only
-		// inside code spans, which is a RENDER concern (SKIP_TAGS / marked code token), not a parse one.
+		// `arr[0]` DOES match by design — array indexing is protected only inside code spans
+		// (RENDER concern: SKIP_TAGS / marked code token), not at parse time.
 		expect(citationMarkersInText('lihat [ref] dan [teks](https://x.com)')).toEqual([]);
 	});
 

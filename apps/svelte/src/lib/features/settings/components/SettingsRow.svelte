@@ -3,7 +3,6 @@
 	import { cn } from '$lib/utils';
 
 	// Full-bleed label/value row. Stack several inside `divide-y divide-border/60`.
-	// Port from apps/web/features/settings/components/settings-card.tsx (SettingsRow).
 	let {
 		label,
 		description,

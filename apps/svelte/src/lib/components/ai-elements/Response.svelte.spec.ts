@@ -5,8 +5,8 @@ import Response from './Response.svelte';
 import type { SourceCardData } from '$lib/features/threads/lib/timeline-types';
 import type { StatsGroup } from '@aqsha/chat-core/stats-viz';
 
-// THC-6 gate: the Streamdown adapter's sanitize/security (hard NO-GO if loosened) + the custom-tag
-// wiring (citations / stats / viz anti-forgery). Runs in real Chromium (client project).
+// Streamdown adapter sanitize/security (hard NO-GO if loosened) + custom-tag wiring (citations /
+// stats / viz anti-forgery). Runs in real Chromium (client project).
 
 const flush = () => new Promise((r) => setTimeout(r, 60));
 

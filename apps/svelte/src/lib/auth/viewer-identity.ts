@@ -1,7 +1,6 @@
 /**
- * Logika viewer identity PURE (tanpa runes/DOM) — port helper `apps/web/lib/use-viewer-identity.ts`.
- * Dipisah dari `viewer.svelte.ts` sesuai §3.5 ("pure reducer/codec/model tetap `.ts` murni") → aman
- * di browser bundle & unit-testable tanpa mount.
+ * Logika viewer identity PURE (tanpa runes/DOM). Dipisah dari `viewer.svelte.ts` agar pure model
+ * tetap di `.ts` murni → aman di browser bundle & unit-testable tanpa mount.
  */
 
 export type ViewerIdentity = {
@@ -34,7 +33,7 @@ export function pickClerkDisplayName(user: ClerkUserLike): string | null {
 	);
 }
 
-/** Inisial 2-huruf dari nama (atau email bila nama = fallback). Identik web `getViewerInitials`. */
+/** Inisial 2-huruf dari nama (atau email bila nama = fallback). */
 export function viewerInitials(name: string, email: string, nameFallback: string): string {
 	const source = name === nameFallback ? email : name;
 	return source
@@ -45,7 +44,7 @@ export function viewerInitials(name: string, email: string, nameFallback: string
 		.join('');
 }
 
-/** Gabung viewer base + user Clerk (base menang bila terisi). Padanan `useResolvedViewer`. */
+/** Gabung viewer base + user Clerk (base menang bila terisi). */
 export function resolveViewer<T extends ViewerIdentity>(
 	viewer: T | undefined,
 	clerkUser: ClerkUserLike
@@ -66,7 +65,7 @@ export type ViewerDisplay = {
 	initials: string;
 };
 
-/** Hitung display lengkap dgn fallback wajib. Padanan `useViewerDisplay`. */
+/** Hitung display lengkap dgn fallback wajib. */
 export function viewerDisplay(
 	viewer: ViewerIdentity | undefined,
 	clerkUser: ClerkUserLike,

@@ -14,7 +14,7 @@
 	] as const;
 
 	// LandingHeader — sticky blur, fade tunggal saat mount. Signature: letter-spacing logo melebar
-	// halus saat scroll melewati hero (0 → 0.06em over 300px). Port `landing-header.tsx`.
+	// halus saat scroll melewati hero (0 → 0.06em over 300px).
 	const motion = motionContext.get();
 	const reduce = $derived(motion.reducedMotion);
 

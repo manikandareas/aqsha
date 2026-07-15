@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { isSidebarOpenFromCookie } from './sidebar-state';
 
-// Cookie codec round-trip (§10 Phase 3 gate). Must agree byte-for-byte with what
-// `Sidebar.Provider` writes (`sidebar_state=true|false`) and with web's read semantics.
+// Cookie codec round-trip. Must agree byte-for-byte with what `Sidebar.Provider` writes
+// (`sidebar_state=true|false`).
 describe('sidebar_state cookie codec', () => {
 	it('is open when the cookie is absent (default)', () => {
 		expect(isSidebarOpenFromCookie(undefined)).toBe(true);

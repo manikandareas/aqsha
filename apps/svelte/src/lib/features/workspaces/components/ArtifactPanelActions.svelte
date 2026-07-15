@@ -11,11 +11,11 @@
 	} from '$lib/features/threads/lib/artifact-download';
 
 	/**
-	 * Side-panel header actions — port of `artifact-detail-view.tsx` `ArtifactPanelActions`. A single
-	 * More popover next to the panel close toggle: one overlay, two views. The "menu" view lists Info +
-	 * Download + Delete; choosing Info swaps the SAME popover to the metadata "info" view. This
-	 * deliberately avoids nesting a Popover inside a DropdownMenu (two dismissable layers sharing an
-	 * anchor fight each other → flicker); one controlled surface sidesteps that.
+	 * Side-panel header actions. A single More popover next to the panel close toggle: one overlay, two
+	 * views. The "menu" view lists Info + Download + Delete; choosing Info swaps the SAME popover to the
+	 * metadata "info" view. This deliberately avoids nesting a Popover inside a DropdownMenu (two
+	 * dismissable layers sharing an anchor fight each other → flicker); one controlled surface sidesteps
+	 * that.
 	 */
 	let {
 		payload,

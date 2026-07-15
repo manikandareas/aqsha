@@ -4,9 +4,8 @@ import type { TokenGetter } from '$lib/auth/token';
 import { createServerApiClient, type ServerApiClient } from './api';
 
 /**
- * Auth facade sisi SERVER (plan §Phase 2 task 3). Semua akses auth server melewati facade ini —
- * jangan sebar API `svelte-clerk`/`locals.auth` mentah ke `load`/route. Padanan sisi client =
- * `$lib/auth` (`getAuthState`, dsb).
+ * Auth facade sisi SERVER. Semua akses auth server melewati facade ini — jangan sebar API
+ * `svelte-clerk`/`locals.auth` mentah ke `load`/route. Sisi client = `$lib/auth` (`getAuthState`, dsb).
  */
 
 type SessionAuth = ReturnType<App.Locals['auth']>;

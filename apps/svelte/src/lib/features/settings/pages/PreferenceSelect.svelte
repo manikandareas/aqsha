@@ -2,8 +2,8 @@
 	import * as Select from '$lib/components/ui/select';
 
 	/**
-	 * Single-select wrapper — port of the local `PreferenceSelect` in web personalization-page.tsx.
-	 * bits-ui Select has no `<SelectValue />`, so the trigger renders the selected option's label.
+	 * Single-select wrapper. bits-ui Select has no `<SelectValue />`, so the trigger renders the
+	 * selected option's label.
 	 */
 	let {
 		value,

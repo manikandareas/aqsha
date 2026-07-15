@@ -1,8 +1,7 @@
-// Configurable house-ads for the Explore feed (own-product promo slot, not third-party
-// ads). Add/edit a campaign here — HouseAdBanner renders every variant, and ExploreFindings
-// interleaves it between feed blocks. Copy is sentence case (see brand voice). `href` internal →
-// resolve()/`<a>`; set `external` for a raw `<a target=_blank>`. Ported verbatim from
-// `apps/web/features/discovery/house-ads.ts`.
+// Configurable house-ads for the Explore feed (own-product promo slot, not third-party ads). Add/edit a
+// campaign here — HouseAdBanner renders every variant, and ExploreFindings interleaves it between feed
+// blocks. Copy is sentence case (see brand voice). `href` internal → resolve()/`<a>`; set `external` for
+// a raw `<a target=_blank>`.
 
 export type HouseAdAccent = 'mint' | 'lavender' | 'coral';
 

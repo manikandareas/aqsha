@@ -17,9 +17,9 @@
 	import WorkspaceLibraryDialogsStack from './WorkspaceLibraryDialogsStack.svelte';
 
 	/**
-	 * Library surface — Svelte port of `workspace-library-surface.tsx`. Owns the search/type/sort URL
-	 * state (`?q=&type=&sort=`, history replace — padanan nuqs) and wires the board to `libraryData`
-	 * mutations + the dialog stack. `onAddToCitations` bridges paper artifacts into the Citation Manager.
+	 * Library surface. Owns the search/type/sort URL state (`?q=&type=&sort=`, history replace) and wires
+	 * the board to `libraryData` mutations + the dialog stack. `onAddToCitations` bridges paper artifacts
+	 * into the Citation Manager.
 	 */
 	const workspaceArtifactSortOptions = [
 		'updated-desc',

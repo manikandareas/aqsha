@@ -21,7 +21,7 @@
 	import DatasetProfileCard from './stats-viz/DatasetProfileCard.svelte';
 
 	/**
-	 * One tool call as a collapsible row (port of `tool-row.tsx`). Collapsed: status icon + title
+	 * One tool call as a collapsible row. Collapsed: status icon + title
 	 * (Shimmer + inline query while running) + result badge. Expanded: curated scalars (default-deny via
 	 * the adapter) grouped Input/Result, or the `/deep` process detail (plan / search cards / …). A
 	 * successful analysis / dataset-profile detail REPLACES the generic row with its stats card.

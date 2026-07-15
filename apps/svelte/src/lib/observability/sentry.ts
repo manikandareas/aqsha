@@ -3,16 +3,16 @@ import type { PublicEnv } from '$lib/env/defaults';
 import type { PrivateEnv } from '$lib/env/schema';
 
 /**
- * Konfigurasi Sentry SvelteKit (plan §Phase 2 task 7) — port semantik `apps/web` Sentry config.
- * `Sentry.init` di sini (bukan lewat vite plugin) supaya SDK aktif tanpa bergantung plugin, yang di
- * `vite.config.ts` HANYA opsional untuk upload source map. `@sentry/sveltekit` isomorphic: Vite
- * memilih SDK browser untuk `hooks.client`, SDK node untuk `hooks.server`.
+ * Konfigurasi Sentry SvelteKit. `Sentry.init` di sini (bukan lewat vite plugin) supaya SDK aktif
+ * tanpa bergantung plugin, yang di `vite.config.ts` HANYA opsional untuk upload source map.
+ * `@sentry/sveltekit` isomorphic: Vite memilih SDK browser untuk `hooks.client`, SDK node untuk
+ * `hooks.server`.
  *
- * Kebijakan (mirror web): DSN kosong → SDK no-op; tracing default 0 (kuota); `sendDefaultPii:false`
- * (jangan auto-attach header/cookie/IP/PII); release/environment env-driven (Infisical, §3.7).
+ * Kebijakan: DSN kosong → SDK no-op; tracing default 0 (kuota); `sendDefaultPii:false`
+ * (jangan auto-attach header/cookie/IP/PII); release/environment env-driven (Infisical).
  */
 
-/** Path tunnel same-origin (di-allowlist public di `hooks.server.ts`, mirror web `tunnelRoute`). */
+/** Path tunnel same-origin (di-allowlist public di `hooks.server.ts`). */
 export const SENTRY_TUNNEL_PATH = '/sentry-tunnel';
 
 /** Init Sentry sisi CLIENT (browser). Dipanggil di `hooks.client.ts`. */
@@ -22,7 +22,7 @@ export function initClientSentry(env: PublicEnv): void {
 		dsn: dsn ?? undefined,
 		enabled: Boolean(dsn),
 		environment: env.PUBLIC_SENTRY_ENVIRONMENT,
-		// Client tracing off (parity web client). Route ingest lewat tunnel same-origin agar
+		// Client tracing off. Route ingest lewat tunnel same-origin agar ad/tracker blocker tak
 		// ad/tracker blocker tak diam-diam men-drop error envelope.
 		tracesSampleRate: 0,
 		tunnel: dsn ? SENTRY_TUNNEL_PATH : undefined,

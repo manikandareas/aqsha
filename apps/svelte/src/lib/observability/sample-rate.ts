@@ -6,7 +6,7 @@
 /**
  * `SENTRY_TRACES_SAMPLE_RATE` harus angka finite di [0,1]; invalid/NaN/out-of-range → `fallback`
  * (default 0). Nilai valid di-clamp, bukan ditolak — env salah tak pernah menaikkan ingest di luar
- * kuota. Port dari `apps/web/lib/sentry-config.ts` (logika sengaja identik dengan `@aqsha/db`).
+ * kuota. Logika identik dengan `@aqsha/db`.
  */
 export function parseSampleRate(raw: string | undefined | null, fallback = 0): number {
 	if (raw == null || raw === '') return fallback;

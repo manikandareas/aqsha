@@ -21,11 +21,10 @@
 	import ThreadActionsMenu from './ThreadActionsMenu.svelte';
 
 	/**
-	 * Astra chat for the Explore surface — mirror of the web `ExploreChatSidePanel` + `CompactThreadChatPanel`
-	 * but workspace-less: a new thread is born headless (like /app). Self-contained (threads list + thread
-	 * detail read from hooks); the parent only holds `activeThreadId`. Reuses the page-level shared
-	 * `ComposerMentions` (so Explore "Tanya Astra" ambient refs reach this composer). Only mounts while the
-	 * panel is open (via `ResponsiveSidePanel`).
+	 * Workspace-less Astra chat for Explore — new threads start headless (like /app). Self-contained
+	 * (threads list + detail from hooks); parent only holds `activeThreadId`. Reuses page-level
+	 * `ComposerMentions` so "Tanya Astra" ambient refs reach this composer. Mounts only while open
+	 * (`ResponsiveSidePanel`).
 	 */
 	let {
 		activeThreadId,

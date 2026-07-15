@@ -20,11 +20,10 @@
 	import DetailPanel from './DetailPanel.svelte';
 
 	/**
-	 * Thread-detail shell (THX-1/2) — the one place that owns the durable agent + the side-panel slot.
-	 * Creates the per-tree contexts (composer mentions, panel controller), seeds the timeline from server
-	 * memory (THX-8: 400-message history), spins up the `ThreadAgent` lifecycle, and lays out the surface
-	 * (main) beside the responsive DetailPanel (`DetailSplitLayout` = inline inset ≥1100px / drawer below).
-	 * A streamlined port of `thread-detail-shell.tsx` (workspace-library tab = Phase 9 seam).
+	 * Thread-detail shell — the one place that owns the durable agent + the side-panel slot. Creates the
+	 * per-tree contexts (composer mentions, panel controller), seeds the timeline from server memory
+	 * (400-message history), spins up the `ThreadAgent` lifecycle, and lays out the surface (main)
+	 * beside the responsive DetailPanel (`DetailSplitLayout` = inline inset ≥1100px / drawer below).
 	 */
 	let {
 		threadId: threadIdProp,
@@ -37,7 +36,7 @@
 	const userId = $derived(clerk.auth.userId);
 	const clerkLoaded = $derived(clerk.isLoaded);
 
-	// Per-tree channels + panel controller (§3.5 — set once at init, never module singletons).
+	// Per-tree channels + panel controller — set once at init, never module singletons.
 	const mentions = new ComposerMentions();
 	setComposerMentions(mentions);
 	const panel = new ThreadPanelController();
@@ -66,7 +65,7 @@
 	// Tab title: the loaded thread title, else "Threads" (also the /app new-thread landing + loading).
 	const pageTitle = $derived(threadDetail.data?.title ?? 'Threads');
 
-	// THX-8: seed the timeline from server memory (400 messages ≈ 200 turns — beyond a sane thread).
+	// Seed the timeline from server memory (400 messages ≈ 200 turns — beyond a sane thread).
 	const history = createQuery(() => ({
 		queryKey: ['mastra', 'thread-messages', threadIdProp],
 		enabled: isExistingThread && clerkLoaded && Boolean(userId),
@@ -90,7 +89,7 @@
 	const loading = $derived(isExistingThread && !historySettled);
 
 	// Create the durable agent once the seed is ready. Lifecycle is imperative (start/destroy) — a valid
-	// external-source `$effect` (§3.4). The seed + initial tier are read via `untrack` so a later history
+	// external-source `$effect`. The seed + initial tier are read via `untrack` so a later history refetch
 	// refetch / threadDetail load doesn't tear down and rebuild the agent mid-stream.
 	let agent = $state<ThreadAgent | null>(null);
 	$effect(() => {
@@ -127,12 +126,11 @@
 	</div>
 {:else}
 	<!--
-		Bounded-height root — restores web `ThreadShellLayout`'s wrapper (`h-svh min-h-0 overflow-hidden`).
-		Every layer below (DetailSplitLayout provider, grid, inset, the surface `main`) is `min-h-svh`/`flex-1`
-		with NO fixed height; without this fixed `h-svh` ancestor the chain is content-driven, so the surface's
-		`overflow-y-auto` never engages (the body scrolls instead) and the landing hero's `flex-1 items-center
-		justify-center` centers inside a content-tall region → the giant top gap. `ThreadDetailShell` merged
-		web's `ThreadShellLayout` role but had dropped this div.
+		Bounded-height root (`h-svh min-h-0 overflow-hidden`). Every layer below (DetailSplitLayout
+		provider, grid, inset, the surface `main`) is `min-h-svh`/`flex-1` with NO fixed height;
+		without this fixed `h-svh` ancestor the chain is content-driven, so the surface's
+		`overflow-y-auto` never engages (the body scrolls instead) and the landing hero's
+		`flex-1 items-center justify-center` centers inside a content-tall region → giant top gap.
 	-->
 	<div class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
 		<DetailSplitLayout

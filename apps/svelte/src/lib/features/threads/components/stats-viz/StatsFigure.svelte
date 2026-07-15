@@ -3,9 +3,8 @@
 
 	/**
 	 * Figur PNG dari sandbox Daytona (scatterplot heteroskedastisitas, P-P plot, dsb.) — base64
-	 * di-render langsung sebagai data-uri. Nomor "Gambar n" di-assign provider (urutan dokumen) — di
-	 * web via React context `useStatsViz().assignFigure(block.id)`; di Svelte diteruskan sebagai prop
-	 * `assignedNumber`. `max-w-full` + wrapper border supaya konsisten dengan tabel.
+	 * di-render langsung sebagai data-uri. Nomor "Gambar n" di-assign provider (urutan dokumen)
+	 * dan diteruskan sebagai prop `assignedNumber`.
 	 */
 	let { block, assignedNumber }: { block: StatsFigureBlock; assignedNumber?: number } = $props();
 

@@ -1,7 +1,6 @@
-/* Tailwind entry. The visual contract (tokens, @theme, prose, panel, composer,
-   viz, keycap, fonts, …) lives in the ported golden CSS at ./styles/globals.css
-   (§9.1). Keeping the Tailwind + tw-animate imports here (before the golden CSS)
-   means globals.css is a pure token/contract file with no framework preamble. */
+/* Tailwind entry — imports live here so ./styles/globals.css stays a pure
+   token/contract file (tokens, @theme, prose, panel, composer, viz, keycap,
+   fonts, …) with no framework preamble. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './styles/globals.css';

@@ -7,7 +7,7 @@
 	/**
 	 * Inline clarification card (above the composer) on the shared `ToolCard` shell: a compact header
 	 * (icon + "Klarifikasi" + question count) that, when `onOpenPanel` is set, opens the Questions panel;
-	 * the form follows. Port of `QuestionsCard`.
+	 * the form follows.
 	 */
 	let {
 		questions,

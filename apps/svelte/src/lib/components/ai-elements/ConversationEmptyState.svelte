@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { cn } from '$lib/utils';
 
-	// Port of `conversation-empty-state.tsx` — the empty transcript state. `icon`/`children` are snippets.
+	// Empty transcript state. `icon`/`children` are snippets.
 
 	let {
 		title = 'Belum ada pesan',

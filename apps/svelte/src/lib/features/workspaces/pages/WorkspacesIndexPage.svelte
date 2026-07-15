@@ -9,7 +9,6 @@
 	import { useWorkspaceIndexData } from '../api/use-workspaces-data';
 	import { Icon, ArchiveIcon, FolderIcon, MoreHorizontalIcon, PlusIcon } from '$lib/icons';
 
-	/** Workspaces index — port `apps/web/features/workspaces/pages/workspaces-index-page.tsx` (WSP-1). */
 	const data = useWorkspaceIndexData();
 
 	let createOpen = $state(false);

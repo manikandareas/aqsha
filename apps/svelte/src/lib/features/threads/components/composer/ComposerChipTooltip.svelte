@@ -7,7 +7,6 @@
 	 * `composer-inline-editor.ts`, not Svelte), so a per-chip tooltip primitive can't be used —
 	 * TokenizedPromptInput delegates hover and renders ONE tooltip positioned from the chip rect,
 	 * portalled to `document.body` to escape the composer's `overflow-hidden` + motion transform.
-	 * Mirrors web `composer-chip-tooltip.tsx`.
 	 */
 	let { chip }: { chip: HTMLElement } = $props();
 

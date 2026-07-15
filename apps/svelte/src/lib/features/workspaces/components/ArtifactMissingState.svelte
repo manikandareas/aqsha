@@ -3,10 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Icon, ArrowLeftIcon, FileIcon } from '$lib/icons';
 
-	/**
-	 * Empty state when the requested artifact isn't available in the open workspace — port of web
-	 * `artifact-render-panels.tsx` `ArtifactMissingState`.
-	 */
+	/** Empty state when the requested artifact isn't available in the open workspace. */
 	let { workspaceId }: { workspaceId: string } = $props();
 </script>
 

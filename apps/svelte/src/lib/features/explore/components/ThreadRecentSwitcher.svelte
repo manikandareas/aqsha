@@ -9,8 +9,7 @@
 
 	/**
 	 * Quick-switch dropdown for the compact chat panel — top 4 recent threads (by activity) + "new".
-	 * Port of `apps/web/features/thread-experience/components/thread-recent-switcher.tsx`
-	 * (`PanelTitleDropdownTrigger` inlined, it wasn't ported in Phase 7).
+	 * `PanelTitleDropdownTrigger` is inlined here.
 	 */
 	let {
 		title,

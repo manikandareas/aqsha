@@ -48,7 +48,6 @@
 		type WorkspaceMoveTarget
 	} from './MoveToWorkspaceContextSubmenu.svelte';
 
-	/** Artifact right-click menu content — port of `ArtifactContextMenuContent` (workspace-library-context-menus.tsx). */
 	let {
 		moveTargets,
 		workspaces,
@@ -72,7 +71,7 @@
 		onDelete: () => void;
 		onMove: (target: string) => void;
 		onMoveToWorkspace: (targetWorkspaceId: string) => void;
-		/** Fase 2 bridge — hanya untuk paper saat Citation Manager aktif. */
+		/** Citation Manager bridge — paper artifacts only when the feature is active. */
 		onAddToCitations?: () => void;
 	} = $props();
 </script>

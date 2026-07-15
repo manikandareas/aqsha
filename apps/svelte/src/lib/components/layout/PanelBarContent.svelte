@@ -1,8 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
-	/** Title/eyebrow + actions clusters shared by `PanelHeaderBar` and `PanelCardToolbar`
-	 *  (padanan web `PanelBarContent`). */
+	/** Title/eyebrow + actions clusters shared by `PanelHeaderBar` and `PanelCardToolbar`. */
 	let { title, eyebrow, actions }: { title: Snippet; eyebrow?: string; actions?: Snippet } =
 		$props();
 </script>

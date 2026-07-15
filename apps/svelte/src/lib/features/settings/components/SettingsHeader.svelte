@@ -2,9 +2,8 @@
 	import { settingsItemForPath, type SettingsKey } from '../lib/settings-menu';
 
 	/**
-	 * Page header (title + subtitle). Port from
-	 * apps/web/features/settings/components/settings-header.tsx. `description === null` hides the
-	 * subtitle; `undefined` falls back to the menu item's description.
+	 * Page header (title + subtitle). `description === null` hides the subtitle; `undefined` falls back
+	 * to the menu item's description.
 	 */
 	let {
 		section,

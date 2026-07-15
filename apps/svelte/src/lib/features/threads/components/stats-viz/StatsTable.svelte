@@ -14,9 +14,8 @@
 
 	/**
 	 * Tabel gaya output SPSS: judul "Tabel n: …", header kolom, baris angka (desimal koma),
-	 * catatan kaki (a., b., …). Nomor "Tabel n" di-assign provider (urutan dokumen) — di web via
-	 * React context `useStatsViz().assignTable(block.id)`; di Svelte diteruskan sebagai prop
-	 * `assignedNumber`. Wrapper `overflow-x-auto` supaya tabel lebar bisa di-scroll di mobile tanpa
+	 * catatan kaki (a., b., …). Nomor "Tabel n" di-assign provider (urutan dokumen)
+	 * dan diteruskan sebagai prop `assignedNumber`. Wrapper `overflow-x-auto` supaya tabel lebar bisa
 	 * merusak layout.
 	 */
 	let { block, assignedNumber }: { block: StatsTableBlock; assignedNumber?: number } = $props();

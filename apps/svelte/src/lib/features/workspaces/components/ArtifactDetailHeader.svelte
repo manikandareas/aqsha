@@ -8,10 +8,8 @@
 	import { readableApiErrorMessage } from '$lib/errors';
 
 	/**
-	 * Sticky artifact-reader breadcrumb header — port of
-	 * `apps/web/features/workspaces/components/artifact-detail-header.tsx`. Workspace crumb → editable
-	 * title crumb (a controlled rename popover, formerly `ArtifactTitleBreadcrumb`, inlined here) →
-	 * optional `trailing` actions.
+	 * Sticky artifact-reader breadcrumb header. Workspace crumb → editable title crumb (a controlled
+	 * rename popover, formerly `ArtifactTitleBreadcrumb`, inlined here) → optional `trailing` actions.
 	 */
 	let {
 		artifactTitle,

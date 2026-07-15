@@ -67,7 +67,7 @@
 	});
 	const loading = $derived(threadIdIsExisting && !historySettled);
 
-	// Create the durable agent once the seed is ready (imperative lifecycle → valid $effect, §3.4).
+	// Create the durable agent once the seed is ready (imperative lifecycle → valid $effect).
 	let agent = $state<ThreadAgent | null>(null);
 	$effect(() => {
 		const tid = threadId;

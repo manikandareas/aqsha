@@ -6,9 +6,8 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Theme submenu inside the user dropdown — ported 1:1 from
-	 * apps/web/components/theme-toggle.tsx (`ThemeMenuSub`). next-themes' `theme`/`setTheme`
-	 * → the `$lib/theme` seam (mode-watcher). Light/Dark/System, active row checked.
+	 * Theme submenu inside the user dropdown. Light/Dark/System via the `$lib/theme` seam
+	 * (mode-watcher); active row checked.
 	 */
 	let { class: className }: { class?: string } = $props();
 

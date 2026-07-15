@@ -9,9 +9,9 @@
 	const OLD_THREADS_COLLAPSED_STORAGE_KEY = 'aqsha:sidebar:old-threads-collapsed';
 
 	/**
-	 * "More" group of older threads — port of web `ThreadArchiveGroup` (`app-sidebar.tsx`). Persisted
-	 * collapse (default collapsed) but forced open while it contains the active thread. Each row is
-	 * rendered via the `threadRow` snippet passed by the parent (shared with the recent group).
+	 * "More" group of older threads. Persisted collapse (default collapsed) but forced open while it
+	 * contains the active thread. Each row is rendered via the `threadRow` snippet passed by the parent
+	 * (shared with the recent group).
 	 */
 	let {
 		threads,

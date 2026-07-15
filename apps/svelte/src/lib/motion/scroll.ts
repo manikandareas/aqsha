@@ -3,8 +3,7 @@ import type { Attachment } from 'svelte/attachments';
 import { computeScrollProgress, type ScrollOffset } from './scroll-math';
 
 /**
- * Scroll-linked progress attach — padanan `useScroll({target, offset})` framer yang dipakai
- * `apps/web/features/marketing/**`. Math pure ada di `scroll-math.ts` (contract-testable di node);
+ * Scroll-linked progress attach. Math pure ada di `scroll-math.ts` (contract-testable di node);
  * di sini hanya wiring listener + reduced-motion guard.
  */
 export { computeScrollProgress, mapRange, type ScrollOffset } from './scroll-math';

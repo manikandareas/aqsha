@@ -78,7 +78,7 @@ export type ImportPreviewResult = {
 
 export type ImportCommitResult = { created: number; merged: number; skipped: number };
 
-/** Folder/collection provider untuk picker penarikan (Fase 5). */
+/** Folder/collection provider untuk picker penarikan. */
 export type ProviderFolder = { id: string; name: string; parentId?: string | null };
 
 export type CitationSettings = {
@@ -92,7 +92,7 @@ export type CitationRenderResult = {
 	bibliography: string;
 };
 
-/** Satu cluster sitasi in-text dokumen (Fase 3 — mengikuti satu inline node BlockNote). */
+/** Satu cluster sitasi in-text dokumen (mengikuti satu inline node BlockNote). */
 export type DocumentCitationCluster = {
 	nodeId: string;
 	citationIds: string[];
@@ -117,7 +117,7 @@ export type CitationDuplicateGroup = {
 	members: CitationListItem[];
 };
 
-/** Hasil "Tambahkan ke Sitasi" dari artifact (Fase 2). */
+/** Hasil "Tambahkan ke Sitasi" dari artifact. */
 export type CreateFromArtifactResult = {
 	citation: CitationDetail;
 	created: boolean;

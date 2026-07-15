@@ -5,7 +5,6 @@
 		type WorkspaceMoveTarget
 	} from './MoveToWorkspaceContextSubmenu.svelte';
 
-	/** Folder right-click menu content — port of `FolderContextMenuContent` (workspace-library-context-menus.tsx). */
 	let {
 		workspaces,
 		onOpen,

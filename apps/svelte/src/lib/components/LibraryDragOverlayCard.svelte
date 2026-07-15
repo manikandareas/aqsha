@@ -9,7 +9,7 @@
 	 * macOS-Finder-style drag preview: a compact capsule showing just the filename that follows the
 	 * pointer. Dragging a multi-selection fans the capsules into a short diagonal cascade — the grabbed
 	 * item on top, the rest peeking below — with a count badge for the true total. Reduced-motion users
-	 * get static pills. Port of `apps/web/components/library-drag-overlay-card.tsx`.
+	 * get static pills.
 	 */
 	let { titles }: { titles: string[] } = $props();
 

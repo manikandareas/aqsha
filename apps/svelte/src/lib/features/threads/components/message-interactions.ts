@@ -5,7 +5,7 @@ import { createContext } from '$lib/context';
  * sub-question / plan) without prop-drilling. `MessageList` provides the value from the thread panel
  * controller; this is the ONE place the shared message components couple to the panel controller.
  * Empty (all undefined) in compact chat panels where there is no detail slot — cards keep their
- * default behaviour there. Svelte port of `message-interactions.tsx` (React context → createContext).
+ * default behaviour there.
  */
 export type MessageInteractions = {
 	openArtifact?: (artifactId: string) => void;

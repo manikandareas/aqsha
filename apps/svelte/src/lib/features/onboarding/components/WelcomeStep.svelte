@@ -1,6 +1,3 @@
-<!--
-	Welcome step — port 1:1 from apps/web/features/onboarding/components/onboarding-steps.tsx.
--->
 <div>
 	<h1 class="font-heading text-3xl font-bold tracking-tight text-foreground sm:text-[2rem]">
 		Kenalan dulu, yuk

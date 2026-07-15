@@ -1,8 +1,5 @@
-// Divergence dari web (dicatat): web mendefinisikan `PaperExtractionStatus` di
-// dalam komponen `artifact-render-panels.tsx` dan meng-import-nya ke model, yang
-// mengkopel model pure ke komponen. Di svelte tipe ini didefinisikan di sini
-// (model pure, step-1) dan di-re-export supaya komponen render + test memakainya
-// tanpa dependensi terbalik.
+// `PaperExtractionStatus` lives in this pure model module (not in a render component) so
+// components and tests can import it without coupling the model layer to UI.
 export type PaperExtractionStatus =
 	| {
 			extraction: {

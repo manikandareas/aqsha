@@ -1,9 +1,7 @@
-// "Tanya Astra" util: turn a discovery item (paper/news) into a composer context token
-// (ContextRef). Used by the Explore reader pages (page token) and the feed/related cards
-// (Tanya Astra → open panel + pin that item's token). The label carries the FULL title —
-// the pill is truncated by CSS (token-pill), the full detail shows in the tooltip.
-// Ported verbatim from `apps/web/features/discovery/ask-astra.ts` — the produced ContextRef
-// is contract-tested byte-for-byte (`ask-astra.spec.ts`).
+// "Tanya Astra" util: turn a discovery item (paper/news) into a composer context token (ContextRef).
+// Used by the Explore reader pages (page token) and the feed/related cards (Tanya Astra → open panel +
+// pin that item's token). The label carries the FULL title — the pill is truncated by CSS (token-pill),
+// the full detail shows in the tooltip. Contract-tested (`ask-astra.spec.ts`).
 
 import {
 	buildExternalPaperMentionLabel,

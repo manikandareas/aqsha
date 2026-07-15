@@ -1,8 +1,7 @@
-// Stats detail builder for the timeline adapter (stats phase A): tool part
-// `run_analysis`/`run_python_analysis` → `analysis` detail (run card), `profile_dataset` success →
-// `dataset-profile` detail (dataset card). Pure FE — numbers/verdicts still come from DB blocks
-// (`statsGroupsByToolCallId`); this detail is only identity + args + friendly status. Verbatim port
-// of `apps/web/features/threads/lib/stats-run-detail.ts`.
+// Stats detail builder for the timeline adapter: tool part `run_analysis`/`run_python_analysis` →
+// `analysis` detail (run card), `profile_dataset` success → `dataset-profile` detail (dataset card).
+// Pure FE — numbers/verdicts still come from DB blocks (`statsGroupsByToolCallId`); this detail is
+// only identity + args + friendly status.
 
 import { statsAnalysisMeta, toRunKey } from '@aqsha/chat-core/stats-viz';
 import type { DatasetProfileColumn, DatasetProfileSummary, DeepStepDetail } from './timeline-types';

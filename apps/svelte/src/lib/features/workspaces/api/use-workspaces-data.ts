@@ -35,10 +35,9 @@ import {
 import type { WorkspaceArtifact } from '../utils/workspace-library-model';
 
 /**
- * Composite workspace data hooks — Svelte port of `apps/web/features/workspaces/api/
- * use-workspaces-data.ts`. React recomputes the return object each render; here we return objects with
- * **getter** properties so accessing `.workspaces`/`.threads`/`.artifacts` re-reads the underlying
- * reactive svelte-query state (§3.5/§3.6). Mutations are exposed as plain async functions.
+ * Composite workspace data hooks. Returns objects with **getter** properties so accessing
+ * `.workspaces`/`.threads`/`.artifacts` re-reads the underlying reactive svelte-query state.
+ * Mutations are exposed as plain async functions.
  *
  * Call these during component init (they call query/api-client context internally). Reactive `workspaceId`/
  * `artifactId` inputs flow as getters into the leaf hooks.
@@ -155,7 +154,7 @@ function flattenArtifacts(
 
 export function useWorkspaceIndexData() {
 	const auth = getAuthState();
-	// Gate queries on Clerk being signed-in (temuan a Phase 1/2): a hard-reload of a deep authed route
+	// Gate queries on Clerk being signed-in: a hard-reload of a deep authed route
 	// fires these before clerk-js loads → 401 tokenless → transient empty. `isSignedIn` = isLoaded && userId.
 	const ready = () => auth.isSignedIn;
 	const profile = useProfile();

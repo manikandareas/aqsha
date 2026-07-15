@@ -27,10 +27,10 @@
 	type DatasetProfileDetail = Extract<DeepStepDetail, { kind: 'dataset-profile' }>;
 
 	/**
-	 * Kartu dataset — hasil `profile_dataset` sebagai objek yang terasa nyata di chat (fase A):
-	 * header shape ("n baris × m kolom"), chip per kolom (tipe terdeteksi + warning missing),
-	 * footer total sel kosong. Field profil yang tak terbaca disembunyikan, bukan crash
-	 * (parse defensif di `datasetProfileSummary`). Port `dataset-profile-card.tsx`.
+	 * Kartu dataset — hasil `profile_dataset` sebagai objek yang terasa nyata di chat: header shape
+	 * ("n baris × m kolom"), chip per kolom (tipe terdeteksi + warning missing), footer total sel
+	 * kosong. Field profil yang tak terbaca disembunyikan, bukan crash (parse defensif di
+	 * `datasetProfileSummary`).
 	 */
 	let { detail }: { detail: DatasetProfileDetail } = $props();
 

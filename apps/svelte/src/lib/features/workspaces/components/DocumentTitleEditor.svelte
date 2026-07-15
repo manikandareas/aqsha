@@ -3,12 +3,10 @@
 	import type { Attachment } from 'svelte/attachments';
 
 	/**
-	 * Notion-style document title — Svelte port of
-	 * `apps/web/features/workspaces/components/document-title-editor.tsx`. A large, flush, editable
-	 * heading above the document body. Seeds its value once (via `untrack`) and stays the local source
-	 * of truth so autosave round-trips never yank the cursor. Autosaves the trimmed title via
-	 * `onRename`, debounced 700ms, and flushes on blur / Enter. Wiring is event-handler-driven (no
-	 * `$effect` mutating state) per the Phase 7/8 runes conventions; autosize + debounce ride the
+	 * Notion-style document title. A large, flush, editable heading above the document body. Seeds its
+	 * value once (via `untrack`) and stays the local source of truth so autosave round-trips never yank
+	 * the cursor. Autosaves the trimmed title via `onRename`, debounced 700ms, and flushes on blur / Enter.
+	 * Wiring is event-handler-driven (no `$effect` mutating state); autosize + debounce ride the
 	 * input/blur/keydown handlers plus a one-shot `{@attach}` for the initial measure.
 	 */
 	let {

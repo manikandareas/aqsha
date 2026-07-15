@@ -15,9 +15,8 @@ import {
 } from './mastra-timeline';
 import type { TimelineMessage, TimelinePart } from './timeline-types';
 
-// Contract tests for the timeline reducer (THC-1). Correctness-critical (§10 Phase 6 gate: "timeline
-// fixture output SAME (byte)" + "no duplicate / lost message"). These pin the exact reduction of the
-// Mastra chunk vocabulary → the presentation timeline, so a Svelte port never drifts from web.
+// Contract tests for the timeline reducer. Correctness-critical: pins the exact reduction of the Mastra
+// chunk vocabulary → the presentation timeline ("no duplicate / lost message").
 
 const chunk = (type: string, payload?: Record<string, unknown>, runId?: string): MastraChunk => ({
 	type,

@@ -36,11 +36,12 @@
 	import WorkspaceUploadToast from './WorkspaceUploadToast.svelte';
 
 	/**
-	 * The workspace library board — Svelte port of `workspace-library-board.tsx`. Owns folder nav
-	 * (`?folder=`), the DnD drag set (native HTML5, card → folder), the upload queue toast, and the
-	 * board-level right-click menu; renders the toolbar + grid/empty + footnote + the surface's dialog
-	 * stack. DIVERGENCE (Phase 9 DR): native HTML5 DnD (no dnd-kit port) → no fanned drag overlay /
-	 * touch-keyboard drag; marquee (grid-owned) + drag-to-folder are faithful for mouse.
+	 * The workspace library board. Owns folder nav (`?folder=`), the DnD drag set (native HTML5,
+	 * card → folder), the upload queue toast, and the board-level right-click menu; renders the toolbar +
+	 * grid/empty + footnote + the surface's dialog stack.
+	 *
+	 * Uses native HTML5 DnD (no dnd-kit) — no fanned drag overlay or touch-keyboard drag; marquee
+	 * (grid-owned) + drag-to-folder work for mouse.
 	 */
 	let {
 		workspaceName,
@@ -345,7 +346,7 @@
 				Folder baru
 			</ContextMenu.Item>
 			{#if DOCUMENT_AUTHORING_ENABLED}
-				<!-- Authored blank document — deferred to editor redesign (§0 #9). -->
+				<!-- Authored blank document — deferred to editor redesign. -->
 				<ContextMenu.Item onSelect={onCreateDocument}>
 					<Icon icon={FileTextIcon} class="size-4" />
 					Dokumen baru

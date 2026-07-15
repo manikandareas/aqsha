@@ -9,11 +9,9 @@
 	import { getSignOut, viewerContext } from '$lib/auth';
 
 	/**
-	 * User menu in the sidebar footer — ported 1:1 from apps/web/components/nav-user.tsx.
-	 * Avatar trigger → dropdown with profile header, Settings link, theme submenu, sign out.
-	 * Viewer display resolves from the Phase-2 `viewerContext` (Clerk-backed); sign out uses
-	 * the `getClerk()` seam then re-runs load via `goto(..., { invalidateAll })` (padanan
-	 * web `router.replace` + `router.refresh`).
+	 * User menu in the sidebar footer. Avatar trigger → dropdown with profile header, Settings
+	 * link, theme submenu, sign out. Viewer display resolves from `viewerContext` (Clerk-backed);
+	 * sign out uses the Clerk seam then re-runs load via `goto(..., { invalidateAll })`.
 	 */
 	const sidebar = Sidebar.useSidebar();
 	const viewer = viewerContext.get();

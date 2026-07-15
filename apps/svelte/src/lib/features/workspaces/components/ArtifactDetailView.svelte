@@ -26,17 +26,14 @@
 	} from './ArtifactDetailSidebar.svelte';
 
 	/**
-	 * The artifact reader orchestrator — Svelte port of
-	 * `apps/web/features/workspaces/components/artifact-detail-view.tsx`. Header + reading column +
-	 * metadata sidebar; dispatches the body by `artifactType`. Unlike web (which fetches inside), this
-	 * component receives the `useArtifactDetailData` result as a prop — the page shell owns the fetch
-	 * and passes data DOWN (§ task). Shared by the full route (`variant="page"`) and the thread-detail
-	 * artifact side panel (`variant="panel"`); only the chrome differs.
+	 * The artifact reader orchestrator. Header + reading column + metadata sidebar; dispatches the body
+	 * by `artifactType`. Unlike a self-fetching variant, this component receives the `useArtifactDetailData`
+	 * result as a prop — the page shell owns the fetch and passes data DOWN. Shared by the full route
+	 * (`variant="page"`) and the thread-detail artifact side panel (`variant="panel"`); only the chrome differs.
 	 *
-	 * DIVERGENCES (documented): document editing is DEFERRED to the post-cutover editor redesign
-	 * (§0 #9 — Phase 10 skipped). Both variants render markdown read-only as prose; the page variant
-	 * adds a small read-only note. Render-error / autosave surfaces are not modelled (belong to the
-	 * editor redesign).
+	 * Document editing is deferred to the post-cutover editor redesign. Both variants render markdown
+	 * read-only as prose; the page variant adds a small read-only note. Render-error / autosave surfaces
+	 * are not modelled (they belong to the editor redesign).
 	 */
 	type ArtifactDetailData = ReturnType<typeof useArtifactDetailData>;
 	type ArtifactDetailVariant = 'page' | 'panel';
@@ -257,7 +254,7 @@
 						class="aqsha-prose aqsha-prose-message min-w-0"
 					/>
 				{:else}
-					<!-- Document editing is deferred to the post-cutover editor redesign (§0 #9); no fixed
+					<!-- Document editing is deferred to the post-cutover editor redesign; no fixed
 					     timeline is promised. For now the document renders read-only as prose. -->
 					<div class="grid gap-3">
 						<h1

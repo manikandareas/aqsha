@@ -18,9 +18,8 @@
 	} from '$lib/features/threads/lib/artifact-download';
 
 	/**
-	 * Reader header action cluster (open link/file, download, More menu) — port of web
-	 * `artifact-render-panels.tsx` `ArtifactHeaderActions` (+ its internal `ArtifactDownloadButton` /
-	 * `HeaderLinkButton`). `onAddToCitations` is a Fase-2 bridge — only supplied for a scholarly paper.
+	 * Reader header action cluster (open link/file, download, More menu). `onAddToCitations` is a Citation
+	 * Manager bridge — only supplied for a scholarly paper.
 	 */
 	let {
 		payload,

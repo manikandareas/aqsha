@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { StickToBottom } from './conversation-state.svelte';
 
-// THC-7 — follow-bottom engine. Real Chromium (client project) so scrollHeight/scrollTop/clientHeight
-// reflect true layout. Verifies: initial pin to bottom, un-follow on user scroll-up, re-pin on button.
+// Follow-bottom engine. Real Chromium (client project) so scrollHeight/scrollTop/clientHeight reflect
+// true layout. Verifies: initial pin to bottom, un-follow on user scroll-up, re-pin on button.
 
 const settle = () => new Promise((r) => setTimeout(r, 120));
 

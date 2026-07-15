@@ -13,10 +13,9 @@
 	} from '../components/settings-card';
 
 	/**
-	 * Port from apps/web/features/settings/appearance-page.tsx. Web `useTheme` (next-themes) maps to
-	 * the Phase-3 ThemeState seam: `theme`→`preference`, `resolvedTheme`→`mode`, `setTheme`→`setMode`.
-	 * The `mounted` guard (web `useSyncExternalStore`) avoids a hydration flash — before hydration the
-	 * control reads "system"/"memuat"; after mount it reflects the browser-local preference.
+	 * Theme preference control via the `$lib/theme` seam: `preference`, `mode`, `setMode`. The `mounted`
+	 * guard avoids a hydration flash — before hydration the control reads "system"/"memuat"; after mount
+	 * it reflects the browser-local preference.
 	 */
 	const theme = themeContext.get();
 	const themeOptions: Array<{ key: ThemeMode; label: string; icon: typeof SunIcon }> = [

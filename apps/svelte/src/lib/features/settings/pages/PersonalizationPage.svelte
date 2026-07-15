@@ -17,8 +17,6 @@
 		SettingsSegmentedControl
 	} from '../components/settings-card';
 
-	// Port 1:1 from apps/web/features/settings/components/personalization-page.tsx.
-
 	// Sentinel "default" for the Select (value="" unsupported) — mapped to null on submit.
 	const DEFAULT_VALUE = 'default';
 
@@ -48,7 +46,7 @@
 	const updatePrefs = useUpdatePreferences();
 	const updateInterests = useUpdateInterests();
 
-	// Draft null = untouched → show the server value (mirror account-page pattern).
+	// Draft null = untouched → show the server value.
 	let language = $state<string | null>(null);
 	let citation = $state<string | null>(null);
 	let style = $state<string | null>(null);

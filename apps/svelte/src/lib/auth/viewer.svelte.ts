@@ -8,8 +8,8 @@ import {
 } from './viewer-identity';
 
 /**
- * State viewer reaktif per-request (plan §3.5 — class `$state` + context, TANPA module-level mutable
- * state → tak bocor lintas user saat SSR). Logika resolve/display pure di `viewer-identity.ts`.
+ * State viewer reaktif per-request — class `$state` + context, TANPA module-level mutable state
+ * (tak bocor lintas user saat SSR). Logika resolve/display pure di `viewer-identity.ts`.
  * Konstruksi dalam komponen child `<ClerkProvider>` (mis. `AppProviders`) — `useClerkContext()`
  * membaca context. `resolved`/`display` reaktif terhadap user Clerk (login/avatar) tanpa `$effect`.
  */

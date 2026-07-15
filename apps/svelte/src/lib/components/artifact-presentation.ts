@@ -1,9 +1,6 @@
-// Shared, icon-free artifact presentation (port apps/web/components/artifact-presentation.ts).
-//
-// The type label + provenance + year were inlined in `library-artifact-card.tsx`;
-// the clickable chat artifact card needs the same copy. Kept pure (no Svelte, no icon
-// imports) so it is unit-testable directly; the matching icon-per-type lives in
-// `getArtifactTypeIcon` (`$lib/icons`).
+// Shared, icon-free artifact presentation helpers (type label, provenance, year).
+// Kept pure (no Svelte, no icon imports) so it is unit-testable directly; the matching
+// icon-per-type lives in `getArtifactTypeIcon` (`$lib/icons`).
 
 export type ArtifactSource = 'manual' | 'upload' | 'agent' | 'url';
 

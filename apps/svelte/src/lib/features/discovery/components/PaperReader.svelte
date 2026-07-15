@@ -19,8 +19,7 @@
 
 	/**
 	 * Paper reader: getPaperDetail(key) → header + actions + metrics + abstract + references + fact-sheet.
-	 * `onAskAstra` (provided by the shell) opens the chat panel. Port of the `PaperReader` half of
-	 * `apps/web/features/discovery/components/paper-reader.tsx`.
+	 * `onAskAstra` (provided by the shell) opens the chat panel.
 	 */
 	let { paperKey, onAskAstra }: { paperKey: string; onAskAstra: () => void } = $props();
 

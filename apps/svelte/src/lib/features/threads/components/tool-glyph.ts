@@ -20,9 +20,9 @@ import {
 } from '$lib/icons';
 
 /**
- * Semantic per-tool icon (cosmetic — `model.name` is always present). Unknown tool → wrench. Mirror of
- * the `ToolGlyph` switch in `tool-row.tsx`. Deep-research step ids (`draft-plan`, `search-literature`,
- * …) each get their own phase glyph; normal tools map by name.
+ * Semantic per-tool icon (cosmetic — `model.name` is always present). Unknown tool → wrench.
+ * Deep-research step ids (`draft-plan`, `search-literature`, …) each get their own phase glyph;
+ * normal tools map by name.
  */
 export function toolGlyph(name: string): IconSvgElement {
 	switch (name) {

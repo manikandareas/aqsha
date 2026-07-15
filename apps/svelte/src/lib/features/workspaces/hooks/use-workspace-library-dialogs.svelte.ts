@@ -1,9 +1,8 @@
 import type { WorkspaceArtifact, WorkspaceFolder } from '../utils/workspace-library-model';
 
 /**
- * Library dialog state — Svelte port of `use-workspace-library-dialogs.ts`. A `$state`-backed class
- * (per-tree, never module singleton) holding the open flags + rename/delete targets, plus the
- * `libraryHandlers` bag the board spreads onto the grid/context menus.
+ * Library dialog state. A `$state`-backed class (per-tree, never module singleton) holding the open
+ * flags + rename/delete targets, plus the `libraryHandlers` bag the board spreads onto the grid/context menus.
  */
 export class WorkspaceLibraryDialogState {
 	archiveWorkspaceOpen = $state(false);

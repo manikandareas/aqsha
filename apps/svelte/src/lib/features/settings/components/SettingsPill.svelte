@@ -3,7 +3,6 @@
 	import { cn } from '$lib/utils';
 
 	// Neutral token-based status chip (subscription status, "Saat ini").
-	// Port from apps/web/features/settings/components/settings-card.tsx (SettingsPill).
 	let { class: className, children }: { class?: string; children: Snippet } = $props();
 </script>
 

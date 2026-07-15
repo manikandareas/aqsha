@@ -9,11 +9,10 @@
 	import AppLoadingOverlay from './AppLoadingOverlay.svelte';
 
 	/**
-	 * Client onboarding gate — the UX (loading-overlay) half, ported from
-	 * apps/web/components/onboarding-gate.tsx. The AUTHORITATIVE redirect for un-onboarded
-	 * `/app` users is the SERVER gate in `hooks.server.ts` (Phase 2, FND-8, no flash); this
-	 * overlay covers the client-side window while the status query resolves and mirrors the
-	 * belt-and-suspenders client redirect. Query args wrapped in a function (§3.6).
+	 * Client onboarding gate — the UX (loading-overlay) half. The authoritative redirect for un-onboarded
+	 * `/app` users is the server gate in `hooks.server.ts` (no flash); this overlay covers the
+	 * client-side window while the status query resolves and redirects if onboarding is incomplete.
+	 * Query args wrapped in a function so TanStack Query stays reactive.
 	 */
 	let { children }: { children: Snippet } = $props();
 

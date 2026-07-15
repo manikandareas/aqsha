@@ -2,10 +2,9 @@
 	import { WORKSPACE_EMOJI_CHOICES } from '$lib/features/workspaces/emoji-choices';
 
 	/**
-	 * Workspace emoji picker — port of `apps/web/features/workspaces/components/
-	 * workspace-emoji-picker-content.tsx`. Web used `frimousse` (a React-only searchable emoji
-	 * picker); the Svelte port renders the curated `WORKSPACE_EMOJI_CHOICES` grid instead — the API
-	 * still validates any emoji via `normalizeWorkspaceEmoji`, and the picker stays dependency-free.
+	 * Workspace emoji picker. Uses a curated `WORKSPACE_EMOJI_CHOICES` grid instead of a searchable
+	 * emoji library — the API still validates any emoji via `normalizeWorkspaceEmoji`, and the picker
+	 * stays dependency-free.
 	 */
 	let { onSelect }: { onSelect: (emoji: string) => void } = $props();
 </script>

@@ -3,11 +3,9 @@
 	import LandingHeader from '$lib/features/marketing/components/LandingHeader.svelte';
 	import LandingFooter from '$lib/features/marketing/components/LandingFooter.svelte';
 
-	// Chrome marketing bersama (header + footer) untuk semua halaman publik ber-chrome: landing, blog,
-	// changelog. Route group `(marketing)` = URL-transparan (mis. `(marketing)/blog` → `/blog`). Padanan
-	// gabungan web `landing-page` (yang render sendiri header/footer) + `app/{blog,changelog}/layout.tsx`
-	// — di sini disatukan jadi satu sumber chrome (DRY). Halaman menyediakan `<main>`-nya sendiri.
-	// sign-in/sign-up TIDAK di group ini (layout terpusat tanpa chrome).
+	// Shared marketing chrome (header + footer) for public pages: landing, blog, changelog.
+	// Route group `(marketing)` is URL-transparent (e.g. `(marketing)/blog` → `/blog`).
+	// sign-in/sign-up are NOT in this group (centered layout without marketing chrome).
 	let { children }: { children: Snippet } = $props();
 </script>
 

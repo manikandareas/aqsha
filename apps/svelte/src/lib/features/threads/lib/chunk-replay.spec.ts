@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createChunkReplayFilter } from './chunk-replay';
 import type { MastraChunk } from './mastra-timeline';
 
-// Contract tests for the replay/idempotency filter (THC-5, "no duplicate / lost tokens" gate). The
+// Contract tests for the replay/idempotency filter ("no duplicate / lost tokens" gate). The
 // subscription replays each in-flight run's buffer from index 0 on every reconnect; the filter must
 // drop exact replays but let genuine new chunks (and unrelated runs) through.
 

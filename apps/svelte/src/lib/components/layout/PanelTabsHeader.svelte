@@ -18,7 +18,7 @@
 	/**
 	 * Flush header bar that makes the side panel a HOME for several panels — a roving-tabindex
 	 * tab strip on the left, panel actions on the right. Collapses to a plain title with ≤1
-	 * usable tab. Padanan web `PanelTabsHeader`.
+	 * usable tab.
 	 */
 	let {
 		tabs,

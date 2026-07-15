@@ -2,7 +2,6 @@
 	import { Icon, SparklesIcon } from '$lib/icons';
 	import type { OnboardingAnswers } from '../lib/onboarding-machine';
 
-	// Port 1:1 from apps/web/features/onboarding/components/onboarding-steps.tsx (FinishStep).
 	let { answers }: { answers: OnboardingAnswers } = $props();
 </script>
 

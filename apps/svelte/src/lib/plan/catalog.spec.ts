@@ -12,7 +12,7 @@ import {
 	type PlanKey
 } from './catalog';
 
-// Kontrak katalog plan browser-safe (§4.1). Test invariant internal → deteksi drift vs SoT
+// Kontrak katalog plan browser-safe. Test invariant internal → deteksi drift vs SoT
 // `packages/services/src/plan.ts` tanpa mengimpor `@aqsha/services` ke bundle.
 describe('plan catalog', () => {
 	it('PLAN_ORDER menaik ketat free<starter<plus<ultra<admin', () => {

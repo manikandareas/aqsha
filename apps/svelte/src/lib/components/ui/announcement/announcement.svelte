@@ -2,7 +2,7 @@
 	import { createContext } from '$lib/context';
 
 	type AnnouncementContextValue = { readonly themed: boolean };
-	/** Shared `themed` flag between Announcement and its Tag (padanan web `BadgeContext`). */
+	/** Shared `themed` flag between Announcement and its Tag. */
 	export const announcementContext = createContext<AnnouncementContextValue>('announcement');
 </script>
 
@@ -13,7 +13,7 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Announcement pill — ported 1:1 from apps/web/components/ui/announcement.tsx. A rounded
+	 * Announcement pill. A rounded Badge with a `themed` context read by `AnnouncementTag`. `h-auto`
 	 * Badge with a `themed` context read by `AnnouncementTag`. `h-auto` releases Badge's fixed
 	 * height so the tag/title padding is not clipped by `overflow-hidden`.
 	 */

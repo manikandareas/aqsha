@@ -5,7 +5,7 @@
 
 	// FeatureFrame — frame gambar editorial besar di bawah copy tiap fitur. Signature: "foto diluruskan
 	// di meja" — masuk sedikit miring lalu scroll-linked lurus (rotate→0, y 32→0) + parallax internal +
-	// hover zoom. Port `feature-frame.tsx` (`useScroll`/`useTransform` → scrollProgress + mapRange).
+	// hover zoom.
 	let {
 		image,
 		alt,

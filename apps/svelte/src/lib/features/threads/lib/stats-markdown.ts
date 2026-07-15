@@ -1,11 +1,9 @@
 // Detection of `{{stats:<runKey>}}` markers in an answer's prose (written by the model when it places
 // a `run_analysis` result) → the `<statsviz>` custom render gated by `StatsBlocksProvider`.
 //
-// ── DIVERGENCE FROM WEB (rehype → marked) ────────────────────────────────────────────────────────
-// Web splits the marker out of a HAST text node in the `reportRehypePlugin` rehype walk. svelte-streamdown
-// is marked-based, so `apps/svelte` registers a marked INLINE extension (`aqshaStatsExtension`, in the
-// Streamdown adapter) using `MARKER_RE` below, producing a custom token rendered by the `children`
-// catch-all snippet → `StatsVizFigure` (gated). The pure regex + marker-parse stays here, contract-tested.
+// svelte-streamdown is marked-based: `aqshaStatsExtension` (Streamdown adapter) uses `MARKER_RE` below
+// as a marked INLINE extension, producing a custom token rendered by `StatsVizFigure` (gated).
+// Pure regex + marker-parse stays here, contract-tested.
 //
 // DIFFERENCE FROM deep-viz (fenced block with inline data): here the marker is only a KEY; the block
 // DATA (table/verdict/PNG) is fetched FE from the DB (`analysis_result_blocks`) then joined via
@@ -28,8 +26,7 @@ export type StatsMarker = {
 };
 
 /**
- * All stats markers in a text, in document order. Pure mirror of the web rehype `splitStatsMarkers`
- * extraction (which runKeys, in what order), extracted so the transform stays contract-tested
+ * All stats markers in a text, in document order (which runKeys, in what order). Contract-tested
  * independent of the render library. A marker with NO real block still becomes a token (the render
  * component renders nothing) → the raw `{{stats:…}}` token never leaks to the user.
  */

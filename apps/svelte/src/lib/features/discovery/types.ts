@@ -1,8 +1,6 @@
 /**
- * Local web `FeedItem` type (subset that is rendered). Svelte (like web) must NOT import
- * `@aqsha/services` (client boundary) → this type mirrors the `FeedItem` contract (docs/v2/05) for the
- * fields the UI uses. Eden still provides the full type from the route; this is only for component props.
- * Ported verbatim from `apps/web/features/discovery/types.ts`.
+ * Local `FeedItem` subset for component props. apps/svelte must not import `@aqsha/services` (client
+ * boundary); Eden still types the route response — this only lists fields the UI renders.
  */
 export type FeedKind = 'paper' | 'news';
 
@@ -62,9 +60,7 @@ export type ExplorePaper = {
 	enriched?: PaperEnrichment;
 };
 
-// ── Enrichment OpenAlex single-work (mirror @aqsha/services PaperEnrichment) ──
-// web/svelte must not import @aqsha/services (client boundary); this type mirrors the
-// GET /papers/detail contract for the PaperReader component props.
+// OpenAlex single-work enrichment — local copy of the GET /papers/detail shape (client boundary; no @aqsha/services import).
 export type PaperEnrichmentRef = {
 	openalexId: string;
 	title: string;

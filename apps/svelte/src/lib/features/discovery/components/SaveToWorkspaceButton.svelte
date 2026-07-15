@@ -7,10 +7,9 @@
 	import WorkspacePicker from '$lib/features/workspaces/components/WorkspacePicker.svelte';
 
 	/**
-	 * Save-to-Workspace button — port of `apps/web/features/artifacts/components/
-	 * save-to-workspace-button.tsx`. Opens a workspace picker Dialog then saves the URL via `useSaveUrl`
-	 * (picks a workspace only, no folder — web parity). `onSaved` fires on real success (discovery
-	 * interest +1). Used by discovery cards (icon-only) and the paper reader (labelled).
+	 * Save-to-Workspace button. Opens a workspace picker Dialog then saves the URL via `useSaveUrl` (picks
+	 * a workspace only, no folder). `onSaved` fires on real success (discovery interest +1). Used by
+	 * discovery cards (icon-only) and the paper reader (labelled).
 	 */
 	let {
 		url,

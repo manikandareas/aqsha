@@ -40,8 +40,7 @@
 	/**
 	 * Interactive clarification form (`ask_questions`) — single-choice (radio-ish keycaps) + "Lainnya…"
 	 * freeform, multi-choice (checkbox), or free text. Shared by the inline card + the right panel.
-	 * Answers → `AskQuestionsResumeData` sent back via `resolveAsk`. Port of `QuestionsForm` in
-	 * `questions-card.tsx`.
+	 * Answers → `AskQuestionsResumeData` sent back via `resolveAsk`.
 	 */
 	let {
 		questions,

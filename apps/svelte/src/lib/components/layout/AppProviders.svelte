@@ -8,18 +8,18 @@
 	/**
 	 * Runtime providers — child `<ClerkProvider>`+`<QueryClientProvider>`, jadi `useClerkContext()`
 	 * sudah tersedia (parent set context saat init, sebelum child dibuat). Membangun Eden client
-	 * ber-auth + viewer state PER-REQUEST (bukan singleton module — §3.5), memasangnya ke context untuk
-	 * feature, dan menjalankan user-sync. Padanan gabungan provider `apps/web/app/layout.tsx`.
+	 * ber-auth + viewer state per-request (bukan singleton module), memasangnya ke context untuk
+	 * feature, dan menjalankan user-sync.
 	 */
 	let { children }: { children: Snippet } = $props();
 
 	const clerk = useClerkContext();
 
-	// Eden client ber-auth (token per-request via clerkTokenGetter) → context (padanan `useApi()`).
+	// Eden client ber-auth (token per-request via clerkTokenGetter) → context.
 	apiClientContext.set(createBrowserApiClient(clerkTokenGetter(clerk)));
 
-	// Viewer identity reaktif → context (padanan `useResolvedViewer`/`useViewerDisplay`). Base viewer
-	// dari API di-set saat data profil termuat (Phase 3); Clerk user mengisi identitas dasar sekarang.
+	// Viewer identity reaktif → context. Base viewer dari API di-set saat data profil termuat;
+	// Clerk user mengisi identitas dasar sekarang.
 	viewerContext.set(new ViewerIdentityState());
 </script>
 

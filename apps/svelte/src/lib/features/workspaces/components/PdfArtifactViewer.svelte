@@ -20,15 +20,14 @@
 	} from '$lib/icons';
 
 	/**
-	 * PDF artifact reader — Svelte port of `apps/web/features/workspaces/components/pdf-artifact-viewer.tsx`.
-	 * Rendered directly via `pdfjs-dist` (react-pdf has no Svelte build) — canvas per page (lazy), a
+	 * PDF artifact reader. Rendered directly via `pdfjs-dist` (react-pdf has no Svelte build) — canvas per page (lazy), a
 	 * shadcn-svelte-skinned floating toolbar (zoom / page nav / fullscreen / find), and full-document
 	 * text search that scrolls to matching pages. Browser-only (dynamic import behind `browser`).
 	 *
-	 * DIVERGENCE (documented, Phase 9 DR): the react-pdf text-selection layer + native annotation-link
-	 * layer + in-text citation/search highlight overlay are NOT ported (they need pdf.js TextLayer/
-	 * AnnotationLayer + their CSS). Search finds and scrolls to the matching page; selection/link overlay
-	 * is deferred. Faithful for zoom / page nav / find / fullscreen / theme (WSP-10 core).
+	 * The react-pdf text-selection layer, native annotation-link layer, and in-text citation/search
+	 * highlight overlay are not implemented (they need pdf.js TextLayer/AnnotationLayer + their CSS).
+	 * Search finds and scrolls to the matching page; selection/link overlay is deferred. Zoom, page nav,
+	 * find, fullscreen, and theme are supported.
 	 */
 	let { url }: { url: string } = $props();
 

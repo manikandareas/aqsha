@@ -1,10 +1,6 @@
 // Shared labels + colors + icons for the `/deep` evidence viz components. Stance colors = CSS token
 // `--viz-stance-*` (globals.css, dataviz-validated per light/dark mode) — components DON'T write hex
-// themselves. Copy in sentence case (no-uppercase copywriting rule). Port of
-// `apps/web/features/threads/components/deep-viz/labels.ts`.
-//
-// Svelte divergence: icons are glyph DATA (`IconSvgElement`) via `$lib/icons` (Hugeicons), not React
-// components — same glyph mapping as web (`$lib/icons` mirrors `@aqsha/ui/icons`).
+// themselves. Copy in sentence case (no-uppercase copywriting rule). Icons are glyph DATA via `$lib/icons`.
 
 import {
 	DEEP_VIZ_STANCES,

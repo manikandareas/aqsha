@@ -13,8 +13,7 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Menu aksi per-thread (dropdown) — port `apps/web/features/thread-experience/components/
-	 * thread-actions-menu.tsx`. Delete selalu ada; sematkan/lepas hanya saat `onTogglePin` diberikan
+	 * Menu aksi per-thread (dropdown). Delete selalu ada; sematkan/lepas hanya saat `onTogglePin` diberikan
 	 * (sidebar row). `variant="sidebar-row"` = trigger absolut kanan-atas, muncul saat hover/focus.
 	 */
 	let {

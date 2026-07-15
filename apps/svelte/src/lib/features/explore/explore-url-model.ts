@@ -1,13 +1,11 @@
-// Explore URL state codec — the single source of truth for `q` (search) + `topic` (feed scope),
-// mirroring the web `nuqs` setup (`useQueryState("q", { defaultValue: "" })` +
-// `useQueryState("topic", parseAsStringLiteral(TOPIC_VALUES))`). Pure functions here + `page.url`/`goto`
-// in `ExplorePage` (§2.3 / THX-6 precedent — no `runed`/nuqs dep). Contract-tested byte-equivalent
-// (`explore-url-model.spec.ts`): default `q` ("") and `null` topic OMIT their param; an invalid topic
-// parses back to `null`; other params are preserved; round-trip is stable.
+// Explore URL state codec — single source of truth for `q` (search) + `topic` (feed scope).
+// Pure functions here; `ExplorePage` reads `page.url` and writes via `goto`. Contract-tested
+// (`explore-url-model.spec.ts`): default `q` ("") and `null` topic omit their param; invalid topic
+// parses to `null`; other params preserved; round-trip stable.
 
 import type { FeedTopic } from '$lib/features/discovery/types';
 
-/** Topic literals accepted in the URL (same list + order as the web `parseAsStringLiteral`). */
+/** Topic literals accepted in the URL. */
 export const TOPIC_VALUES: readonly FeedTopic[] = [
 	'sains_teknologi',
 	'kesehatan',
@@ -23,14 +21,14 @@ export function parseTopicParam(value: string | null | undefined): FeedTopic | n
 	return value && (TOPIC_VALUES as readonly string[]).includes(value) ? (value as FeedTopic) : null;
 }
 
-/** Read the explore state from URL search params. Missing `q` defaults to "" (the web default). */
+/** Read explore state from URL search params. Missing `q` defaults to "". */
 export function readExploreUrl(params: URLSearchParams): ExploreUrlState {
 	return { q: params.get('q') ?? '', topic: parseTopicParam(params.get('topic')) };
 }
 
 /**
  * Apply a single-key patch to a COPY of `params`, omitting default values so the URL stays clean
- * (empty `q` and `null` topic drop the param — parity with nuqs default-omission). Returns the new
+ * (empty `q` and `null` topic drop the param so defaults stay out of the URL). Returns the new
  * params; other keys are preserved. `q` is set to its trimmed form (the ask-bar submits trimmed).
  */
 export function applyExploreUrl(

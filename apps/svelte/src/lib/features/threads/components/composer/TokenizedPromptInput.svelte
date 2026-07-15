@@ -94,7 +94,7 @@
 	const isMobile = new IsMobile();
 	const anchorToShell = $derived(isMobile.current && mobilePaletteAnchor != null);
 
-	// Non-reactive dismissal + signature holders (mirror the React refs — never read reactively).
+	// Non-reactive dismissal + signature holders — never read reactively.
 	// Starts undismissed; `setPaletteDismissed` snapshots the current `value` at dismissal time.
 	let paletteDismissal: { value: string; dismissed: boolean } = { value: '', dismissed: false };
 	let lastContextSignature: string | null = null;
@@ -251,15 +251,15 @@
 			slashFilterQuery = null;
 			mentionFilterQuery = null;
 		}
-		// Reset the drill once the mention palette is closed (web "adjust state during render").
+		// Reset the drill once the mention palette is closed.
 		if (mentionFilterQuery === null && drillWorkspaceId !== null) {
 			drillWorkspaceId = null;
 			onRequestWorkspaceItems?.(null);
 		}
 	}
 
-	// Seed the editor DOM from `value` + pinned pills whenever they change externally (§3.4 — external
-	// DOM sync via {@attach}, NOT a derived reflex). Skips while focused+non-empty so the caret never
+	// Seed the editor DOM from `value` + pinned pills whenever they change externally (external DOM sync
+	// via {@attach}, NOT a derived reflex). Skips while focused+non-empty so the caret never jumps
 	// jumps mid-type; the `serialized === value` guard makes the post-input re-run a no-op.
 	function seedEditor(node: HTMLDivElement) {
 		// Read reactive deps so the attachment re-runs on change.

@@ -23,11 +23,10 @@
 	import { getWorkspacePanel } from './workspace-panel-context.svelte';
 
 	/**
-	 * Workspace-detail right panel with `Chat · Sitasi` tabs — Svelte port of `workspace-side-panel.tsx`
-	 * (+ `workspace-chat-side-panel.tsx`). The frame + tab strip live here; each tab contributes its body.
-	 * Mode comes from the URL-backed `WorkspacePanelController` (`?panel=` / `?panel=cite:<id>`). The chat
-	 * tab reuses the compact `ExploreThreadChat` (shares the page-level `ComposerMentions` so the workspace
-	 * `@Workspace` ambient pill + citation refs reach the composer).
+	 * Workspace-detail right panel with `Chat · Sitasi` tabs. The frame + tab strip live here; each tab
+	 * contributes its body. Mode comes from the URL-backed `WorkspacePanelController` (`?panel=` /
+	 * `?panel=cite:<id>`). The chat tab reuses the compact `ExploreThreadChat` (shares the page-level
+	 * `ComposerMentions` so the workspace `@Workspace` ambient pill + citation refs reach the composer).
 	 */
 	const CHAT_CITATIONS_TABS: PanelTab[] = [
 		{ key: 'chat', label: 'Chat' },

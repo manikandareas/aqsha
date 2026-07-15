@@ -50,16 +50,15 @@ import {
 } from '../lib/mastra-timeline';
 import type { TimelineMessage } from '../lib/timeline-types';
 
-// ── THX-5: durable-thread chat + `/deep` Workflow agent as a Svelte 5 runes state class ──────────────
+// ── Durable-thread chat + `/deep` Workflow agent (Svelte 5 runes state class) ─────────────────────
 //
-// Extends the Phase 6 CHAT spine (subscription / replay / reconnect / send / queue / stop / regenerate /
-// HITL tool approval) with the imperative `/deep` durable Workflow orchestration ported from
-// `apps/web/features/threads/lib/use-mastra-agent.ts`: sendDeep / consumeWorkflow / runById re-attach
-// poll / plan+clarify resume / terminal reconciliation / failure-recovery (retry via timeTravelStream)
-// / stall detection / server-queue durability. The workflow REDUCERS (`reduceWorkflowChunk`,
-// `seedWorkflowProgress`, `settleWorkflowTurn`, `reviveWorkflowTurn`) were ported+tested in Phase 6;
-// this class is the driver. Reactivity (§3.4): the subscription + re-attach poll lifecycles are owned
-// imperatively (`start()`/`destroy()` from the consuming `$effect`), NOT per-field reflexes.
+// Owns the chat spine (subscription / replay / reconnect / send / queue / stop / regenerate / HITL
+// tool approval) plus imperative `/deep` durable Workflow orchestration: sendDeep / consumeWorkflow /
+// runById re-attach poll / plan+clarify resume / terminal reconciliation / failure-recovery (retry
+// via timeTravelStream) / stall detection / server-queue durability. Workflow reducers
+// (`reduceWorkflowChunk`, `seedWorkflowProgress`, `settleWorkflowTurn`, `reviveWorkflowTurn`) are
+// pure; this class drives them. Subscription + re-attach poll lifecycles are owned imperatively
+// (`start()`/`destroy()` from the consuming `$effect`), NOT per-field reflexes.
 
 /** Subscription handle from `agent.subscribeToThread` (subset used here). */
 type ThreadSubscription = {
@@ -117,9 +116,8 @@ export type ThreadAgentOptions = {
 	seed?: TimelineMessage[];
 	/**
 	 * Astra's `request_document_edit` tool result routes here. Intentionally UNWIRED pending the
-	 * post-cutover editor redesign (§0 #9): with document editing read-only there is no editor to
-	 * apply the instruction, so leaving this undefined makes the detector a safe no-op instead of a
-	 * dead affordance. The redesign supplies this callback (the web `documentEditBus` equivalent).
+	 * editor redesign: with document editing read-only there is no editor to apply the instruction,
+	 * so leaving this undefined makes the detector a safe no-op instead of a dead affordance.
 	 */
 	onRequestDocumentEdit?: (edit: { artifactId: string; instruction: string }) => void;
 };
@@ -149,10 +147,10 @@ function lastUserText(messages: readonly TimelineMessage[]): string | null {
 type ServerMessageLike = { id: string; role?: string };
 
 /**
- * Ids of the last [user, assistant] pair in server memory (to delete on regenerate). Verbatim port of
- * `lastTurnMessageIds` — durable-thread `sendMessage` stores user input as a SIGNAL (`role:"signal"`),
- * so matching by `role==="user"` would MISS it → a duplicate user bubble after refresh (G6). Match
- * positionally: the last assistant + all non-assistant messages just before it, regardless of label.
+ * Ids of the last [user, assistant] pair in server memory (to delete on regenerate). Durable-thread
+ * `sendMessage` stores user input as a SIGNAL (`role:"signal"`), so matching by `role==="user"` would
+ * MISS it → a duplicate user bubble after refresh (G6). Match positionally: the last assistant + all
+ * non-assistant messages just before it, regardless of label.
  */
 export function lastTurnMessageIds(messages: readonly ServerMessageLike[]): string[] {
 	let lastAssistant = -1;
@@ -767,7 +765,7 @@ export class ThreadAgent {
 		}
 	}
 
-	// ── `/deep` Workflow orchestration (THX-5) ──────────────────────────────────────────────────────
+	// ── `/deep` Workflow orchestration ─────────────────────────────────────────────────────────────
 
 	#workflow(): WorkflowClient {
 		return this.#getClient().getWorkflow(DEEP_WORKFLOW_ID) as unknown as WorkflowClient;

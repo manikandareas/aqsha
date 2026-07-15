@@ -3,7 +3,6 @@
 	import { cn } from '$lib/utils';
 	import type { WorkspaceUploadStatus } from '$lib/features/workspaces/utils/workspace-file-upload';
 
-	/** Port of `workspace-upload-toast-status-icon.tsx`. */
 	let {
 		status,
 		class: className

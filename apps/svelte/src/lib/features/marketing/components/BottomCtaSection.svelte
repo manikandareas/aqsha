@@ -5,7 +5,7 @@
 
 	// BottomCtaSection — dark inversion finale. Kelas `dark` me-resolve ulang token ke palet charcoal
 	// khusus section ini (tanpa warna hardcode). Signature "reading reveal": kata-kata headline naik
-	// dari opacity 0.18 → 1 satu per satu, scroll-linked. Magnetic CTA. Port `bottom-cta-section.tsx`.
+	// dari opacity 0.18 → 1 satu per satu, scroll-linked. Magnetic CTA.
 	const HEADLINE = 'Nulis riset yang bisa kamu pertahanin.';
 	const words = HEADLINE.split(' ');
 

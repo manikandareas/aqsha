@@ -1,6 +1,5 @@
 /**
- * Shared file-drag dropzone behaviour — port of
- * `apps/web/features/workspaces/hooks/use-file-dropzone.ts`. Highlights on drag, clears on
+ * Shared file-drag dropzone behaviour. Highlights on drag, clears on
  * leave/drop, and hands dropped files off, so the "only react to Files, copy effect,
  * contains-based dragLeave" policy lives in one place.
  *

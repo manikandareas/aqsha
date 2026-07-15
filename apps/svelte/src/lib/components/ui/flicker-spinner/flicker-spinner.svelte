@@ -3,8 +3,7 @@
 	import type { SVGAttributes } from 'svelte/elements';
 
 	/**
-	 * Brand loading spinner — ported 1:1 from apps/web/components/ui/flicker-spinner.tsx.
-	 * A 7x7 LED-style dot grid that flickers a travelling pattern. Theme-aware — lit dots use
+	 * Brand loading spinner. A 7x7 LED-style dot grid that flickers a travelling pattern. Theme-aware — lit dots use
 	 * `currentColor` (inherits `text-*`, works light + dark), resting dots are the same color
 	 * dimmed. Size comes from `class` (e.g. `size-7`) or `size`. Respects reduced motion.
 	 *

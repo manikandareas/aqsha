@@ -4,9 +4,8 @@ import { discoveryItemToContextRef } from './ask-astra';
 import { feedItemToDiscoveryItem, paperToDiscoveryItem, type DiscoveryItem } from './model';
 import type { ExplorePaper, FeedItem } from './types';
 
-// EXACT Ask Astra payload contract (§11.2 / EXP-5 ★). The ContextRef a card/reader pins onto the
-// composer must be byte-for-byte identical to `apps/web/features/discovery/ask-astra.ts` — a drift here
-// changes what Astra hydrates.
+// Ask Astra payload contract. The ContextRef a card/reader pins onto the composer must stay stable —
+// a drift here changes what Astra hydrates.
 
 const searchPaper: Omit<ExplorePaper, 'lastSeenAt'> = {
 	key: 'arxiv:2401.001',

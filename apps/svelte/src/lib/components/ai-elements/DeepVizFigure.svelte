@@ -4,12 +4,11 @@
 	import VizFigureBody from '$lib/features/threads/components/deep-viz/VizFigureBody.svelte';
 	import type { VizFigureAssign } from './contexts';
 
-	// `<deepviz payload>` gate — port of `DeepVizMarkdownComponent` / `viz-block.tsx`. ANTI-FORGERY:
-	// the figure only renders when the `figureAssign` gate prop is present (a trusted `/deep` report; set
-	// by `Response` only when `viz={true}`).
+	// `<deepviz payload>` gate — ANTI-FORGERY: the figure only renders when the `figureAssign` gate prop
+	// is present (a trusted `/deep` report; set by `Response` only when `viz={true}`).
 	//   1. no assigner (ordinary chat) → render the raw payload as PLAIN CODE (a forged fence never a figure).
 	//   2. present, payload corrupt/unknown → compact fallback (not a crash), raw JSON in <details>.
-	//   3. valid → the RICH gated figure (THX-4 `VizFigureBody`: consensus meter / timeline / claims / …),
+	//   3. valid → the RICH gated figure (`VizFigureBody`: consensus meter / timeline / claims / …),
 	//      figure number = block.figure ?? assign(block.id). The citation map is threaded to PaperPills.
 	// A per-block error boundary keeps one bad chart from tearing down the whole report.
 

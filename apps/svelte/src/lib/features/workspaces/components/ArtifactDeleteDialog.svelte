@@ -4,11 +4,9 @@
 	import { readableApiErrorMessage } from '$lib/errors';
 
 	/**
-	 * Delete-artifact confirmation — port of
-	 * `apps/web/features/workspaces/components/artifact-delete-dialog.tsx`. Controlled `open`; runs the
-	 * async `onConfirm` and surfaces a normalized error inline on failure. Deliberately does NOT close
-	 * itself on success — the parent (`ArtifactDetailView`) owns what happens next (navigate back on the
-	 * page, close the panel), matching the web component.
+	 * Delete-artifact confirmation. Controlled `open`; runs the async `onConfirm` and surfaces a
+	 * normalized error inline on failure. Deliberately does NOT close itself on success — the parent
+	 * (`ArtifactDetailView`) owns what happens next (navigate back on the page, close the panel).
 	 */
 	let {
 		open,

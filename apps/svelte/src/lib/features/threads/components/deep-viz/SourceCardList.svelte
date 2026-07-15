@@ -9,8 +9,7 @@
 	import type { SourceCardData } from '$lib/features/threads/lib/timeline-types';
 
 	/**
-	 * Daftar kartu sumber ringkas (preview) — port lokal `SourceCardList` + `SourceCard` dari
-	 * `apps/web/features/threads/components/deep-search-cards.tsx`. Dipakai `ResultsTimeline` untuk
+	 * Daftar kartu sumber ringkas (preview). Dipakai `ResultsTimeline` untuk menampilkan kartu sumber
 	 * menampilkan kartu sumber `[n]` yang dipilih di bawah chart. Satu sumber = BARIS TUNGGAL:
 	 * logo kecil (favicon → ikon origin) + judul (truncate) + badge `[n]` opsional + afordans outbound.
 	 */

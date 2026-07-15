@@ -3,9 +3,8 @@
 	import NameDialogContent from './NameDialogContent.svelte';
 
 	/**
-	 * Name dialog — port `apps/web/features/workspaces/components/workspace-dialogs.tsx` `NameDialog`.
-	 * Content mounted only while `open` (+ keyed on `initialName`) so each open seeds a fresh draft
-	 * (padanan web `key={initialName}` remount-on-open).
+	 * Name dialog. Content mounted only while `open` (+ keyed on `initialName`) so each open seeds a
+	 * fresh draft (remount-on-open).
 	 */
 	let {
 		open,

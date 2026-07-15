@@ -8,9 +8,8 @@ import {
 	threadPanelTabOf
 } from './thread-panel-model';
 
-// Byte-equivalent URL codec contract (§11.2 / §13). The `panel` query-param serialization must be
-// IDENTICAL to apps/web so a deep link round-trips across both apps. These vectors mirror the exact
-// string forms documented in `thread-panel-model.ts`.
+// URL codec contract for the `panel` query param. Serialization must stay stable so deep links
+// round-trip; vectors match the string forms documented in `thread-panel-model.ts`.
 
 const VECTORS: Array<[ThreadPanelMode, string]> = [
 	[{ kind: 'context' }, 'c'],

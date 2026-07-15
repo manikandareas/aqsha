@@ -3,7 +3,6 @@
 	import InterestChip from './InterestChip.svelte';
 	import StepHeading from './StepHeading.svelte';
 
-	// Port 1:1 from apps/web/features/onboarding/components/onboarding-steps.tsx (InterestsStep).
 	let { value, ontoggle }: { value: string[]; ontoggle: (id: string) => void } = $props();
 </script>
 

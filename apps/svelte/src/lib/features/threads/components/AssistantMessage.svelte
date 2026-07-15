@@ -17,7 +17,7 @@
 	/**
 	 * One assistant message (one turn): reasoning → "Proses" block (tool + intermediate text) → answer
 	 * (LAST text part) → artifact → sources → actions. `message.streaming` (already busy-gated in the
-	 * adapter) drives the shimmer + hides sources/actions while streaming. Port of `AssistantMessage`.
+	 * adapter) drives the shimmer + hides sources/actions while streaming.
 	 */
 	let {
 		message,

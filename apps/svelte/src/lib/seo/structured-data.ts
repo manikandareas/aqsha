@@ -1,8 +1,7 @@
 /**
- * JSON-LD identitas + FAQ untuk landing — port `apps/web/features/marketing/components/structured-data.tsx`.
- * Browser-safe: harga di-derive dari `$lib/plan` (mirror pure-data, §4.1) — JANGAN impor `@aqsha/services`.
- * Mengembalikan SATU objek `@graph` (Organization + WebSite + SoftwareApplication + FAQPage), identik web;
- * di-render `SeoHead` sebagai satu `<script type="application/ld+json">`.
+ * JSON-LD identitas + FAQ untuk landing. Browser-safe: harga di-derive dari `$lib/plan` — JANGAN
+ * impor `@aqsha/services`. Mengembalikan SATU objek `@graph` (Organization + WebSite +
+ * SoftwareApplication + FAQPage); di-render `SeoHead` sebagai satu `<script type="application/ld+json">`.
  */
 import { PLAN_CATALOG, PUBLIC_PLAN_KEYS } from '$lib/plan/catalog';
 import { faqItems } from '$lib/features/marketing/faq-data';
@@ -15,7 +14,7 @@ import {
 	siteUrl
 } from './config';
 
-/** Bangun graph JSON-LD landing (dipanggil di `load` / komponen, byte-parity web). */
+/** Bangun graph JSON-LD landing (dipanggil di `load` / komponen). */
 export function buildLandingJsonLd(): Record<string, unknown> {
 	// Derive harga dari PLAN_CATALOG (SSOT) — jangan duplikat angka.
 	const paidPrices = PUBLIC_PLAN_KEYS.map((k) => PLAN_CATALOG[k].monthlyPriceIdr);

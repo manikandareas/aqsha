@@ -5,12 +5,11 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Full-app / region loading surface — ported 1:1 from
-	 * apps/web/components/app-loading-overlay.tsx. FlickerSpinner + a label with rotating
-	 * hints that cycle every 2.2s (paused under reduced motion). `variant="fixed"` covers
-	 * the viewport (full-app gate); `variant="absolute"` fills the nearest positioned
-	 * ancestor (a single page region). The `AnimatePresence`/`m.p` swap is expressed with
-	 * `{#key}` + `fly` (mode="wait" equivalent), collapsing to no motion when reduced.
+	 * Full-app / region loading surface. FlickerSpinner + a label with rotating hints that cycle
+	 * every 2.2s (paused under reduced motion). `variant="fixed"` covers the viewport (full-app
+	 * gate); `variant="absolute"` fills the nearest positioned ancestor (a single page region).
+	 * Rotating hints use `{#key}` + `fly` (mode="wait" equivalent), collapsing to no motion when
+	 * reduced.
 	 */
 	type Props = {
 		/** Primary line, shown larger and centered. */

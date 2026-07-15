@@ -4,11 +4,10 @@
 	import SettingsRail from './SettingsRail.svelte';
 
 	/**
-	 * Settings shell — port 1:1 from apps/web/features/settings/components/settings-shell.tsx. Own
-	 * `Sidebar.Provider` (distinct from the product AppShell) with the settings rail, a mobile-only
-	 * sticky header (SidebarTrigger + "Pengaturan"), and a centered max-w-2xl content column. The
-	 * NavUser viewer resolves from `viewerContext` (Phase 3), so no `useProfile()` prop is needed
-	 * (web threaded one through only to feed NavUser). Custom rail widths mirror web (16.5 / 17.5rem).
+	 * Settings shell. Own `Sidebar.Provider` (distinct from the product AppShell) with the settings rail,
+	 * a mobile-only sticky header (SidebarTrigger + "Pengaturan"), and a centered max-w-2xl content
+	 * column. NavUser viewer resolves from `viewerContext`, so no profile prop is needed. Custom rail
+	 * widths: 16.5 / 17.5rem.
 	 */
 	let { children }: { children: Snippet } = $props();
 </script>

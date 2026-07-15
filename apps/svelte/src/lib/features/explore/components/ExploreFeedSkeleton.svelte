@@ -18,7 +18,7 @@
 	{@render spotlightCardSkeleton('feature', 'left')}
 </div>
 
-<!-- Mirror DiscoverySpotlightCard: grid media + kolom teks (judul 2 baris, tldr 3 baris, footer). -->
+<!-- Spotlight card skeleton: grid media + text column (2-line title, 3-line tldr, footer). -->
 {#snippet spotlightCardSkeleton(size: 'hero' | 'feature', imageSide: 'left' | 'right')}
 	{@const mediaHeight =
 		size === 'hero'
@@ -58,7 +58,7 @@
 	</article>
 {/snippet}
 
-<!-- Mirror DiscoveryStandardCard: media aspect-16/10 + judul 2 baris + footer. -->
+<!-- Standard card skeleton: 16/10 media + 2-line title + footer. -->
 {#snippet standardCardSkeleton()}
 	<article class="flex flex-col">
 		<Skeleton class="aspect-[16/10] w-full rounded-[12px]" />
@@ -74,7 +74,7 @@
 	</article>
 {/snippet}
 
-<!-- Mirror CardFooter: avatar sumber size-5 + label, ikon save + overflow di kanan. -->
+<!-- Footer skeleton: source avatar + label, save + overflow icons on the right. -->
 {#snippet footerSkeleton()}
 	<div class="flex items-center justify-between gap-3">
 		<div class="flex min-w-0 items-center gap-2">

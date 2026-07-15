@@ -4,7 +4,7 @@
 	import { cn } from '$lib/utils';
 
 	// MagneticButton — membungkus child (biasanya `<Button>`) dalam div yang bergeser ke arah kursor
-	// dalam `radius`, lalu balik. Reduced-motion di-hormati di attach `magnetic`. Port `magnetic-button.tsx`.
+	// dalam `radius`, lalu balik. Reduced-motion di-hormati di attach `magnetic`.
 	let {
 		children,
 		class: className,

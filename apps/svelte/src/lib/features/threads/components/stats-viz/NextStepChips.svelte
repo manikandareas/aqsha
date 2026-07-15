@@ -4,11 +4,10 @@
 	import { getComposerMentions } from '../../state/composer-mentions.svelte';
 
 	/**
-	 * Chip next-step ritual (fase C plan statistik-panel) — tuntunan urutan uji SKILL.md, dirender di
-	 * bawah transkrip HANYA pada run analisis TERAKHIR + turn settled (lihat `MessageList`). Tap = prefill
-	 * composer via `getComposerMentions().setComposerDraft` (channel `ComposerMentions`), TANPA auto-send.
+	 * Chip next-step ritual — tuntunan urutan uji SKILL.md, dirender di bawah transkrip HANYA pada run
+	 * analisis TERAKHIR + turn settled (lihat `MessageList`). Tap = prefill composer via
+	 * `getComposerMentions().setComposerDraft` (channel `ComposerMentions`), TANPA auto-send.
 	 * Uji tanpa saran (custom / Tier 3) → `statsNextStepsFor` kosong → tak render apa pun.
-	 * Port `next-step-chips.tsx` (`StatsNextStepChips`).
 	 */
 	let { analysis }: { analysis: string } = $props();
 

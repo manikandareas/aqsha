@@ -5,8 +5,7 @@
 	/**
 	 * "scroll ke bawah, yuk" handwritten cue — top-right of the /app landing, diagonal between the
 	 * open-Workspace action and the hero title. Click → smooth-scroll to the Jelajahi section below the
-	 * fold. Hidden below @2xl (no gap between header & hero on narrow screens). Port of
-	 * `apps/web/features/thread-experience/components/explore-handwritten-cue.tsx` (framer-motion → CSS).
+	 * fold. Hidden below @2xl (no gap between header & hero on narrow screens). Animated with CSS.
 	 */
 	const reduced = $derived(prefersReducedMotion.current);
 

@@ -3,7 +3,7 @@
 	import PanelBarContent from './PanelBarContent.svelte';
 	import { panelCardToolbarClass } from './panel-surface';
 
-	/** Compact toolbar at the top of the floating side-panel card — padanan web `PanelCardToolbar`. */
+	/** Compact toolbar at the top of the floating side-panel card. */
 	let { title, eyebrow, actions }: { title: Snippet; eyebrow?: string; actions?: Snippet } =
 		$props();
 </script>

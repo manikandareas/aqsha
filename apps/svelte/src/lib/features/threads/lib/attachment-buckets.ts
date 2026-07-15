@@ -24,7 +24,6 @@ function toAttachment(a: Artifact): MessageAttachment {
  *    the chat message ids).
  *
  * Attachments removed before sending are already soft-deleted (absent from the list) → unmapped.
- * Verbatim port of `apps/web/features/threads/lib/attachment-buckets.ts`.
  */
 export function bucketMessageAttachments(
 	messages: readonly TimelineMessage[],

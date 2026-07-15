@@ -10,7 +10,6 @@
 		SettingsRow
 	} from '../components/settings-card';
 
-	// Port 1:1 from apps/web/features/settings/security/active-devices-panel.tsx.
 	const sessions = useSessions();
 	const revoke = useRevokeSession();
 

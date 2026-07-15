@@ -6,7 +6,6 @@
 	} from '$lib/features/workspaces/components/workspace-upload-toast-model';
 	import WorkspaceUploadToastStatusIcon from './WorkspaceUploadToastStatusIcon.svelte';
 
-	/** Port of `workspace-upload-toast-row.tsx`. */
 	let { item }: { item: UploadQueueItem } = $props();
 
 	const statusText = $derived(getStatusText(item));

@@ -3,7 +3,7 @@
 	import NewsReaderRoute from '$lib/features/discovery/components/NewsReaderRoute.svelte';
 
 	// `/app/explore/n/[id]` — news reader. Keyed on the id so navigating between related news items
-	// remounts a fresh reader + chat shell (web parity with the dynamic-segment re-instantiation).
+	// remounts a fresh reader + chat shell.
 	const id = $derived(page.params.id ?? '');
 </script>
 

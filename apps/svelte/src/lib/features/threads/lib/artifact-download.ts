@@ -1,13 +1,11 @@
 /**
- * Browser-safe download triggers — Svelte port of the download half of
- * `apps/web/lib/artifact-download.ts`. Phase 7 (THX-4) needed the two *trigger* functions
- * (thread reference export = BibTeX/RIS blob; analysis export = base64 docx/xlsx); Phase 9
- * (WSP artifact reader) adds `resolveArtifactDownload` (synthesize a savable representation of
- * any artifact type).
+ * Browser-safe download triggers for thread reference export (BibTeX/RIS blob) and analysis export
+ * (base64 docx/xlsx). `resolveArtifactDownload` synthesizes a savable representation of any artifact
+ * type for the artifact reader.
  *
- * The byte payload + `fileName` are produced authoritatively by the server; these helpers must
- * reproduce EXACTLY the same anchor-download bytes as web (§11.2 contract). Kept as a pure DOM
- * module (no runes, no `@aqsha/db`/services) so it is browser-only and unit-testable.
+ * The byte payload + `fileName` are produced authoritatively by the server; these helpers create the
+ * anchor download in the browser. Kept as a pure DOM module (no runes, no `@aqsha/db`/services) so it
+ * is browser-only and unit-testable.
  */
 
 import type { ArtifactRenderPayload } from '$lib/features/artifacts/types';

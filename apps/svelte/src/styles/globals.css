@@ -1,23 +1,19 @@
-/* Golden CSS — visual contract ported 1:1 from apps/web/app/globals.css (§9.1).
-   Do NOT clean up tokens/classes during migration. The only intentional deltas
-   vs web are documented in docs/migration/apps-svelte-phase3-decision-record.md:
-   - Tailwind + tw-animate imports live in app.css (this file is @imported there).
-   - React-only imports dropped: `shadcn/tailwind.css`, `@blocknote/react|shadcn`,
-     `./styles/blocknote-aqsha.css` (BlockNote = Phase 10).
-   - `@source` for React node_modules (`@blocknote/shadcn`, `packages/ui/src`)
-     dropped: Svelte carries its utility classes in the src .svelte tree, which
-     Tailwind v4 auto-scans.
-   - Fonts self-hosted here (`@font-face` below) instead of `next/font/google`;
-     the `--font-*` variable names + fallbacks are preserved (see :root).
-   Everything else — :root/.dark, @theme inline, base, prose, panel, composer,
-   viz, shimmer, react-pdf, streamdown, keycap, scrollbar, reduced-motion — is
-   verbatim from web. */
+/* Visual contract — tokens, @theme, prose, panel, composer, viz, streamdown,
+   keycap, scrollbar, reduced-motion. Do not casually refactor tokens/classes;
+   they are the shared design surface across routes and components.
 
-/* ─── Self-hosted fonts (mirror next/font/google in apps/web/app/layout.tsx) ───
+   Intentional deltas from the React app:
+   - Tailwind + tw-animate imports live in app.css (this file is @imported there).
+   - Dropped React-only imports: `shadcn/tailwind.css`, BlockNote packages, and
+     blocknote-aqsha.css — Svelte does not use BlockNote.
+   - No `@source` for React node_modules; Tailwind v4 auto-scans Svelte sources.
+   - Fonts are self-hosted below (`@font-face`); `--font-*` names + fallbacks match
+     the React layout variables. */
+
+/* ─── Self-hosted fonts ───
    Inter → --font-sans, Instrument Serif → --font-serif/--font-heading,
    JetBrains Mono → --font-mono, Caveat → --font-hand. woff2 in static/fonts;
-   sourced from @fontsource(-variable) devDeps (latin subset). font-display:swap
-   matches next/font default. */
+   latin subset from @fontsource(-variable) devDeps. font-display: swap. */
 @font-face {
 	font-family: 'Inter';
 	font-style: normal;
@@ -86,8 +82,7 @@
 	--sidebar-border: oklch(0.8434 0.0231 87.1621);
 	--sidebar-ring: oklch(0.3012 0 0);
 	--radius: 0.5rem;
-	/* Self-hosted font families (mirror next/font/google variables from apps/web
-     app/layout.tsx; @font-face above). Names + fallbacks preserved for parity. */
+	/* Font family tokens — must match @font-face names above; fallbacks preserved. */
 	--font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
 	--font-serif: 'Instrument Serif', ui-serif, Georgia, serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
@@ -768,8 +763,8 @@
 }
 
 /* ─── Streamdown table: flat design ─── */
-/* §9.1 point 4: svelte-streamdown emits per-element `data-streamdown-table` (the wrapper div), not the
-   React `data-streamdown="table"` — selector updated to match the Svelte output (THC-6). */
+/* svelte-streamdown emits `data-streamdown-table` on the wrapper div, not React's
+   `data-streamdown="table"` — selectors below target the Svelte attribute shape. */
 
 /* svelte-streamdown's TableDownload wraps the table; reset the table's own spacing */
 .aqsha-prose [data-streamdown-table] {
@@ -907,12 +902,10 @@
 	}
 }
 
-/* ─── Brand FlickerSpinner (components/ui/flicker-spinner) ───
-   Global (unscoped) so the SVG's inline `style="animation: fXXXX …"` references
-   resolve — the Svelte component renders ONLY the SVG (a scoped component <style>
-   would rename the keyframes away from those inline references). Web renders the
-   equivalent <style> as an SVG child. Lit dots = currentColor; resting = dimmed;
-   reduced-motion holds them static. Keyframe names/percentages verbatim from web. */
+/* ─── FlickerSpinner (components/ui/flicker-spinner) ───
+   Global (unscoped) so inline SVG `style="animation: fXXXX …"` references resolve;
+   scoped component styles would rename keyframes away from those attributes.
+   Lit dots use currentColor; resting dots are dimmed; reduced-motion keeps them static. */
 .flicker-spinner circle {
 	fill: currentColor;
 }
@@ -1352,9 +1345,8 @@
 	}
 }
 
-/* PDF viewer (react-pdf) — flush, theme-aware pages with citation links.
-   Kept verbatim from web (§9.1): selectors are inert until the PDF reader
-   is ported (Phase 9). */
+/* PDF viewer — flush, theme-aware pages with citation links.
+   Selectors kept for when the PDF reader is wired; inert until then. */
 .react-pdf__Document {
 	width: 100%;
 }

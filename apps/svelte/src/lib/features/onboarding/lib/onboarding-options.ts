@@ -1,7 +1,6 @@
 // Onboarding option sets. The `id` values are the contract with the backend
 // (@aqsha/services onboarding/options) — keep them in sync. Labels are Bahasa
-// Indonesia, sentence case (never all-uppercase). Port 1:1 from
-// apps/web/features/onboarding/lib/onboarding-options.ts.
+// Indonesia, sentence case (never all-uppercase).
 
 export type OnboardingOption = { id: string; label: string };
 

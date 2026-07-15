@@ -1,6 +1,6 @@
 /**
  * Pure math untuk scroll-linked motion — dipisah dari `scroll.ts` (yang mengimpor `svelte/motion`
- * browser-only) supaya contract-testable di node. Padanan `useScroll`/`useTransform` framer.
+ * browser-only) supaya contract-testable di node.
  */
 
 export type ScrollOffset = [string, string]; // mis. ["start end", "start 0.75"]
@@ -39,7 +39,7 @@ export function computeScrollProgress(
 	return Math.min(1, Math.max(0, p));
 }
 
-/** Interpolasi linier — padanan `useTransform(progress, [i0,i1], [o0,o1])` untuk output numerik. */
+/** Interpolasi linier untuk output numerik dari progress scroll. */
 export function mapRange(value: number, input: [number, number], output: [number, number]): number {
 	const [i0, i1] = input;
 	const [o0, o1] = output;

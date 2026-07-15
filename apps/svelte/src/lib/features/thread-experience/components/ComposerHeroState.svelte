@@ -3,8 +3,7 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Empty-thread hero — brand mark + heading over the rich composer. Port of `composer-hero-state.tsx`
-	 * (BrandLogoIcon → the static `/logo.svg` mark). Layout classes preserved.
+	 * Empty-thread hero — brand mark + heading over the rich composer (static `/logo.svg` mark).
 	 */
 	let {
 		title = 'Apa yang ingin kita teliti?',

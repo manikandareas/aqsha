@@ -13,11 +13,9 @@
 	import WorkspaceUploadToastView from './WorkspaceUploadToastView.svelte';
 
 	/**
-	 * Upload-queue controller — port of the `useWorkspaceUploadToast` hook in
-	 * `apps/web/features/workspaces/components/workspace-upload-toast.tsx`. Renders nothing itself;
-	 * it owns the queue state, drives a persistent sonner toast (`WorkspaceUploadToastView`), and
-	 * exposes `enqueue(files, folderId)` via `bind:this`. `isUploadActive` is a bindable mirror of
-	 * the React hook's returned `isUploadActive`.
+	 * Upload-queue controller. Renders nothing itself; it owns the queue state, drives a persistent sonner
+	 * toast (`WorkspaceUploadToastView`), and exposes `enqueue(files, folderId)` via `bind:this`.
+	 * `isUploadActive` is bindable and tracks whether the queue is actively uploading.
 	 */
 	type UploadFiles = (
 		files: File[],
@@ -41,8 +39,8 @@
 	let items = $state<UploadQueueItem[]>([]);
 	let isCollapsed = $state(false);
 
-	// Synchronous guard mirror of the React `activeRef` (state lands a tick late, so a ref keeps
-	// `enqueue`/`retryFailedUploads` from double-firing) + the delayed dismiss timer.
+	// Synchronous guard: `$state` lands a tick late, so a plain flag keeps
+	// `enqueue`/`retryFailedUploads` from double-firing, plus the delayed dismiss timer.
 	let activeRef = false;
 	let dismissTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -174,8 +172,8 @@
 		return Math.random().toString(36).slice(2);
 	}
 
-	// Re-publish the sonner toast whenever queue/collapse/active state changes (mirror of the React
-	// render `useEffect`). Re-calling `toast.custom` with the same id updates the live toast.
+	// Re-publish the sonner toast whenever queue/collapse/active state changes.
+	// Re-calling `toast.custom` with the same id updates the live toast.
 	$effect(() => {
 		if (!hasItems) return;
 		toast.custom(WorkspaceUploadToastView, {

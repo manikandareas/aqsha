@@ -9,10 +9,9 @@ import { queryKeys, unwrap } from '$lib/query';
 import type { DiscoveryItemRef, ExplorePaper, FeedItem, FeedMode, FeedTopic } from './types';
 
 /**
- * Discovery query/mutation hooks — Svelte port of `apps/web/features/discovery/api.ts` (EXP-1..4).
- * Called during component init (query + api-client context). Reactive inputs are passed as getters
- * (§3.6 svelte-query idiom, see `features/threads/api.ts`). Query keys, page size, stale policy and the
- * `keepPreviousData` fade are byte-equivalent with web (§11.2).
+ * Discovery query/mutation hooks. Called during component init (query + api-client context). Reactive
+ * inputs are passed as getters (see `features/threads/api.ts`). Query keys, page size, stale policy,
+ * and the `keepPreviousData` fade match the product contract.
  */
 
 const FEED_PAGE_SIZE = 20;

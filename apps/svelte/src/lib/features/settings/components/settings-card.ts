@@ -1,5 +1,4 @@
-// Barrel for the settings card primitives (padanan the multi-export
-// apps/web/features/settings/components/settings-card.tsx).
+// Barrel for the settings card primitives.
 export { default as SettingsPanel } from './SettingsPanel.svelte';
 export { default as SettingsPanelHeader } from './SettingsPanelHeader.svelte';
 export { default as SettingsPanelBody } from './SettingsPanelBody.svelte';

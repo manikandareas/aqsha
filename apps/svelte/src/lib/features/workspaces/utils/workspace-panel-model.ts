@@ -5,8 +5,7 @@
 // sitasi deep-linkable (`?panel=cite` / `?panel=cite:<citationId>`) dan tahan refresh.
 // Param absen = panel tertutup (menggantikan state lokal `chatPanelOpen`).
 //
-// Port svelte: codec PURE (serialize/parse), di-wire lewat SvelteKit `page.url`/
-// `goto` (padanan thread-panel-model THX-6). Parser nuqs web dihapus (§2.3 phase7).
+// Codec PURE (serialize/parse), wired through SvelteKit `page.url`/`goto`.
 
 export type WorkspacePanelMode =
 	{ kind: 'closed' } | { kind: 'chat' } | { kind: 'citations'; citationId?: string };

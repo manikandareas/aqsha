@@ -3,7 +3,6 @@
 
 	/**
 	 * Monthly credit balance meter (used vs limit). Unlimited → no bar + ∞ label.
-	 * Port from apps/web/features/settings/components/bits.tsx (CreditMeter).
 	 */
 	let {
 		creditsUsed,

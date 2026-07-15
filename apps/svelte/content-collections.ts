@@ -8,16 +8,12 @@ import { visit } from 'unist-util-visit';
 import { z } from 'zod';
 
 /**
- * Content Collections config — port dari `apps/web/content-collections.ts`.
+ * Content Collections config for blog and changelog.
  *
- * Perbedaan SATU-SATUNYA yang disengaja (SPIKE Phase 4, dicatat di decision record):
- * web memakai `@content-collections/mdx` `compileMDX` (menghasilkan komponen React yang di-render
- * `<MDXContent>`), sedangkan di sini kita pakai `@content-collections/markdown` `compileMarkdown`
- * yang menghasilkan STRING HTML. Konten blog/changelog 100% markdown murni (nol JSX), jadi output
- * HTML-nya IDENTIK karena pipeline remark/rehype-nya SAMA PERSIS (remark-gfm + rehype-shiki
- * github-dark + rehype-slug + rehype-autolink-headings wrap). Konsumen Svelte me-render lewat
- * `{@html post.mdx}` ke dalam `.aqsha-prose .blog-prose` / `.changelog-prose` — byte-parity prose +
- * tanpa membawa runtime MDX/React ke bundle. Skema/frontmatter/slug/ordering DIPERTAHANKAN.
+ * Uses `@content-collections/markdown` `compileMarkdown` (HTML string output) rather than MDX React
+ * components. Content is pure markdown — same remark/rehype pipeline (remark-gfm, rehype-shiki
+ * github-dark, rehype-slug, rehype-autolink-headings). Svelte pages render via `{@html post.mdx}`
+ * inside `.aqsha-prose`.
  */
 
 /** Reading time kasar (≈200 wpm), dihitung sekali saat build → nol cost runtime. */
@@ -39,10 +35,9 @@ function deriveExcerpt(content: string, max = 160): string {
 }
 
 /**
- * Mirror `apps/web/components/mdx-components.tsx` di lapisan hast (build-time) karena di Svelte kita
- * render HTML string, bukan override komponen React saat render. Link eksternal → `rel="noreferrer"`;
- * `<img>` → `loading="lazy"` + `alt` default "". Link internal (`/...`, bukan `//host`) dibiarkan
- * anchor biasa: SvelteKit meng-enhance navigasi client-side untuk `<a>` same-origin secara otomatis.
+ * Build-time hast transforms for rendered markdown links and images.
+ * External links get `rel="noreferrer"`; images get `loading="lazy"` and default empty `alt`.
+ * Internal links (`/...`, not `//host`) stay plain anchors — SvelteKit enhances same-origin `<a>` automatically.
  */
 function rehypeAqshaMdxLinks() {
 	return (tree: unknown) => {

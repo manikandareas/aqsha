@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { buttonVariants } from './index.js';
 
 /**
- * Button variant contract (§10 Phase 3 gate — "cn/variant" correctness). Locks the Aqsha
- * press choreography ported from apps/web/components/ui/button-variants.ts: solid variants
- * (default/secondary) carry `.btn-keycap` + `--btn-face`; non-solid variants
- * (outline/ghost/destructive) carry the generic active-translate nudge and NO keycap.
+ * Button variant contract. Locks the Aqsha press choreography: solid variants (default/secondary)
+ * carry `.btn-keycap` + `--btn-face`; non-solid variants (outline/ghost/destructive) carry the generic
+ * active-translate nudge and NO keycap.
  */
 describe('buttonVariants', () => {
 	it('default is a keycap driven by --primary', () => {

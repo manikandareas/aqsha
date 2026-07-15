@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { getPublishedPost, publishedPosts } from './posts';
 import { getPublishedEntry, publishedEntries } from '$lib/features/changelog/lib/entries';
 
-// Contract terhadap data Content Collections (generated saat `content-collections build`, prefiks
-// script test). Menjaga schema/slug/ordering/non-draft — kontrak §8.2.
+// Contract against Content Collections data (generated at `content-collections build`, test script prefix).
+// Guards schema, slug, ordering, and non-draft filtering.
 describe('publishedPosts', () => {
 	it('non-draft, terbaru dulu, dengan computed fields', () => {
 		const posts = publishedPosts();

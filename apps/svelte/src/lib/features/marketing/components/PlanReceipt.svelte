@@ -16,7 +16,7 @@
 
 	// PlanReceipt — satu plan sebagai struk jujur: mono, paper-grain, dotted leaders, ekor zigzag.
 	// Signature: line items "print" top-to-bottom saat masuk viewport; total flip per periode
-	// (PriceOdometer). Resting tilt + hover mengangkat (lurus + naik). Port `PlanReceipt`.
+	// (PriceOdometer). Resting tilt + hover mengangkat (lurus + naik).
 	let {
 		planKey,
 		billing,

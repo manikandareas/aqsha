@@ -10,12 +10,10 @@ import {
 } from '../utils/workspace-panel-model';
 
 /**
- * Workspace-detail right-panel controller — Svelte port of `workspace-panel-context.tsx`
- * (`WorkspacePanelProvider`/`useWorkspacePanel`). Open mode lives in the URL (`?panel=` query param,
- * codec `workspace-panel-model.ts`, byte-equivalent with web) so tabs + citation detail are
- * deep-linkable and survive refresh. `mode` derives reactively from `page.url`; openers navigate via
- * `goto` (history replace). `setOpen(true)` restores the last open mode (default chat). Per-tree class
- * via `createContext` (§3.5 — never a module singleton).
+ * Workspace-detail right-panel controller. Open mode lives in the URL (`?panel=` query param, codec
+ * `workspace-panel-model.ts`) so tabs + citation detail are deep-linkable and survive refresh. `mode`
+ * derives reactively from `page.url`; openers navigate via `goto` (history replace). `setOpen(true)`
+ * restores the last open mode (default chat). Per-tree class via `createContext` (never a module singleton).
  */
 export class WorkspacePanelController {
 	// Last open mode set within this mount — target of the next `setOpen(true)` (default chat).

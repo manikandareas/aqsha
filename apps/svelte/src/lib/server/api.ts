@@ -3,9 +3,9 @@ import { publicEnv } from '$lib/env/public';
 import type { TokenGetter } from '$lib/auth/token';
 
 /**
- * Eden Treaty client ber-auth untuk sisi server (`load`/`+*.server.ts`/hooks). Padanan
- * `apps/web/lib/api-server.ts`: token Clerk di-scope per-request lewat `getToken` (bukan singleton
- * module-level — cegah kebocoran token lintas request pada satu proses Node, §3.5).
+ * Eden Treaty client ber-auth untuk sisi server (`load`/`+*.server.ts`/hooks). Token Clerk di-scope
+ * per-request lewat `getToken` (bukan singleton module-level — cegah kebocoran token lintas request
+ * pada satu proses Node).
  *
  * Sumber token = `event.locals.auth().getToken()` (lihat `$lib/server/auth`). Beda dari `handleFetch`
  * di `hooks.server.ts`: `handleFetch` menyuntik token untuk `event.fetch` di `load`; client ini

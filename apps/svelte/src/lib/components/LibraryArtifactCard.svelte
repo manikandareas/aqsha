@@ -9,7 +9,7 @@
 	} from './artifact-presentation';
 	import LibraryCardFrame from './LibraryCardFrame.svelte';
 
-	/** Port of `apps/web/components/library-artifact-card.tsx` — the tall library card face. */
+	/** Tall library card face for workspace artifacts. */
 	let {
 		title,
 		artifactType,

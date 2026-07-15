@@ -1,7 +1,6 @@
 /**
- * SEO config — single source of truth untuk semua nilai SEO/metadata.
- * Port 1:1 dari `apps/web/lib/seo-config.ts`. `siteUrl` dibaca dari `PUBLIC_SITE_URL`
- * (`$env/dynamic/public` via `publicEnv`, §3.7) agar domain dipindah tanpa ubah kode.
+ * SEO config — single source of truth untuk semua nilai SEO/metadata. `siteUrl` dibaca dari
+ * `PUBLIC_SITE_URL` (`$env/dynamic/public` via `publicEnv`) agar domain dipindah tanpa ubah kode.
  * Client-safe (tanpa zod/services) — dipakai metadata, robots, sitemap, manifest, JSON-LD.
  */
 import { publicEnv } from '$lib/env/public';
@@ -59,15 +58,14 @@ export const ogImage = {
 	subtitle: 'Sumber yang nggak ngarang.'
 };
 
-/** Alt untuk OG/Twitter image (padanan `alt` export web opengraph-image.tsx). */
+/** Alt untuk OG/Twitter image. */
 export const ogImageAlt = `${siteName} — ${ogImage.title}`;
 
 /** Path OG/Twitter card image (static, 1200×630). Dipakai og:image + twitter:image. */
 export const ogImagePath = '/og.png';
 
 /**
- * Gate index mesin telusur (§10 Phase 4 preview-noindex → cutover). `true` HANYA saat
- * `PUBLIC_SEO_ALLOW_INDEXING === 'true'` (di-set owner saat flip domain, Phase 12); selain itu
+ * Gate index mesin telusur. `true` HANYA saat `PUBLIC_SEO_ALLOW_INDEXING === 'true'`; selain itu
  * preview di-noindex (robots.txt disallow-all + `<meta name="robots" content="noindex">`).
  */
 export const seoAllowIndexing = publicEnv.PUBLIC_SEO_ALLOW_INDEXING === 'true';

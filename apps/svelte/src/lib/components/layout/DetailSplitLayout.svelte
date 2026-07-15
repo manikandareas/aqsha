@@ -7,14 +7,11 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Two-column main + side-panel split — ported 1:1 from
-	 * apps/web/components/layout/detail-split-layout.tsx. Reuses `Sidebar.Provider` as the
-	 * panel's open/close state machine. ALWAYS two grid tracks (side is 0-width when closed) so
-	 * `grid-template-columns` interpolates the open/close slide and the expand (30:70) tween.
-	 * Provides the panel-expand seam via context. Docks inline only above the panel-inline
-	 * breakpoint; below it `ResponsiveSidePanel` overlays main as a bottom drawer.
-	 *
-	 * Consumer-validated in Phase 6/7 (no thread/workspace surface exists in Phase 3).
+	 * Two-column main + side-panel split. Reuses `Sidebar.Provider` as the panel's open/close state
+	 * machine. ALWAYS two grid tracks (side is 0-width when closed) so `grid-template-columns`
+	 * interpolates the open/close slide and the expand (30:70) tween. Provides the panel-expand
+	 * seam via context. Docks inline only above the panel-inline breakpoint; below it
+	 * `ResponsiveSidePanel` overlays main as a bottom drawer.
 	 */
 	let {
 		main,

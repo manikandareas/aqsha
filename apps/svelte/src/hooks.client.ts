@@ -7,8 +7,8 @@ import { initClientSentry } from '$lib/observability';
 initClientSentry(publicEnv);
 
 /**
- * Unexpected client error → Sentry (via `handleErrorWithSentry`) + shape `App.Error` yang dirender
- * `+error.svelte`. Expected error (`error()`) tak lewat sini. Plan §Phase 2 task 7.
+ * Unexpected client error → Sentry (via `handleErrorWithSentry`) + shape `App.Error` rendered by
+ * `+error.svelte`. Expected errors (`error()`) do not pass through here.
  */
 const handleClientError: HandleClientError = ({ error }) => {
 	console.error('[svelte:client] unexpected error', error);

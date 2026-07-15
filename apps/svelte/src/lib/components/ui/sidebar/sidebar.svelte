@@ -1,6 +1,6 @@
 <script lang="ts" module>
 	// Aqsha adds `flush` + `transparent` on top of the stock sidebar/floating/inset
-	// variants (ported from apps/web/components/ui/sidebar.tsx): transparent = a docked
+	// variants: transparent = a docked rail over the app background (no border, no bg),
 	// rail over the app background (no border, no bg), flush = opaque app-background rail.
 	export type SidebarVariant = 'sidebar' | 'floating' | 'inset' | 'flush' | 'transparent';
 

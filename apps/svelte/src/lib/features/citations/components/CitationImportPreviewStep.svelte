@@ -12,7 +12,7 @@
 
 	/**
 	 * Langkah preview (checkbox + policy duplikat + commit). Dipakai wizard import file
-	 * DAN wizard sinkron provider (Fase 5) — didorong murni oleh `ImportPreviewResult`.
+	 * DAN wizard sinkron provider — didorong murni oleh `ImportPreviewResult`.
 	 */
 	let {
 		preview,

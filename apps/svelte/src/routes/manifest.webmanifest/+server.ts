@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 import { buildWebManifest } from '$lib/seo/handlers';
 
-/** Padanan `apps/web/app/manifest.ts`. Public (allow-list `hooks.server.ts`). */
+/** Web app manifest. Public (allow-list `hooks.server.ts`). */
 export const GET: RequestHandler = () => {
 	return new Response(JSON.stringify(buildWebManifest()), {
 		headers: {

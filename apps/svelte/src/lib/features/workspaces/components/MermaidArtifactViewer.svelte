@@ -1,7 +1,7 @@
 <script lang="ts" module>
 	// One monotonically-increasing id per viewer instance keeps each rendered diagram's SVG root id
-	// unique (mermaid.render() injects a temp node keyed by this id), the Svelte equivalent of web's
-	// `useId()`. `initialized` guards the one-time `mermaid.initialize(...)` across every instance.
+	// unique (mermaid.render() injects a temp node keyed by this id). `initialized` guards the one-time
+	// `mermaid.initialize(...)` across every instance.
 	let mermaidInstanceCounter = 0;
 	let mermaidInitialized = false;
 
@@ -18,12 +18,11 @@
 	import { Icon, Loader2Icon } from '$lib/icons';
 
 	/**
-	 * Renders a Mermaid diagram from source — Svelte port of
-	 * `apps/web/features/workspaces/components/mermaid-artifact-viewer.tsx`. `mermaid` touches the DOM
-	 * (`document`, layout measurement) so it is dynamically imported inside an `{@attach}` guarded by
-	 * `browser` (SSR never evaluates it). The attachment reads `source` (reactive) → it re-runs when the
-	 * source changes, cancelling any in-flight render first. `securityLevel: "strict"` +
-	 * `htmlLabels: false` keep untrusted diagram text from injecting markup.
+	 * Renders a Mermaid diagram from source. `mermaid` touches the DOM (`document`, layout measurement)
+	 * so it is dynamically imported inside an `{@attach}` guarded by `browser` (SSR never evaluates it).
+	 * The attachment reads `source` (reactive) → it re-runs when the source changes, cancelling any
+	 * in-flight render first. `securityLevel: "strict"` + `htmlLabels: false` keep untrusted diagram
+	 * text from injecting markup.
 	 */
 	let { source }: { source: string } = $props();
 

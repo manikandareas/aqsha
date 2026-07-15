@@ -15,10 +15,10 @@
 
 	/**
 	 * Chat shell for the Explore reader pages (paper & news). Wraps the reader with the Astra chat panel
-	 * (DetailSplitLayout + ExploreChatSidePanel, workspace-less) — mirror of ExplorePage. The page context
-	 * token (paper/news) flows into the composer via the shared `ComposerMentions` (`syncAmbientFromPage`)
-	 * so it auto-pins as a pill when the panel opens. The reader's "Tanya Astra" button calls `openChat`
-	 * (children render-prop) → opens the panel, NOT a seed navigation. Port of `explore-reader-chat-shell.tsx`.
+	 * (DetailSplitLayout + ExploreChatSidePanel, workspace-less). The page context token (paper/news)
+	 * flows into the composer via the shared `ComposerMentions` (`syncAmbientFromPage`) so it auto-pins as
+	 * a pill when the panel opens. The reader's "Tanya Astra" button calls `openChat` (children
+	 * render-prop) → opens the panel, NOT a seed navigation.
 	 */
 	let {
 		breadcrumb,
@@ -30,7 +30,7 @@
 		children: Snippet<[{ openChat: () => void }]>;
 	} = $props();
 
-	// Shared per-tree channel (§3.5) — publisher (page context) + consumer (panel composer).
+	// Shared per-tree channel — publisher (page context) + consumer (panel composer).
 	const mentions = new ComposerMentions();
 	setComposerMentions(mentions);
 

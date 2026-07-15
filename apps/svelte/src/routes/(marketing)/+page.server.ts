@@ -5,8 +5,8 @@ import { CATEGORY_META } from '$lib/features/changelog/lib/categories';
 import type { LatestUpdate, TeaserLatest } from '$lib/features/marketing/types';
 
 /**
- * Landing (`/`) — padanan `apps/web/app/page.tsx` + `landing-page.tsx`. Data terbaru dibaca dari
- * Content Collections (statis) di server; JSON-LD identitas/FAQ disematkan lewat SeoHead.
+ * Landing (`/`). Latest changelog data read from Content Collections at server load; identity/FAQ
+ * JSON-LD embedded via SeoHead.
  */
 export const load: PageServerLoad = () => {
 	const entries = publishedEntries();

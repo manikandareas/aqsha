@@ -1,6 +1,4 @@
-// Pure formatters for the discovery mosaic. id-only (the surface is
-// Indonesian-first, so the V1 lang param is dropped). Ported verbatim from
-// `apps/web/features/discovery/format.ts`.
+// Pure formatters for the discovery mosaic. id-only (the surface is Indonesian-first).
 
 import type { DiscoveryItem } from './model';
 

@@ -1,6 +1,5 @@
 <script lang="ts">
-	// Shared step heading (title + subtitle). Port of the local `StepHeading` in
-	// apps/web/features/onboarding/components/onboarding-steps.tsx.
+	// Shared step heading (title + subtitle).
 	let { title, subtitle }: { title: string; subtitle: string } = $props();
 </script>
 

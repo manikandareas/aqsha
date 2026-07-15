@@ -9,7 +9,7 @@
 	 * PdfThumb overlays and covers the base once page-1 renders. We keep the URL that FAILED (not a
 	 * boolean) + `{#key pdfUrl}` on PdfThumb → when this slot is reused for another paper (e.g. an
 	 * unkeyed hero whose item changes), stale state doesn't carry: a new URL ≠ failedUrl → shows again,
-	 * and PdfThumb remounts clean per URL. Ported from `PaperCover` in web `discovery-item-card.tsx`.
+	 * and PdfThumb remounts clean per URL.
 	 */
 	let { item, class: className }: { item: DiscoveryItem; class?: string } = $props();
 

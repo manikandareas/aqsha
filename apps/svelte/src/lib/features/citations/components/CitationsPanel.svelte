@@ -75,7 +75,7 @@
 		citationId: string | null;
 		onOpenCitation: (citationId: string) => void;
 		onBackToList: () => void;
-		/** Fase 4 — sematkan referensi sebagai konteks chip composer chat (opsional). */
+		/** Sematkan referensi sebagai konteks chip composer chat (opsional). */
 		onAddToChat?: (citation: { id: string; title: string }) => void;
 	} = $props();
 

@@ -4,8 +4,7 @@
 
 	/**
 	 * Pill nomor paper `[n]` kompak untuk tabel viz (kolom Papers) — resolve ke kartu sumber lewat
-	 * peta sitasi yang diteruskan sebagai prop (Phase 6: reactive snippet props, bukan React context).
-	 * Nomor tanpa kartu ter-resolve tetap tampil sebagai teks `[n]` (degradasi mulus). Maksimal `max`
+	 * peta sitasi yang diteruskan sebagai prop (reactive snippet props, bukan context). Nomor tanpa kartu ter-resolve tetap tampil sebagai teks `[n]` (degradasi mulus). Maksimal `max`
 	 * pill; sisanya diringkas "+n lainnya".
 	 */
 	let {

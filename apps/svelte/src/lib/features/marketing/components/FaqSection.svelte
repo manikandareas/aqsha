@@ -7,7 +7,7 @@
 	// FAQ landing — konten SAMA dengan FAQPage JSON-LD (structured-data). Wajib visible + answer SELALU
 	// di DOM (grid-rows 0fr↔1fr, bukan unmount) supaya crawler tetap baca. Signature "ghost index":
 	// angka serif raksasa di margin kiri (lg) menampilkan nomor pertanyaan terbuka, crossfade. Toggle
-	// morph plus→cross (dua garis 1px rotate 45°). Port `faq-section.tsx`.
+	// morph plus→cross (dua garis 1px rotate 45°).
 	let openIndex = $state<number | null>(0);
 
 	const revealOnce = reveal();

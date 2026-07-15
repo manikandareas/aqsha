@@ -4,11 +4,9 @@ import { publicEnv } from '$lib/env/public';
 import { parseSentryDsn } from '$lib/observability';
 
 /**
- * Sentry tunnel (plan §Phase 2 task 7; mirror web `tunnelRoute: '/sentry-tunnel'`). Browser SDK
- * mem-POST error envelope ke sini (client `tunnel` option), lalu di-forward ke ingest Sentry, supaya
- * ad/tracker blocker tak diam-diam men-drop event. Route ini PUBLIC (allow-list `hooks.server.ts`).
- *
- * SSRF-guard: hanya envelope dengan DSN == PUBLIC_SENTRY_DSN yang diteruskan (bukan open relay).
+ * Sentry tunnel. Browser SDK POSTs error envelopes here (client `tunnel` option), then forwarded to
+ * Sentry ingest so ad/tracker blockers do not silently drop events. Route is PUBLIC (allow-list
+ * `hooks.server.ts`). SSRF-guard: only envelopes with DSN == PUBLIC_SENTRY_DSN are forwarded.
  */
 export const POST: RequestHandler = async ({ request, fetch }) => {
 	const configured = parseSentryDsn(publicEnv.PUBLIC_SENTRY_DSN);

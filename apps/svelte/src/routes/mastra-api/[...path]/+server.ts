@@ -3,9 +3,9 @@ import { serverEnv } from '$lib/server/env';
 import { forwardToAgent } from './proxy';
 
 /**
- * Streaming Mastra proxy (`/mastra-api/*`) → `@aqsha/agent`. Tipis: origin dari `serverEnv`
- * (tervalidasi, §3.7), forwarding di `./proxy` (`forwardToAgent`, unit-tested). Route ini PUBLIC di
- * `hooks.server.ts` (di-exclude dari gate Clerk) — auth ditangani `server.auth` agent.
+ * Streaming Mastra proxy (`/mastra-api/*`) → `@aqsha/agent`. Thin handler: origin from validated
+ * `serverEnv`, forwarding in `./proxy` (`forwardToAgent`, unit-tested). Route is PUBLIC in
+ * `hooks.server.ts` (excluded from Clerk gate) — auth is handled by the agent's `server.auth`.
  */
 const proxy: RequestHandler = ({ request, url }) =>
 	forwardToAgent(request, url, serverEnv.MASTRA_AGENT_ORIGIN);

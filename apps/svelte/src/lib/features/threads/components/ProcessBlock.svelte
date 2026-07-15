@@ -13,7 +13,7 @@
 	/**
 	 * Collapsible "Proses" block — tool-rows + intermediate reasoning/text of one message, in original
 	 * order. Open + shimmer while streaming; on settle auto-collapses to "Selesai · N langkah" unless the
-	 * user opened it manually. Port of `ProcessBlock`/`ProcessPartView` in `message-list.tsx`.
+	 * user opened it manually.
 	 */
 	let {
 		parts,

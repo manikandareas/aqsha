@@ -2,7 +2,7 @@ import type { PageServerLoad } from './$types';
 import { createPageMetadata } from '$lib/seo';
 import { publishedPosts } from '$lib/features/blog/lib/posts';
 
-/** Padanan `apps/web/app/blog/page.tsx`. SSR-first (§3.6) — konten statis, siteUrl runtime. */
+/** Blog index — SSR-first; static content, siteUrl from runtime env. */
 export const load: PageServerLoad = () => {
 	return {
 		posts: publishedPosts(),

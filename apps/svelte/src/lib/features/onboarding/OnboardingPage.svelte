@@ -25,10 +25,9 @@
 	import FinishStep from './components/FinishStep.svelte';
 
 	/**
-	 * Onboarding wizard — port of apps/web/features/onboarding/pages/onboarding-page.tsx.
-	 * The pure step machine + validation lives in `lib/onboarding-machine.ts`; the flow state +
-	 * complete mutation in `state.svelte.ts`. Motion mirrors the framer AnimatePresence via
-	 * Svelte `{#key}` + `fly` (mode="wait" equivalent), collapsing to no motion when reduced.
+	 * Onboarding wizard. The pure step machine + validation lives in `lib/onboarding-machine.ts`; the
+	 * flow state + complete mutation in `state.svelte.ts`. Step transitions use `{#key}` + `fly`
+	 * (mode="wait" equivalent), collapsing to no motion when reduced.
 	 */
 	const api = getApiClient();
 	const flow = createOnboardingFlow();
@@ -40,9 +39,8 @@
 	}));
 	const status = $derived(statusQuery.data);
 
-	// Only relevant at mount: bounce an already-onboarded user who lands here directly. Once the
-	// flow advances past "welcome", status is ignored — so a "completed" flipping true after submit
-	// can't skip the finish screen (mirror web's mount-only useEffect intent).
+	// Only at mount: redirect users who already completed onboarding. Ignored after leaving "welcome"
+	// so a late "completed" status can't skip the finish screen.
 	$effect(() => {
 		if (flow.step === 'welcome' && status?.completed) {
 			void goto(resolve('/app/explore'), { replaceState: true });
@@ -89,8 +87,7 @@
 </script>
 
 {#if flow.step === 'welcome' && (!status || status.completed)}
-	<!-- At mount, wait for status before showing "welcome" — avoids flashing the wizard to an
-		already-onboarded user we're about to redirect away (mirror web loader). -->
+	<!-- Wait for status before showing welcome — avoids flashing the wizard to a user we're redirecting. -->
 	<OnboardingLayout>
 		<div class="flex justify-center text-muted-foreground">
 			<FlickerSpinner class="size-5" />

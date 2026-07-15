@@ -3,10 +3,8 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Layered library card shell — port of `apps/web/components/library-card-frame.tsx`. The
-	 * hover choreography (framer `whileHover` spring rotateY/rotateX/y + the fanned backing cards)
-	 * is expressed with `motion-safe:` CSS transitions, so `prefers-reduced-motion` disables it
-	 * exactly like the React `useReducedMotion()` branch.
+	 * Layered library card shell. Hover choreography (3D tilt + fanned backing cards) uses
+	 * `motion-safe:` CSS transitions so `prefers-reduced-motion` disables the animation.
 	 */
 	let {
 		as = 'div',

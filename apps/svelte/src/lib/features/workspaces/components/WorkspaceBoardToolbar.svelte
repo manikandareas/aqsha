@@ -22,7 +22,6 @@
 	import WorkspaceEmojiPopover from './WorkspaceEmojiPopover.svelte';
 	import WorkspaceTitlePopover from './WorkspaceTitlePopover.svelte';
 
-	/** Port of `apps/web/features/workspaces/components/workspace-board-toolbar.tsx`. */
 	let {
 		workspaceName,
 		workspaceEmoji,
@@ -130,7 +129,7 @@
 							Folder
 						</DropdownMenu.Item>
 						{#if DOCUMENT_AUTHORING_ENABLED}
-							<!-- Authored blank document — deferred to editor redesign (§0 #9). -->
+							<!-- Authored blank document — deferred to editor redesign. -->
 							<DropdownMenu.Item onSelect={onCreateDocument}>
 								<Icon icon={FileTextIcon} class="size-4" />
 								Dokumen

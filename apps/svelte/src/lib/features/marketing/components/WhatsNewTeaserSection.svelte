@@ -4,7 +4,7 @@
 	import type { TeaserLatest } from '../types';
 
 	// WhatsNewTeaserSection — momen "rilis terbaru" terpusat & compact, tepat sebelum CTA penutup.
-	// Aksen tanggal pakai token app `text-chart-1`. Port `whats-new-teaser-section.tsx`.
+	// Aksen tanggal pakai token app `text-chart-1`.
 	let { latest = null }: { latest?: TeaserLatest | null } = $props();
 
 	const revealOnce = reveal();

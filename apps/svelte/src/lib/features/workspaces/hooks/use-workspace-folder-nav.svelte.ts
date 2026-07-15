@@ -3,10 +3,9 @@ import { page } from '$app/state';
 import { resolveActiveFolderId, type ArtifactGroup } from '../utils/workspace-library-model';
 
 /**
- * Folder navigation — Svelte port of `use-workspace-folder-nav.ts`. The active folder lives in the
- * URL `folder` query param (default `root` → param omitted); `activeFolderId` resolves against the
- * current groups (falls back to root for unknown ids). Navigation is a same-page query change via
- * `goto` (history replace, no scroll, keep focus) — padanan nuqs `history:'replace', shallow:true`.
+ * Folder navigation. The active folder lives in the URL `folder` query param (default `root` → param
+ * omitted); `activeFolderId` resolves against the current groups (falls back to root for unknown ids).
+ * Navigation is a same-page query change via `goto` (history replace, no scroll, keep focus).
  */
 export function createWorkspaceFolderNav(getGroups: () => ArtifactGroup[]) {
 	function setFolderParam(folderId: 'root' | string) {

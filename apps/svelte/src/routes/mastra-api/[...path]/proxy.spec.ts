@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { forwardToAgent } from './proxy';
 
 /**
- * Test proxy Mastra (plan §Phase 2 task 6 / DoD): header rules, path rewrite, first-byte streaming,
- * abort propagation, large payload — terhadap upstream `node:http` sungguhan (socket nyata).
- * `forwardToAgent` sengaja env-free → tak memicu boot validation `serverEnv`.
+ * Tests for `forwardToAgent`: header rules, path rewrite, first-byte streaming, abort propagation,
+ * large payload — against a real `node:http` upstream (actual socket). `forwardToAgent` is env-free
+ * so it does not trigger `serverEnv` boot validation.
  */
 function startUpstream(
 	handler: http.RequestListener

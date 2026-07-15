@@ -26,7 +26,6 @@
 		SettingsSegmentedControl
 	} from '../components/settings-card';
 
-	// Port 1:1 from apps/web/features/settings/components/usage-billing-page.tsx.
 	const WINDOWS = [30, 90, 365] as const;
 
 	const billing = useBillingCurrent();

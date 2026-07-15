@@ -11,8 +11,7 @@
 	import { resolve } from '$app/paths';
 	import { Button, type ButtonVariant } from '$lib/components/ui/button';
 
-	// Port `apps/web/components/error-state-page.tsx`. Layout + CSS (`.aqsha-error-state-*` golden CSS)
-	// dipertahankan. Dipakai root `+error.svelte` (404 + generic). `<img>` menggantikan next/image.
+	// Shared error layout (`.aqsha-error-state-*`); consumed by root `+error.svelte` (404 + generic).
 	let {
 		eyebrow,
 		title,

@@ -4,8 +4,7 @@
 	import type { LayoutData } from './$types';
 
 	/**
-	 * Product shell layout — wraps every `/app` surface in the persistent `AppShell`
-	 * (sidebar + inset). Padanan web `app/app/(product)/layout.tsx`.
+	 * Product shell layout — wraps every `/app` surface in the persistent `AppShell` (sidebar + inset).
 	 */
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 </script>

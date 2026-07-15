@@ -9,7 +9,7 @@
 	 * Small landing banner on /app (moved from the sidebar usage card) — a Manus-style autoslide carousel:
 	 * one wide card aligned with the composer, left content + right thumbnail, dots below. Slides = billing
 	 * usage summary + house-ads (reuse HOUSE_ADS from Explore). Autoslide pauses on hover/focus and stops
-	 * entirely under prefers-reduced-motion. Port of `apps/web/components/home-banner-carousel.tsx`.
+	 * entirely under prefers-reduced-motion.
 	 */
 	const BILLING_HREF = '/app/settings/usage-billing';
 	const NUM = new Intl.NumberFormat('id-ID');

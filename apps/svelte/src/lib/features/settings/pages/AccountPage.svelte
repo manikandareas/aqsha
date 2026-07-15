@@ -14,7 +14,6 @@
 		SettingsRow
 	} from '../components/settings-card';
 
-	// Port 1:1 from apps/web/features/settings/components/account-page.tsx.
 	const profile = useProfile();
 	const update = useUpdateDisplayName();
 	const del = useDeleteAccount(getSignOut());

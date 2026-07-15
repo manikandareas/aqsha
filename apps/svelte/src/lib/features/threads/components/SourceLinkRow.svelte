@@ -1,9 +1,8 @@
 <script module lang="ts">
-	// One cited/gathered source as a clickable row: favicon (with a Globe fallback
-	// when no favicon resolves) + title + domain + outbound affordance. Shared by
-	// the sub-agent detail panel (WS5) and the answer-level Sources collapsible
-	// (WS7) so the provenance row reads identically everywhere. Pure presentation —
-	// the caller passes an already-resolved `SourceLinkItem` (no raw payload).
+	// One cited/gathered source as a clickable row: favicon (with a Globe fallback when no favicon
+	// resolves) + title + domain + outbound affordance. Shared by the sub-agent detail panel and the
+	// answer-level Sources collapsible so the provenance row reads identically everywhere. Pure
+	// presentation — the caller passes an already-resolved `SourceLinkItem` (no raw payload).
 	export type SourceLinkItem = {
 		key: string;
 		title: string;
@@ -17,7 +16,6 @@
 	import { Icon, ExternalLinkIcon, GlobeIcon } from '$lib/icons';
 	import { cn } from '$lib/utils';
 
-	/** Port of `thread-experience/components/source-link-row.tsx`. */
 	let { link }: { link: SourceLinkItem } = $props();
 
 	const rowClass = 'flex min-w-0 items-start gap-2 rounded-[8px] px-2 py-1.5 transition-colors';

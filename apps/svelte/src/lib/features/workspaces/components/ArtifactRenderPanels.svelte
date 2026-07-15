@@ -5,19 +5,17 @@
 	import Response from '$lib/components/ai-elements/Response.svelte';
 	import type { ArtifactRenderPayload } from '$lib/features/artifacts/types';
 	import MermaidArtifactViewer from './MermaidArtifactViewer.svelte';
-	// PdfArtifactViewer is created by the route/caller (Phase 9); it takes a `url: string` prop.
+	// PdfArtifactViewer is created by the route/caller; it takes a `url: string` prop.
 	import PdfArtifactViewer from './PdfArtifactViewer.svelte';
 
 	/**
-	 * Artifact reading column — port of `apps/web/features/workspaces/components/artifact-render-panels.tsx`
-	 * `ArtifactReadingColumn` (+ its internal viewers: url / pdf / docx / html / svg / mermaid / json /
-	 * csv / plain_text / code). Content-first types read as documents; framed embedded viewers share one
-	 * `ArtifactSurface` shell + height. Markdown is handled upstream in `ArtifactDetailView` (read-only
-	 * prose; editing deferred to the editor redesign, §0 #9), so it is excluded from this union.
+	 * Artifact reading column (`ArtifactReadingColumn` + internal viewers: url / pdf / docx / html / svg /
+	 * mermaid / json / csv / plain_text / code). Content-first types read as documents; framed embedded
+	 * viewers share one `ArtifactSurface` shell + height. Markdown is handled upstream in `ArtifactDetailView`
+	 * (read-only prose; editing deferred to the editor redesign), so it is excluded from this union.
 	 *
-	 * Code / source rendering (was React `CodeBlock`) is delegated to svelte-streamdown via `Response`
-	 * (fenced code block) — its built-in syntax highlight + copy control replace the bespoke chrome
-	 * (library-first, matching the Phase 6 decision to drop the ported `CodeBlock`).
+	 * Code / source rendering is delegated to svelte-streamdown via `Response` (fenced code block) —
+	 * its built-in syntax highlight + copy control replace a bespoke `CodeBlock` component.
 	 */
 	type NonMarkdownPayload = Exclude<ArtifactRenderPayload, { artifactType: 'markdown' }>;
 
@@ -202,7 +200,7 @@
 		</div>
 	</div>
 {:else if payload.artifactType === 'image'}
-	<!-- Svelte addition: the render payload union carries an `image` file type (web's did not). -->
+	<!-- Image artifacts render from a direct object-storage URL (no inline text payload). -->
 	<div class={cn(ARTIFACT_SURFACE_CLASS, VIEWER_HEIGHT_CLASS, 'grid place-items-center p-4')}>
 		<img src={payload.url} alt={title} class="max-h-full max-w-full object-contain" />
 	</div>

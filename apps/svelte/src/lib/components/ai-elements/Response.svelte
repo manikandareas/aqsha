@@ -11,21 +11,18 @@
 	import DeepVizFigure from './DeepVizFigure.svelte';
 	import StatsVizFigure from './StatsVizFigure.svelte';
 
-	// THC-6 — the Svelte Streamdown adapter (DEALBREAKER). Port of `apps/web/components/ai-elements/
-	// response.tsx` + `message.tsx` `MessageResponse`. Renders an Astra answer with the custom-tag
-	// wiring: `[n]` citations, `{{stats:}}` markers, and ```aqsha:viz fences → gated components.
+	// Svelte Streamdown adapter. Renders an Astra answer with custom-tag wiring: `[n]` citations,
+	// `{{stats:}}` markers, and ```aqsha:viz fences → gated components.
 	//
-	// SANITIZE / SECURITY (NOT loosened, §10 gate): svelte-streamdown renders MARKED tokens, never raw
-	// HTML (`renderHtml` left OFF), so `<script>`/`onerror`/`javascript:`-in-markup can't execute.
-	// Link/image URLs are restricted to an explicit http(s)/mailto/relative allowlist → `javascript:`
-	// and `data:` payloads are stripped. Our custom tags are OUR tokens rendering OUR gated components
-	// (no HTML injection, no sanitize allowlist widening). Pinned by `response.svelte.spec.ts` (XSS corpus).
+	// SANITIZE / SECURITY (NOT loosened): svelte-streamdown renders MARKED tokens, never raw HTML
+	// (`renderHtml` left OFF), so `<script>`/`onerror`/`javascript:`-in-markup can't execute. Link/image
+	// URLs are restricted to an explicit http(s)/mailto/relative allowlist → `javascript:` and `data:`
+	// payloads are stripped. Custom tags are OUR tokens rendering OUR gated components (no HTML injection,
+	// no sanitize allowlist widening). Pinned by `response.svelte.spec.ts` (XSS corpus).
 	//
-	// DIVERGENCE FROM WEB: the rehype `reportRehypePlugins` pipeline is replaced by marked extensions +
-	// snippets (svelte-streamdown is marked-based). The anti-forgery gates (VizFigureProvider /
-	// StatsBlocksProvider) are ported as REACTIVE snippet props (Svelte `setContext` is init-only, but
-	// stats groups arrive post-stream). Presence-of-gate-data semantics are identical. See the Phase 6
-	// decision record + §13 risk register.
+	// The rehype plugin pipeline is replaced by marked extensions + snippets (svelte-streamdown is
+	// marked-based). Anti-forgery gates (viz + stats) are reactive snippet props because Svelte
+	// `setContext` is init-only, but stats groups arrive post-stream.
 
 	let {
 		text,
@@ -36,7 +33,7 @@
 		statsGroups
 	}: {
 		text: string;
-		/** Streaming this turn — exposed as `data-streaming` (CSS hook; Phase 7 adds smooth-reveal). */
+		/** Streaming this turn — exposed as `data-streaming` (CSS hook for smooth-reveal). */
 		streaming?: boolean;
 		class?: string;
 		citations?: Map<number, SourceCardData[]>;
@@ -46,9 +43,9 @@
 		statsGroups?: Map<string, StatsGroup>;
 	} = $props();
 
-	// Gate data — mirror of the React providers. Numberers are created ONCE per instance (stable
-	// document-order numbering that survives re-render), matching `useRef(new Map)` in the web providers.
-	// `viz` is read once via `untrack` (a message is a /deep report or not — never flips mid-life).
+	// Gate data — numberers are created ONCE per instance (stable document-order numbering that survives
+	// re-render). `viz` is read once via `untrack` (a message is a /deep report or not — never flips
+	// mid-life).
 	const vizFigureAssign = untrack(() => (viz ? createNumberer() : undefined));
 	const statsAssignTable = createNumberer();
 	const statsAssignFigure = createNumberer();
@@ -58,15 +55,14 @@
 			: undefined
 	);
 
-	// Smooth character reveal while streaming (mirror web `response.tsx`); the full text shows at once
-	// once settled. `parseIncompleteMarkdown` keeps half-formed markdown from flashing during the reveal.
+	// Smooth character reveal while streaming; the full text shows at once once settled.
+	// `parseIncompleteMarkdown` keeps half-formed markdown from flashing during the reveal.
 	const smooth = useSmoothText(
 		() => text,
 		() => streaming
 	);
 
-	// `[data-streamdown]` wrapper → the Phase 3 golden CSS (prose/table/citation) applies as descendant
-	// selectors (§9.1 point 4). Web `MessageResponse` classes preserved.
+	// `[data-streamdown]` wrapper → prose/table/citation styles apply as descendant selectors.
 	const WRAP = $derived(
 		cn(
 			'aqsha-prose aqsha-prose-message size-full min-w-0 max-w-full overflow-x-hidden break-words',

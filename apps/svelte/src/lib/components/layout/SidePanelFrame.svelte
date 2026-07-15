@@ -4,10 +4,9 @@
 	import { panelBodyColumnClass, sidePanelCardClass } from './panel-surface';
 
 	/**
-	 * Shared frame for every right side-panel surface — ported 1:1 from
-	 * apps/web/components/layout/side-panel-frame.tsx (`SidePanelFrame`). Splits the header OUT
-	 * of the card: `header` renders flush at the top of the column, the body tucks into the
-	 * floating card below it (inline/desktop) or stays flush (narrow-viewport drawer).
+	 * Shared frame for every right side-panel surface. Splits the header OUT of the card: `header`
+	 * renders flush at the top of the column, the body tucks into the floating card below it
+	 * (inline/desktop) or stays flush (narrow-viewport drawer).
 	 */
 	let { header, children }: { header: Snippet; children: Snippet } = $props();
 

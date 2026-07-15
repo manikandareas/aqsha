@@ -2,8 +2,8 @@ import { createContext } from '$lib/context';
 import type { BrowserApiClient } from './client';
 
 /**
- * Context Eden client ber-auth (padanan `useApi()` di web). Di-set sekali di `AppProviders` (child
- * `<ClerkProvider>`), dibaca feature via `getApiClient()`. Per-tree (bukan module singleton, §3.5).
+ * Context Eden client ber-auth. Di-set sekali di `AppProviders` (child `<ClerkProvider>`), dibaca
+ * feature via `getApiClient()`. Per-tree — bukan module singleton — agar tak bocor lintas request SSR.
  */
 export const apiClientContext = createContext<BrowserApiClient>('api-client');
 

@@ -9,13 +9,10 @@
 	 * Render semua blok satu grup uji (tabel → kartu verdict → figur) dalam urutan builder.
 	 * `onOpenStats` (opsional) → header kecil dengan tombol buka panel Statistik scoped; hanya dipasang
 	 * jalur inline chat (bukan panel scoped itu sendiri, yang me-reuse komponen ini tanpa `onOpenStats`).
-	 * Port `stats-block.tsx` (`StatsVizGroup`).
 	 *
-	 * Divergence Svelte: web `useStatsViz` (React context) sekaligus gerbang anti-pemalsuan + sumber
-	 * penomoran "Tabel n"/"Gambar n" untuk SELURUH pesan. Context itu dihapus → grup diterima sebagai
-	 * PROP (gerbang di renderer atas), dan penomoran dihitung per-grup di sini lalu diteruskan sebagai
-	 * `assignedNumber` ke `StatsTable`/`StatsFigure`. Kontinuitas antar-grup dalam satu pesan =
-	 * tanggung jawab renderer pesan tingkat atas (Phase 8), bukan komponen ini.
+	 * Penomoran "Tabel n"/"Gambar n" digerbangkan via grup sebagai PROP; dihitung per-grup di sini
+	 * lalu diteruskan sebagai `assignedNumber` ke `StatsTable`/`StatsFigure`. Kontinuitas antar-grup
+	 * dalam satu pesan = tanggung jawab renderer pesan tingkat atas.
 	 */
 	let { group, onOpenStats }: { group: StatsGroup; onOpenStats?: () => void } = $props();
 
@@ -59,7 +56,7 @@
 
 <div class="stats-viz-group min-w-0">
 	{#if onOpenStats}
-		<!-- Header kecil blok hasil inline: judul uji + tombol buka panel Statistik scoped (fase B). -->
+		<!-- Header kecil blok hasil inline: judul uji + tombol buka panel Statistik scoped. -->
 		<div class="not-prose mt-4 mb-1 flex items-center justify-between gap-2">
 			<span class="min-w-0 truncate text-[12px] font-medium text-muted-foreground">
 				{group.title}

@@ -3,8 +3,7 @@
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
 	import { type VariantProps, tv } from 'tailwind-variants';
 
-	// Ported 1:1 from apps/web/components/ui/button-variants.ts. Solid variants
-	// (default/secondary) carry `.btn-keycap` + `[--btn-face:*]` (globals.css owns
+	// Solid variants (default/secondary) carry `.btn-keycap` + `[--btn-face:*]` (globals.css owns
 	// the press choreography); non-solid variants (outline/ghost/destructive) get
 	// the generic `active:not-aria-[haspopup]:translate-y-px` nudge instead.
 	export const buttonVariants = tv({

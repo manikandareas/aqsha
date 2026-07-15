@@ -10,10 +10,7 @@
 
 	type NonMarkdownPayload = Exclude<ArtifactRenderPayload, { artifactType: 'markdown' }>;
 
-	/**
-	 * Header "Details" trigger + popover holding the full artifact metadata panel — port of web
-	 * `artifact-detail-sidebar.tsx` `ArtifactMetadataPopover`. Keeps the reading column flush.
-	 */
+	/** Header "Details" trigger + popover holding the full artifact metadata panel. Keeps the reading column flush. */
 	let {
 		artifact,
 		payload,

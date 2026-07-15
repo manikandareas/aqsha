@@ -3,7 +3,7 @@
 	import PanelBarContent from './PanelBarContent.svelte';
 	import { panelHeaderBarClass } from './panel-surface';
 
-	/** Compact glass header bar for a side panel — padanan web `PanelHeaderBar`. */
+	/** Compact glass header bar for a side panel. */
 	let { title, eyebrow, actions }: { title: Snippet; eyebrow?: string; actions?: Snippet } =
 		$props();
 </script>
