@@ -5,11 +5,24 @@
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import * as Command from '$lib/components/ui/command/index.js';
 	import NavUser from './NavUser.svelte';
+	import SidebarSection from './sidebar/SidebarSection.svelte';
+	import ThreadArchiveGroup from './sidebar/ThreadArchiveGroup.svelte';
+	import ThreadActionsMenu from '$lib/features/thread-experience/components/ThreadActionsMenu.svelte';
+	import CreateWorkspacePopover from '$lib/features/workspaces/components/CreateWorkspacePopover.svelte';
+	import NameDialog from '$lib/features/workspaces/components/NameDialog.svelte';
+	import {
+		useWorkspaceIndexData,
+		type SidebarThread,
+		type SidebarWorkspace
+	} from '$lib/features/workspaces/api/use-workspaces-data';
 	import {
 		Icon,
 		HomeIcon,
+		LayoutGridIcon,
 		MessageSquareIcon,
 		PanelLeftIcon,
+		PinIcon,
+		PlusIcon,
 		SearchIcon,
 		SettingsIcon,
 		TrendingUpIcon
@@ -17,20 +30,15 @@
 	import { cn } from '$lib/utils';
 
 	/**
-	 * Left navigation rail — Phase-3 shell CHROME ported from apps/web/components/app-sidebar.tsx.
-	 * Header (collapse + search buttons, Home / Jelajahi nav), footer (NavUser), and the ⌘K
-	 * command palette (create + open). The workspace/thread SECTIONS (data-driven rows,
-	 * ThreadActionsMenu, CreateWorkspacePopover, collapsible sections) are wired in Phase 7/9;
-	 * until then the content shows the empty-state placeholder, matching web's no-items branch.
+	 * Left navigation rail — full port of `apps/web/components/app-sidebar.tsx` (Phase 9 addendum).
+	 * Fetches sidebar data via `useWorkspaceIndexData()` (reactive getters) instead of receiving props
+	 * (web threads them from `AppShell`); selection derives from the route. Renders the workspace tree
+	 * + thread groups (pinned / recent / older) with per-row `ThreadActionsMenu`, `CreateWorkspacePopover`,
+	 * collapsible sections, and the ⌘K command palette.
 	 */
-	const sidebar = Sidebar.useSidebar();
-
-	let commandOpen = $state(false);
-
-	const pathname = $derived(page.url.pathname);
-	const isHomeActive = $derived(pathname === '/app');
-	const isExploreActive = $derived(pathname.startsWith('/app/explore'));
-
+	const MOBILE_THREAD_TITLE_MAX_CHARS = 42;
+	const THREADS_COLLAPSED_STORAGE_KEY = 'aqsha:sidebar:threads-collapsed';
+	const WORKSPACES_COLLAPSED_STORAGE_KEY = 'aqsha:sidebar:workspaces-collapsed';
 	const sidebarItemBaseClass =
 		'h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5';
 
@@ -43,12 +51,82 @@
 		);
 	}
 
+	const sidebar = Sidebar.useSidebar();
+	const data = useWorkspaceIndexData();
+
+	let commandOpen = $state(false);
+	let createDialogOpen = $state(false);
+
+	const pathname = $derived(page.url.pathname);
+	const selectedThreadId = $derived(page.params.threadId);
+	const selectedWorkspaceId = $derived(page.params.workspaceId);
+	const isHomeActive = $derived(pathname === '/app' && !selectedThreadId);
+	const isWorkspaceRoute = $derived(pathname.startsWith('/app/workspaces'));
+	const isExploreActive = $derived(pathname.startsWith('/app/explore'));
+
+	const sortedWorkspaces = $derived(
+		[...data.workspaces].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+	);
+	const sortedThreads = $derived(
+		[...data.threads].sort((a, b) => b.lastActivityAt - a.lastActivityAt)
+	);
+	// Thread yang disematkan diangkat ke grup "Disematkan" (urut pinnedAt DESC). Sisanya (unpinned)
+	// dipisah recent/older dari BE (ThreadService.list `bucket`).
+	const pinnedThreads = $derived(
+		data.threads
+			.filter((t) => t.pinnedAt != null)
+			.sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0))
+	);
+	const unpinnedThreads = $derived(sortedThreads.filter((t) => t.pinnedAt == null));
+	const recentThreads = $derived(unpinnedThreads.filter((t) => t.bucket !== 'older'));
+	const olderThreads = $derived(unpinnedThreads.filter((t) => t.bucket === 'older'));
+
+	async function submitCreateWorkspace({ name }: { name: string }) {
+		const workspaceId = await data.createWorkspace({ name });
+		await goto(
+			resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: String(workspaceId) })
+		);
+	}
+
+	function runCreateThread() {
+		commandOpen = false;
+		void goto(resolve('/app/(product)'));
+	}
+
+	function runCreateWorkspace() {
+		commandOpen = false;
+		createDialogOpen = true;
+	}
+
 	function closeSidebar() {
 		if (sidebar.isMobile) {
 			sidebar.setOpenMobile(false);
 			return;
 		}
 		sidebar.setOpen(false);
+	}
+
+	async function handleDeleteThread(thread: SidebarThread) {
+		await data.removeThread({ threadId: thread.threadId });
+		if (pathname === `/app/threads/${thread.threadId}`) {
+			if (thread.workspaceId) {
+				await goto(
+					resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: thread.workspaceId })
+				);
+			} else {
+				await goto(resolve('/app/(product)'));
+			}
+		}
+	}
+
+	async function handleTogglePin(thread: SidebarThread) {
+		await data.togglePinThread({ threadId: thread.threadId, pinned: thread.pinnedAt == null });
+	}
+
+	function truncateCharacters(value: string, maxLength: number) {
+		const trimmed = value.trim();
+		if (trimmed.length <= maxLength) return trimmed;
+		return `${trimmed.slice(0, maxLength - 1).trimEnd()}...`;
 	}
 
 	function handleShortcut(event: KeyboardEvent) {
@@ -60,6 +138,83 @@
 </script>
 
 <svelte:window onkeydown={handleShortcut} />
+
+{#snippet workspaceEmojiGlyph(emoji: string | undefined, active: boolean)}
+	<span
+		aria-hidden="true"
+		class={cn(
+			'flex size-4 shrink-0 items-center justify-center rounded-[5px] text-[13px] leading-none',
+			active ? 'bg-background/70' : 'bg-muted/35'
+		)}
+	>
+		{emoji?.trim() || '📚'}
+	</span>
+{/snippet}
+
+{#snippet workspaceRow(workspace: SidebarWorkspace)}
+	{@const active = isWorkspaceRoute && workspace._id === selectedWorkspaceId}
+	<Sidebar.MenuItem class="min-w-0 overflow-hidden">
+		<Sidebar.MenuButton
+			isActive={active}
+			size="sm"
+			class={cn(sidebarItemClass(active), 'w-full min-w-0 max-w-full overflow-hidden')}
+		>
+			{#snippet child({ props })}
+				<a
+					{...props}
+					href={resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: workspace._id })}
+					class="flex min-w-0 max-w-full items-center gap-2 overflow-hidden"
+				>
+					{@render workspaceEmojiGlyph(workspace.emoji, active)}
+					<span class="min-w-0 flex-1 truncate font-normal">{workspace.name}</span>
+				</a>
+			{/snippet}
+		</Sidebar.MenuButton>
+	</Sidebar.MenuItem>
+{/snippet}
+
+{#snippet threadRow(thread: SidebarThread)}
+	{@const active = thread.threadId === selectedThreadId}
+	{@const isPinned = thread.pinnedAt != null}
+	{@const deleteDescription = thread.workspaceId
+		? 'Thread dan pesannya akan dihapus permanen dari workspace ini.'
+		: 'Thread dan pesannya akan dihapus permanen.'}
+	<Sidebar.MenuItem class="min-w-0 overflow-hidden">
+		<Sidebar.MenuButton
+			isActive={active}
+			size="sm"
+			class={cn(sidebarItemClass(active), 'w-full min-w-0 max-w-full overflow-hidden pr-8')}
+		>
+			{#snippet child({ props })}
+				<a
+					{...props}
+					href={resolve('/app/(product)/threads/[threadId]', { threadId: thread.threadId })}
+					aria-label={thread.title}
+					title={thread.title}
+					class="flex min-w-0 max-w-full items-center gap-2 overflow-hidden"
+				>
+					<Icon icon={MessageSquareIcon} class="size-3.5 shrink-0" />
+					<span class="min-w-0 flex-1 truncate font-normal">
+						{truncateCharacters(thread.title, MOBILE_THREAD_TITLE_MAX_CHARS)}
+					</span>
+					{#if isPinned}
+						<Icon icon={PinIcon} class="size-3 shrink-0 text-primary/50" />
+					{/if}
+					{#if thread.status === 'streaming'}
+						<span class="inline-flex size-1.5 shrink-0 rounded-full bg-primary"></span>
+					{/if}
+				</a>
+			{/snippet}
+		</Sidebar.MenuButton>
+		<ThreadActionsMenu
+			variant="sidebar-row"
+			description={deleteDescription}
+			onDelete={() => handleDeleteThread(thread)}
+			{isPinned}
+			onTogglePin={() => handleTogglePin(thread)}
+		/>
+	</Sidebar.MenuItem>
+{/snippet}
 
 <Sidebar.Root collapsible="offcanvas" variant="transparent">
 	<Sidebar.Header class="gap-3 px-3 pb-3 pt-3.5">
@@ -90,7 +245,7 @@
 					class={sidebarItemClass(isHomeActive)}
 				>
 					{#snippet child({ props })}
-						<a href={resolve('/app')} {...props}>
+						<a {...props} href={resolve('/app/(product)')}>
 							<Icon icon={HomeIcon} class="size-3.5 shrink-0" />
 							<span>Home</span>
 						</a>
@@ -104,7 +259,7 @@
 					class={sidebarItemClass(isExploreActive)}
 				>
 					{#snippet child({ props })}
-						<a href={resolve('/app/explore')} {...props}>
+						<a {...props} href={resolve('/app/(product)/explore')}>
 							<Icon icon={TrendingUpIcon} class="size-3.5 shrink-0" />
 							<span>Jelajahi</span>
 						</a>
@@ -116,11 +271,73 @@
 
 	<Sidebar.Content class="min-h-0 px-3 pb-3 pt-2">
 		<div class="grid min-w-0 gap-5 overflow-hidden">
-			<div
-				class="rounded-[8px] border border-dashed border-mint-soft-border bg-mint-soft/50 px-3 py-4 text-center text-[12px] leading-relaxed text-muted-foreground"
+			<SidebarSection
+				label="Workspaces"
+				first
+				collapsible
+				storageKey={WORKSPACES_COLLAPSED_STORAGE_KEY}
 			>
-				Belum ada thread atau workspace.
-			</div>
+				{#snippet action()}
+					<CreateWorkspacePopover onSubmit={submitCreateWorkspace} />
+				{/snippet}
+				{#if sortedWorkspaces.length > 0}
+					<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
+						{#each sortedWorkspaces as workspace (workspace._id)}
+							{@render workspaceRow(workspace)}
+						{/each}
+					</Sidebar.Menu>
+				{:else}
+					<div
+						class="rounded-[8px] border border-dashed border-border/70 px-2.5 py-2 text-[11px] font-medium leading-5 text-muted-foreground"
+					>
+						Belum ada workspace.
+					</div>
+				{/if}
+			</SidebarSection>
+
+			<SidebarSection label="Threads" collapsible storageKey={THREADS_COLLAPSED_STORAGE_KEY}>
+				{#snippet action()}
+					<button
+						type="button"
+						onclick={runCreateThread}
+						class="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
+						aria-label="Thread baru"
+					>
+						<Icon icon={PlusIcon} class="size-3" />
+					</button>
+				{/snippet}
+				{#if sortedThreads.length > 0}
+					<div class="min-w-0 overflow-hidden">
+						<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
+							{#if pinnedThreads.length > 0}
+								<li role="presentation" aria-hidden="true" class="flex items-center gap-1 px-1">
+									<Icon icon={PinIcon} class="size-3 shrink-0 text-primary/60" />
+									<span
+										class="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground"
+									>
+										Disematkan
+									</span>
+								</li>
+								{#each pinnedThreads as thread (thread.threadId)}
+									{@render threadRow(thread)}
+								{/each}
+							{/if}
+							{#each recentThreads as thread (thread.threadId)}
+								{@render threadRow(thread)}
+							{/each}
+						</Sidebar.Menu>
+						{#if olderThreads.length > 0}
+							<ThreadArchiveGroup threads={olderThreads} {selectedThreadId} {threadRow} />
+						{/if}
+					</div>
+				{:else}
+					<div
+						class="rounded-[8px] border border-dashed border-border/70 px-2.5 py-2 text-[11px] font-medium leading-5 text-muted-foreground"
+					>
+						Belum ada thread.
+					</div>
+				{/if}
+			</SidebarSection>
 		</div>
 	</Sidebar.Content>
 
@@ -134,14 +351,13 @@
 	<Command.List>
 		<Command.Empty>Tidak ada hasil.</Command.Empty>
 		<Command.Group heading="Buat">
-			<Command.Item
-				onSelect={() => {
-					commandOpen = false;
-					goto(resolve('/app'));
-				}}
-			>
+			<Command.Item onSelect={runCreateThread}>
 				<Icon icon={MessageSquareIcon} class="size-4" />
 				Chat baru
+			</Command.Item>
+			<Command.Item onSelect={runCreateWorkspace}>
+				<Icon icon={LayoutGridIcon} class="size-4" />
+				Workspace baru
 			</Command.Item>
 		</Command.Group>
 		<Command.Group heading="Buka">
@@ -149,7 +365,7 @@
 				value="buka-beranda"
 				onSelect={() => {
 					commandOpen = false;
-					goto(resolve('/app'));
+					goto(resolve('/app/(product)'));
 				}}
 			>
 				<Icon icon={HomeIcon} class="size-4" />
@@ -159,7 +375,7 @@
 				value="buka-jelajahi"
 				onSelect={() => {
 					commandOpen = false;
-					goto(resolve('/app/explore'));
+					goto(resolve('/app/(product)/explore'));
 				}}
 			>
 				<Icon icon={TrendingUpIcon} class="size-4" />
@@ -176,5 +392,50 @@
 				Pengaturan
 			</Command.Item>
 		</Command.Group>
+		{#if sortedWorkspaces.length > 0}
+			<Command.Group heading="Workspaces">
+				{#each sortedWorkspaces as workspace (workspace._id)}
+					<Command.Item
+						value={`workspace-${workspace._id}`}
+						keywords={[workspace.name]}
+						onSelect={() => {
+							commandOpen = false;
+							goto(
+								resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: workspace._id })
+							);
+						}}
+					>
+						{@render workspaceEmojiGlyph(workspace.emoji, false)}
+						<span class="truncate">{workspace.name}</span>
+					</Command.Item>
+				{/each}
+			</Command.Group>
+		{/if}
+		{#if sortedThreads.length > 0}
+			<Command.Group heading="Threads">
+				{#each sortedThreads as thread (thread.threadId)}
+					<Command.Item
+						value={`thread-${thread.threadId}`}
+						keywords={[thread.title]}
+						onSelect={() => {
+							commandOpen = false;
+							goto(resolve('/app/(product)/threads/[threadId]', { threadId: thread.threadId }));
+						}}
+					>
+						<Icon icon={MessageSquareIcon} class="size-4" />
+						<span class="truncate">{thread.title}</span>
+					</Command.Item>
+				{/each}
+			</Command.Group>
+		{/if}
 	</Command.List>
 </Command.Dialog>
+
+<NameDialog
+	open={createDialogOpen}
+	onOpenChange={(open) => (createDialogOpen = open)}
+	title="Workspace baru"
+	description="Buat area riset personal."
+	submitLabel="Buat"
+	onSubmit={submitCreateWorkspace}
+/>

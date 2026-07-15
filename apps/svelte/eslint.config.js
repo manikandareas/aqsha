@@ -144,5 +144,29 @@ export default defineConfig(
 		rules: {
 			'svelte/no-navigation-without-resolve': 'off'
 		}
+	},
+	{
+		// Citation manager (Phase 9) renders EXTERNAL research URLs (DOI/publisher links opened in a new
+		// tab) plus internal deep links that resolve() cannot model here: a static settings link
+		// (`/app/settings/integrations`) reused verbatim from web, and a dynamic workspace-artifact reader
+		// href (`/app/workspaces/<id>/artifacts/<artifactId>`) whose route lands later in Phase 9. Same
+		// precedent as vendored `ui/**` + `marketing/**` + `settings/**` + thread source cards +
+		// discovery/explore above; the hrefs stay a clean 1:1 diff with `apps/web/features/citations/**`.
+		files: ['src/lib/features/citations/**', 'src/lib/components/citation/**'],
+		rules: {
+			'svelte/no-navigation-without-resolve': 'off'
+		}
+	},
+	{
+		// Workspaces artifact reader (Phase 9) renders EXTERNAL artifact locators — paper DOIs
+		// (`https://doi.org/…`), saved-page links, and object-storage file/download URLs (pdf/docx/image)
+		// opened or downloaded in a new tab — none of which resolve() can model (it maps internal SvelteKit
+		// route ids only). Internal-only crumbs ("Workspace" / "Back to workspace") still use resolve()
+		// inline. Same precedent as vendored `ui/**` + `marketing/**` + `settings/**` + thread source cards +
+		// discovery/explore + citations above; the hrefs stay a clean 1:1 diff with `apps/web/features/workspaces/**`.
+		files: ['src/lib/features/workspaces/**'],
+		rules: {
+			'svelte/no-navigation-without-resolve': 'off'
+		}
 	}
 );
