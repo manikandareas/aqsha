@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { PanelInline } from '$lib/hooks/panel-inline.svelte';
-	import { panelBodyColumnClass, sidePanelCardClass } from '$lib/panel-surface';
+	import { panelBodyColumnClass, sidePanelCardClass } from './panel-surface';
 
 	/**
 	 * Shared frame for every right side-panel surface — ported 1:1 from

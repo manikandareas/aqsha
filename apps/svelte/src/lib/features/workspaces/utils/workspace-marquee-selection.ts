@@ -1,4 +1,4 @@
-import { MAX_CONTEXT_ARTIFACTS } from '$lib/context-selection';
+import { MAX_CONTEXT_ARTIFACTS } from '$lib/features/threads/lib/context-selection';
 
 export type MarqueePoint = {
 	x: number;

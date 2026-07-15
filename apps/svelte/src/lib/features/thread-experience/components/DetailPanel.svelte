@@ -2,7 +2,7 @@
 	import { Icon, XIcon } from '$lib/icons';
 	import { Button } from '$lib/components/ui/button';
 	import SidePanelFrame from '$lib/components/layout/SidePanelFrame.svelte';
-	import { panelBodyPaddingClass } from '$lib/panel-surface';
+	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import { cn } from '$lib/utils';
 	import { searchKey } from '$lib/features/threads/lib/thread-panel-data';
 	import SourcesPanel from '$lib/features/threads/components/SourcesPanel.svelte';

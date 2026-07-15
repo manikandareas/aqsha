@@ -12,7 +12,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import PanelTitleLabel from './PanelTitleLabel.svelte';
-	import { panelHeaderBarClass } from '$lib/panel-surface';
+	import { panelHeaderBarClass } from './panel-surface';
 	import { cn } from '$lib/utils';
 
 	/**

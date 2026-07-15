@@ -20,7 +20,7 @@
 	import { Icon, FolderIcon } from '$lib/icons';
 	import * as ContextMenu from '$lib/components/ui/context-menu';
 	import LibraryArtifactCard from '$lib/components/LibraryArtifactCard.svelte';
-	import { libraryArtifactGridClass } from '$lib/library-grid';
+	import { libraryArtifactGridClass } from '../utils/library-grid';
 	import { cn } from '$lib/utils';
 	import ArtifactContextMenuContent from './ArtifactContextMenuContent.svelte';
 	import FolderContextMenuContent from './FolderContextMenuContent.svelte';

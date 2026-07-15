@@ -1,4 +1,4 @@
-import { MAX_UPLOAD_BYTES } from '$lib/artifact-upload-limits';
+import { MAX_UPLOAD_BYTES } from '../utils/artifact-upload-limits';
 import type { WorkspaceUploadStatus } from '../utils/workspace-file-upload';
 
 export type UploadQueueItem = {

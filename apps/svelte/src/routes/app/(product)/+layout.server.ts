@@ -1,5 +1,8 @@
 import type { LayoutServerLoad } from './$types';
-import { SIDEBAR_STATE_COOKIE, isSidebarOpenFromCookie } from '$lib/sidebar-state';
+import {
+	SIDEBAR_STATE_COOKIE,
+	isSidebarOpenFromCookie
+} from '$lib/components/layout/sidebar-state';
 
 /**
  * Reads the persisted sidebar open state from the `sidebar_state` cookie (written by

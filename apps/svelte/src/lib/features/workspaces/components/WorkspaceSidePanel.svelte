@@ -8,7 +8,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Icon, MessageSquarePlusIcon, XIcon } from '$lib/icons';
 	import { cn } from '$lib/utils';
-	import { panelBodyPaddingClass } from '$lib/panel-surface';
+	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import { getComposerMentions } from '$lib/features/threads/state/composer-mentions.svelte';
 	import { useThread } from '$lib/features/threads/api';
 	import { threadTitle } from '$lib/features/threads/types';

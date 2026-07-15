@@ -23,7 +23,7 @@
 	} from '$lib/components/ai-elements';
 	import { cn } from '$lib/utils';
 	import { queryKeys } from '$lib/query';
-	import { threadTranscriptColumnClass } from '$lib/panel-surface';
+	import { threadTranscriptColumnClass } from '$lib/components/layout/panel-surface';
 	import {
 		usePinnedThreads,
 		useSendStatus,

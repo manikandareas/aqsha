@@ -2,7 +2,7 @@ import {
 	isAllowedWorkspaceUploadFile,
 	UPLOAD_REJECTED_MESSAGE,
 	WORKSPACE_UPLOAD_ACCEPT
-} from '$lib/artifact-upload-policy';
+} from './artifact-upload-policy';
 import { readableApiErrorMessage } from '$lib/errors';
 
 export { isAllowedWorkspaceUploadFile, UPLOAD_REJECTED_MESSAGE, WORKSPACE_UPLOAD_ACCEPT };

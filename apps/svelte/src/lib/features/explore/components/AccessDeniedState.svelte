@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { panelBodyPaddingClass } from '$lib/panel-surface';
+	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import { cn } from '$lib/utils';
 
 	// Port of `apps/web/features/thread-experience/components/access-denied-state.tsx`.

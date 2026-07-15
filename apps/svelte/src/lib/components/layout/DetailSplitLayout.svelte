@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { PanelInline } from '$lib/hooks/panel-inline.svelte';
-	import { detailSplitMainSurfaceClass, PANEL_TRANSITION_MS } from '$lib/panel-surface';
+	import { detailSplitMainSurfaceClass, PANEL_TRANSITION_MS } from './panel-surface';
 	import { panelExpandContext } from './panel-expand.svelte';
 	import { cn } from '$lib/utils';
 

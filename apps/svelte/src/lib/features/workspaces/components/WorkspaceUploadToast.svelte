@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from '$lib/artifact-upload-limits';
+	import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from '../utils/artifact-upload-limits';
 	import {
 		MAX_WORKSPACE_UPLOAD_FILES,
 		type WorkspaceUploadProgressEvent,

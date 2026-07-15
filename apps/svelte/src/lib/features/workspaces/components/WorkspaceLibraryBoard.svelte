@@ -7,7 +7,7 @@
 		panelBodyColumnClass,
 		panelBodyPaddingClass,
 		panelCardToolbarClass
-	} from '$lib/panel-surface';
+	} from '$lib/components/layout/panel-surface';
 	import { DOCUMENT_AUTHORING_ENABLED } from '$lib/features/workspaces/document-authoring';
 	import { useFileDropzone } from '../hooks/use-file-dropzone.svelte';
 	import { createWorkspaceFolderNav } from '../hooks/use-workspace-folder-nav.svelte';

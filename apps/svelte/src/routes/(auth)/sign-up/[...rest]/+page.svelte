@@ -8,9 +8,8 @@
 
 <!-- Catch-all `[...rest]` mirrors Next's optional catch-all for Clerk path routing (plan §7).
      `signInUrl` + `forceRedirectUrl`/`fallbackRedirectUrl` mirror
-     `apps/web/app/sign-up/[[...rest]]/page.tsx`: sign-up selesai → /onboarding (bukan /app). -->
+     `apps/web/app/sign-up/[[...rest]]/page.tsx`: sign-up selesai → /onboarding (bukan /app).
+     Centered chrome lives in `(auth)/+layout.svelte`. -->
 <SeoHead seo={data.seo} />
 
-<main class="flex min-h-svh items-center justify-center bg-background px-5 py-10">
-	<SignUp signInUrl="/sign-in" forceRedirectUrl="/onboarding" fallbackRedirectUrl="/onboarding" />
-</main>
+<SignUp signInUrl="/sign-in" forceRedirectUrl="/onboarding" fallbackRedirectUrl="/onboarding" />

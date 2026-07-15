@@ -26,7 +26,7 @@
 		Trash2Icon,
 		UploadIcon
 	} from '$lib/icons';
-	import { panelBodyPaddingClass } from '$lib/panel-surface';
+	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import { cn } from '$lib/utils';
 	import {
 		type CitationListFilters,

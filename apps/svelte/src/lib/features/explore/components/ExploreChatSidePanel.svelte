@@ -7,7 +7,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Icon, MessageSquarePlusIcon, XIcon } from '$lib/icons';
 	import { cn } from '$lib/utils';
-	import { panelBodyPaddingClass } from '$lib/panel-surface';
+	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import {
 		useDeleteThread,
 		usePinnedThreads,

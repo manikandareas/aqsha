@@ -6,7 +6,7 @@
 	import ResponsiveSidePanel from '$lib/components/layout/ResponsiveSidePanel.svelte';
 	import PanelOpenButton from '$lib/components/layout/PanelOpenButton.svelte';
 	import { Icon, ChevronRightIcon, MessageSquareIcon } from '$lib/icons';
-	import { panelHeaderBarClass } from '$lib/panel-surface';
+	import { panelHeaderBarClass } from '$lib/components/layout/panel-surface';
 	import {
 		ComposerMentions,
 		setComposerMentions

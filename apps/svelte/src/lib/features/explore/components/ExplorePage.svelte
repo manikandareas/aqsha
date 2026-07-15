@@ -8,7 +8,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Icon, ChevronRightIcon, MessageSquareIcon, PanelLeftIcon } from '$lib/icons';
 	import { cn } from '$lib/utils';
-	import { panelHeaderBarClass } from '$lib/panel-surface';
+	import { panelHeaderBarClass } from '$lib/components/layout/panel-surface';
 	import {
 		ComposerMentions,
 		setComposerMentions

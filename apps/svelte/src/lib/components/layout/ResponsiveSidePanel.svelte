@@ -3,7 +3,7 @@
 	import * as Drawer from '$lib/components/ui/drawer/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { PanelInline } from '$lib/hooks/panel-inline.svelte';
-	import { PANEL_TRANSITION_MS, sidePanelColumnClass } from '$lib/panel-surface';
+	import { PANEL_TRANSITION_MS, sidePanelColumnClass } from './panel-surface';
 	import { cn } from '$lib/utils';
 
 	/**

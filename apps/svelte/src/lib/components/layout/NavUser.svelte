@@ -24,7 +24,7 @@
 
 	async function signOut() {
 		await clerkSignOut();
-		await goto(resolve('/sign-in'), { invalidateAll: true });
+		await goto(resolve('/(auth)/sign-in'), { invalidateAll: true });
 	}
 
 	const menuItemClass =
