@@ -12,7 +12,7 @@ Untuk setiap proses brainstorming dan planning, gunakan **bahasa Indonesia**. Is
 - `docs/README.md` — index of product/architecture/migration/agent/features/ops docs.
 - `docs/product/versioning-and-changelog.md` — decision guide for product version bumps and whether a change needs a changelog entry. Consult when closing any user-facing work.
 - `docs/architecture/` — architecture and design notes (overview, tech stack, API domains, service layer, contracts).
-- `BRAND-IDENTITY.md` — brand voice and palette source of truth.
+- `apps/svelte/PRODUCT.md` / `apps/svelte/DESIGN.md` — product positioning and visual system for the Svelte app.
 - Mastra docs (`.mcp.json` `@mastra/mcp-docs-server`, or context7 `/mastra-ai/mastra`) — consult before editing the agent runtime in `apps/agent/src/mastra/` (agents, tools, skills, workflows, processors, memory). Verify Mastra APIs against the installed `@mastra/core` version; don't invent them.
 
 Next.js in this repo is 16.x. Before writing frontend code that depends on framework behavior, consult the installed `node_modules/next/dist/docs/` docs.
@@ -96,3 +96,10 @@ Example — `// Runes-only mode (plan §3.4) turns legacy syntax into a build er
 - For new or touched backend code, return structured application errors from `packages/db/src/appError.ts`.
 - Structured error payload shape: `{ message: string; code: string; severity?: "info" | "warning" | "error"; field?: string }`.
 - Keep intentional product return unions as return values instead of thrown errors, such as send-message rate-limit or billing-block results.
+
+## Design Context
+
+`apps/svelte` carries its own design context for the Impeccable design skill:
+
+- `apps/svelte/PRODUCT.md` — register `product`, platform `web`. Primary users are student researchers; positioning is a blend of a serious research engine (Astra, `/deep`, citations) with an approachable student-writing workspace ("Ideas, neatly linked"). Personality: calm, clear, playful. Anti-references: fear-driven AI-safety tone, generic AI SaaS, strict academic/institutional severity. Target WCAG 2.2 AA.
+- `apps/svelte/DESIGN.md` — the visual system captured from `src/styles/globals.css` (warm-cream OKLCH palette, Inter + Instrument Serif + JetBrains Mono + Caveat, mint/lavender/coral/lemon accents, keycap buttons, full dark mode). Consult before changing tokens or building new svelte screens.
