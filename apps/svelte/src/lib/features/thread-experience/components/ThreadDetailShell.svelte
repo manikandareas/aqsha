@@ -116,23 +116,33 @@
 		<span class="text-sm">Memuat thread…</span>
 	</div>
 {:else}
-	<DetailSplitLayout
-		{sideOpen}
-		onSideOpenChange={(open) => {
-			if (!open) panel.close();
-		}}
-	>
-		{#snippet main()}
-			<MastraChatThreadSurface
-				agent={agent!}
-				{threadId}
-				{threadAgentKind}
-				{compact}
-				{initialContent}
-			/>
-		{/snippet}
-		{#snippet side()}
-			<DetailPanel controller={panel} />
-		{/snippet}
-	</DetailSplitLayout>
+	<!--
+		Bounded-height root — restores web `ThreadShellLayout`'s wrapper (`h-svh min-h-0 overflow-hidden`).
+		Every layer below (DetailSplitLayout provider, grid, inset, the surface `main`) is `min-h-svh`/`flex-1`
+		with NO fixed height; without this fixed `h-svh` ancestor the chain is content-driven, so the surface's
+		`overflow-y-auto` never engages (the body scrolls instead) and the landing hero's `flex-1 items-center
+		justify-center` centers inside a content-tall region → the giant top gap. `ThreadDetailShell` merged
+		web's `ThreadShellLayout` role but had dropped this div.
+	-->
+	<div class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
+		<DetailSplitLayout
+			{sideOpen}
+			onSideOpenChange={(open) => {
+				if (!open) panel.close();
+			}}
+		>
+			{#snippet main()}
+				<MastraChatThreadSurface
+					agent={agent!}
+					{threadId}
+					{threadAgentKind}
+					{compact}
+					{initialContent}
+				/>
+			{/snippet}
+			{#snippet side()}
+				<DetailPanel controller={panel} />
+			{/snippet}
+		</DetailSplitLayout>
+	</div>
 {/if}
