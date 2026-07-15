@@ -226,7 +226,7 @@ export {
 } from "./explore/model";
 
 // Citation Manager (Fase 1) — Citation Library workspace-scoped + import .bib/.ris +
-// render CSL multi-style (lihat docs/adr-citation-csl-engine.md).
+// render CSL multi-style (lihat docs/features/citations/csl-engine-adr.md).
 export {
   CITATION_EXPORT_FORMATS,
   CITATION_STYLES,

@@ -14,8 +14,6 @@ import { callerId } from "../lib/tool-context";
  *
  * Validasi ownership + tipe markdown di sini supaya sinyal tepercaya; penyuntingan + billing tetap
  * dijaga route `/blocknote-ai/chat` saat AI editor benar-benar berjalan. READ-only, tanpa debit.
- *
- * Dasar: docs/blocknote-native-ai-astra-implementation-plan.md §7.1 (Fase 3.5, opsional D8).
  */
 export const requestDocumentEdit = createTool({
   id: "request_document_edit",

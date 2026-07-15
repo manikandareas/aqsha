@@ -7,8 +7,6 @@ import type { EntitlementResult } from "./billing/types";
  * `/blocknote-ai/chat`). xl-ai/server (ai@6) sengaja DIKURUNG di route api; services tetap bebas
  * `ai` supaya tak bentrok dengan agent (ai@7-beta). Di sini hidup: prompt Bahasa/brand, gerbang
  * ownership artifact, dan billing (precheck + debit idempotent rate Lite, event `doc_ai_edit`).
- *
- * Lihat docs/blocknote-native-ai-astra-implementation-plan.md §1 (D7/D9) + §3.2/§5.
  */
 
 /** Provider billing untuk event `doc_ai_edit` (gateway OpenAI-compatible yang sama dengan Astra). */

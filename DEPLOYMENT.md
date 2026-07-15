@@ -41,7 +41,7 @@ In Dokploy: **Create Project → Create Service → Compose**.
 Secrets live in **Infisical** (`https://secrets.aqshara.com`), not in the Dokploy Environment tab.
 The app containers pull folder `/app` at start via their entrypoint (`infisical run`); the Dokploy tab
 only holds the bootstrap + infra credentials that stock images read. See the full model + owner
-checklist in **`docs/infisical-secrets-strategy.md`**; the root **`.env.example`** is the annotated map
+checklist in **`docs/ops/secrets/infisical-strategy.md`**; the root **`.env.example`** is the annotated map
 of what goes where (Bagian A = Dokploy, Bagian B/C/D = Infisical).
 
 In the service's **Environment** tab, set only **Bagian A** of `.env.example`:
@@ -128,8 +128,8 @@ The bucket stays private (`minio-init` runs `mc anonymous set none`); access is 
 
 The sections below are quick reference. For the **step-by-step go-live** (owner prerequisites, exact
 env per pillar, verification checklists, troubleshooting) across CI/CD + Sentry (errors · logs ·
-uptime · cron) + Langfuse on-demand, see **`docs/observability-cicd-runbook.md`** (design rationale +
-migration off Grafana/Kuma: `docs/observability-sentry-consolidation-plan.md`).
+uptime · cron) + Langfuse on-demand, see **`docs/ops/observability/cicd-runbook.md`** (design rationale +
+migration off Grafana/Kuma: `docs/ops/observability/sentry-consolidation-plan.md`).
 
 ## Observability (Langfuse) — optional
 
@@ -180,7 +180,7 @@ Branch flow: feature branches → `development` (integration + local test, **no 
 `NEXT_PUBLIC_*` + the Sentry build args are pulled from **Infisical `/build`** at build time (via
 `Infisical/secrets-action`) and baked into the web image; the Dokploy trigger creds come from Infisical
 `/deploy`. Each image bakes `GIT_COMMIT` → Sentry `release` + Langfuse tag, so errors/traces tie back
-to a commit. Full model + owner checklist: **`docs/infisical-secrets-strategy.md`**.
+to a commit. Full model + owner checklist: **`docs/ops/secrets/infisical-strategy.md`**.
 
 **Owner prerequisites (one-time):**
 
@@ -207,7 +207,7 @@ docker compose up -d
 The images still start via the Infisical entrypoint: set the five `INFISICAL_*` bootstrap vars (env
 `prod`) in an `.env` next to compose so `infisical run` pulls `/app`; if Infisical is unreachable,
 leave them empty (entrypoint execs directly) and supply `/app` secrets via a compose `env_file:`
-override. See `docs/infisical-secrets-strategy.md` → "Local / emergency full-stack".
+override. See `docs/ops/secrets/infisical-strategy.md` → "Local / emergency full-stack".
 
 ## Staging
 
@@ -232,13 +232,13 @@ Create it like Steps 1–8 with these deltas:
   POSTGRES_HOST_PORT=5436            # 5435 is taken by the prod stack
   IMAGE_TAG=staging                  # rollback: sha-<short>-staging
   # Sentry (errors/logs/uptime) is env-gated by the DSNs in /app; staging uses SENTRY_ENVIRONMENT=staging
-  # and its own uptime monitors at lower severity (see docs/observability-cicd-runbook.md).
+  # and its own uptime monitors at lower severity (see docs/ops/observability/cicd-runbook.md).
   ```
 
 - **Step 3 (Domains)**: `staging.<domain>` → web:3000, `api.staging.<domain>` → api:3001,
   `assets.staging.<domain>` → minio:9000 (DNS A-records required, same VPS IP).
 - **Infisical env `staging`** must be populated first (all four folders — see
-  `docs/infisical-secrets-strategy.md` → "Staging"): `/app` internal wiring uses
+  `docs/ops/secrets/infisical-strategy.md` → "Staging"): `/app` internal wiring uses
   `${staging.infra.*}` references (never paste `${prod.infra.*}` — `dokploy-staging` can't read
   prod, the container would crash-loop), Clerk **development instance** keys (`pk_test`/`sk_test`),
   `MAYAR_SERVER=sandbox` + sandbox key, `SENTRY_ENVIRONMENT=staging`,
@@ -278,7 +278,7 @@ in the right project, symbolicated, tagged with the commit `release`.
 **Sentry is the daily incident console** — errors, selected structured logs, uptime, and cron
 monitoring, all in one place. **Langfuse is the specialist tool** for LLM trace/token/cost/eval and
 is opened only when analysing agent behaviour or spend, not as an alert inbox. Rationale and the full
-runbook: `docs/observability-cicd-runbook.md`.
+runbook: `docs/ops/observability/cicd-runbook.md`.
 
 What each signal owns:
 

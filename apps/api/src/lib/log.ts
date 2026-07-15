@@ -16,7 +16,7 @@ import { pinoRecordToSentryLog } from "./sentry-log-bridge";
  * SINK SENTRY LOGS: bila `SENTRY_DSN_API` ada, stream KEDUA (inline, bukan worker-thread) mem-bridge
  * baris terpilih (warn/error + info `notable`) ke Sentry Logs lewat `pinoRecordToSentryLog`. stdout
  * tetap sink utama; Sentry hanya menerima subset diagnostik ter-redaksi. Lihat
- * docs/observability-sentry-consolidation-plan.md §5.1.
+ * docs/ops/observability/sentry-consolidation-plan.md §5.1.
  */
 const isProd = process.env.NODE_ENV === "production";
 const SERVICE = "aqsha-api";

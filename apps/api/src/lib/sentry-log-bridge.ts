@@ -3,7 +3,7 @@ import { scrubLogAttributes, type ScalarAttribute } from "@aqsha/db";
 /**
  * Jembatan Pino → Sentry Logs (murni, tanpa side-effect — dipanggil sink di `./log.ts`).
  *
- * Policy telemetry (docs/observability-sentry-consolidation-plan.md §5.1): TIDAK semua stdout dikirim
+ * Policy telemetry (docs/ops/observability/sentry-consolidation-plan.md §5.1): TIDAK semua stdout dikirim
  * ke Sentry.
  *  - `fatal`/`error`/`warn` → selalu di-bridge (searchable log, melengkapi event exception).
  *  - `info` → HANYA event lifecycle bernilai tinggi yang menandai dirinya `notable: true`

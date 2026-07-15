@@ -24,8 +24,8 @@ import { rateLimitMacro } from "../plugins/rate-limit";
  * bebas `ai` supaya tak bentrok dengan agent (ai@7-beta). Auth Clerk + ownership + billing (rate
  * Lite, event `doc_ai_edit`, idempotent) hidup di route ini via `DocAiService` (helper murni).
  *
- * Dasar: docs/blocknote-native-ai-astra-implementation-plan.md §5; kontrak route =
- * blocknotejs.org/docs/features/ai/backend-integration (body `{ messages, toolDefinitions }`).
+ * Kontrak route = blocknotejs.org/docs/features/ai/backend-integration
+ * (body `{ messages, toolDefinitions }`).
  */
 
 /**

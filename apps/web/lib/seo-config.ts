@@ -3,7 +3,7 @@
  *
  * Cara pakai: isi nilai bertanda `TODO:` di bawah. Sisanya sudah punya default
  * yang aman. Dikonsumsi oleh metadata (lib/metadata.ts), robots.ts, sitemap.ts,
- * manifest.ts, dan JSON-LD (lihat docs/seo/implementation-plan-a-b.md).
+ * manifest.ts, dan JSON-LD.
  *
  * `siteUrl` dibaca dari env NEXT_PUBLIC_SITE_URL agar gampang dipindah domain
  * tanpa ubah kode. Tambahkan ke apps/web/.env.example & .env.local.

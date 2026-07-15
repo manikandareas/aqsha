@@ -1,6 +1,6 @@
 # Baseline freeze — migrasi `apps/web` → `apps/svelte`
 
-> Bagian dari **Phase 0** (§10 [`../apps-svelte-migration-plan.md`](../apps-svelte-migration-plan.md)).
+> Bagian dari **Phase 0** (§10 [`svelte-plan.md`](svelte-plan.md)).
 > Dokumen ini mengunci **satu commit reference** dan mendeklarasikan freeze `apps/web`.
 
 ## Commit reference (frozen baseline)
@@ -14,7 +14,7 @@
 | Tanggal commit | 2026-07-13 22:10:05 +0800 |
 | Tanggal freeze | 2026-07-14 |
 
-Working tree saat freeze: bersih. Yang berubah pada Phase 0 hanya harness/doc: `docs/apps-svelte-migration-plan.md` (plan) + `docs/migration/**` (harness ini). Tidak ada file `apps/web` yang berubah — sesuai gate Phase 0 ("hanya harness/doc berubah").
+Working tree saat freeze: bersih. Yang berubah pada Phase 0 hanya harness/doc: `docs/migration/svelte-plan.md` (plan) + `docs/migration/**` (harness ini). Tidak ada file `apps/web` yang berubah — sesuai gate Phase 0 ("hanya harness/doc berubah").
 
 Semua porting Svelte di-diff terhadap commit ini. Bila `apps/web` **harus** berubah setelah freeze (mis. security hotfix), catat di [§Freeze exceptions](#freeze-exceptions), update commit reference secara eksplisit, dan pastikan perubahan itu juga diport ke Svelte.
 

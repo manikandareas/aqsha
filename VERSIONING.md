@@ -96,7 +96,7 @@ redeploy — the push to `main` already shipped the images via `deploy.yml`; the
 
 - **Product-facing** — the curated "Apa yang baru" entries in `apps/web/content/changelog/`. Written by
   hand, in product voice, for users. This is the one shown in the app. Editorial guidance (when to add
-  one, categories, mechanics) lives in [docs/versioning-and-changelog.md](docs/versioning-and-changelog.md).
+  one, categories, mechanics) lives in [docs/product/versioning-and-changelog.md](docs/product/versioning-and-changelog.md).
 - **Developer-facing** — the auto-generated GitHub Release notes (from merged PRs/commits). For the team.
 
 Keep them separate: the GitHub Release is the raw record; the MDX changelog is the human story. The
