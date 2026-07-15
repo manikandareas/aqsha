@@ -1,15 +1,11 @@
 <script lang="ts">
 	import { SignIn } from 'svelte-clerk';
-	import { siteName } from '$lib/seo/config';
+	import { PageTitle } from '$lib/seo';
 </script>
 
-<!-- Catch-all `[...rest]` mirrors Next's optional catch-all `[[...rest]]` for Clerk's path routing
-     (plan §7). svelte-clerk auto-derives `path` from the route; `signUpUrl`/`fallbackRedirectUrl`
-     passed explicitly to mirror `apps/web/app/sign-in/[[...rest]]/page.tsx`. Sign-in has no own
-     metadata in web → inherits root default title "Aqsha". Centered chrome lives in
-     `(auth)/+layout.svelte`. -->
-<svelte:head>
-	<title>{siteName}</title>
-</svelte:head>
+<!-- Catch-all `[...rest]` for Clerk path routing (same role as Next optional catch-all `[[...rest]]`).
+     svelte-clerk auto-derives `path` from the route; `signUpUrl`/`fallbackRedirectUrl` set explicitly.
+     Centered chrome lives in `(auth)/+layout.svelte`. -->
+<PageTitle title="Sign in" />
 
 <SignIn signUpUrl="/sign-up" fallbackRedirectUrl="/app" />

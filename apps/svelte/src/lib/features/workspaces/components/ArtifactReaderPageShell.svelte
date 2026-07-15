@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { buildPaperMentionLabel, type ContextRef } from '@aqsha/chat-core';
+	import { PageTitle } from '$lib/seo';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import ResponsiveSidePanel from '$lib/components/layout/ResponsiveSidePanel.svelte';
 	import {
@@ -11,24 +12,22 @@
 	import ArtifactDetailView from './ArtifactDetailView.svelte';
 
 	/**
-	 * Standalone artifact reader page shell — Svelte port of
-	 * `apps/web/features/workspaces/components/artifact-reader-page-shell.tsx`. Owns the fixed `h-svh`
-	 * frame (so the reader's inner `overflow-y-auto` works — see the DetailSplitLayout `h-svh`-ancestor
-	 * gotcha), fetches the artifact via `useArtifactDetailData(() => artifactId)`, and passes the data
-	 * DOWN to `ArtifactDetailView` (variant="page"). The reader's header carries a "Chat" open toggle.
+	 * Standalone artifact reader page shell. Owns the fixed `h-svh` frame (so the reader's inner
+	 * `overflow-y-auto` works — see the DetailSplitLayout `h-svh`-ancestor gotcha), fetches the artifact
+	 * via `useArtifactDetailData(() => artifactId)`, and passes the data DOWN to `ArtifactDetailView`
+	 * (variant="page"). The reader's header carries a "Chat" open toggle.
 	 *
 	 * The Astra chat panel reuses the Explore chat surface (`ExploreChatSidePanel`) with the current
 	 * artifact injected as an ambient `paper` ContextRef via the shared `ComposerMentions` channel — so
 	 * sending a message auto-pins the document as context and archives the new thread to its workspace.
-	 * DIVERGENCE (documented): web's `WorkspaceChatSidePanel` scopes the thread switcher to the
-	 * workspace's threads; reusing `ExploreChatSidePanel` shows the global thread list. Functional parity
-	 * (chat about this artifact) holds via the ambient ref; the switcher scoping is the only difference.
+	 * The workspace-scoped thread switcher is not used here; `ExploreChatSidePanel` shows the global
+	 * thread list. Chat-about-this-artifact parity holds via the ambient ref.
 	 */
 	let { workspaceId, artifactId }: { workspaceId: string; artifactId: string } = $props();
 
 	const data = useArtifactDetailData(() => artifactId);
 
-	// Shared per-tree channel (§3.5) — publisher (this artifact) + consumer (panel composer).
+	// Shared per-tree channel — publisher (this artifact) + consumer (panel composer).
 	const mentions = new ComposerMentions();
 	setComposerMentions(mentions);
 
@@ -51,6 +50,9 @@
 		mentions.syncAmbientFromPage(ambientContextRefs);
 	});
 
+	// Tab title: the loaded artifact title (nested one level under the composite), else "Workspaces".
+	const pageTitle = $derived(data.artifact?.artifact?.title ?? 'Workspaces');
+
 	let chatOpen = $state(false);
 	let threadId = $state<string | null>(null);
 
@@ -59,6 +61,8 @@
 		if (next !== null) chatOpen = true;
 	}
 </script>
+
+<PageTitle title={pageTitle} />
 
 <main class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
 	<DetailSplitLayout sideOpen={chatOpen} onSideOpenChange={(open) => (chatOpen = open)}>

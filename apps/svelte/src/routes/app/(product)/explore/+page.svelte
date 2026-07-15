@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { PageTitle } from '$lib/seo';
 	import ExplorePage from '$lib/features/explore/components/ExplorePage.svelte';
 
-	// `/app/explore` — the discovery surface (feed / search two-state + Astra chat panel). Phase 8.
 </script>
+
+<PageTitle title="Jelajahi" />
 
 <ExplorePage />

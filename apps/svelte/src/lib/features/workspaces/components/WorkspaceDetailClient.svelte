@@ -7,6 +7,7 @@
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import ResponsiveSidePanel from '$lib/components/layout/ResponsiveSidePanel.svelte';
 	import AppLoadingOverlay from '$lib/components/layout/AppLoadingOverlay.svelte';
+	import { PageTitle } from '$lib/seo';
 	import {
 		ComposerMentions,
 		getComposerMentions,
@@ -20,17 +21,16 @@
 	import WorkspaceSidePanel from './WorkspaceSidePanel.svelte';
 
 	/**
-	 * Workspace detail — Svelte port of `workspace-detail-client.tsx`. Provides the per-tree
-	 * `ComposerMentions` (with the `@Workspace` ambient pill) + `WorkspacePanelController` (URL `?panel=`),
-	 * then renders the library surface (main) + the tabbed `Chat · Sitasi` side panel inside a
-	 * `DetailSplitLayout`. GOTCHA (memory): the split layout needs a fixed-height `h-svh` ancestor or its
-	 * inner `overflow-y-auto` dies — hence the bounded `<main>`.
+	 * Workspace detail. Provides the per-tree `ComposerMentions` (with the `@Workspace` ambient pill) +
+	 * `WorkspacePanelController` (URL `?panel=`), then renders the library surface (main) + the tabbed
+	 * `Chat · Sitasi` side panel inside a `DetailSplitLayout`. GOTCHA: the split layout needs a
+	 * fixed-height `h-svh` ancestor or its inner `overflow-y-auto` dies — hence the bounded `<main>`.
 	 */
 	let { workspaceId }: { workspaceId: string } = $props();
 
 	const data = useWorkspaceDetailData(() => workspaceId);
 
-	// Per-tree channels (never module singletons, §3.5).
+	// Per-tree channels (never module singletons).
 	setComposerMentions(new ComposerMentions());
 	const mentions = getComposerMentions();
 	const panel = setWorkspacePanel(new WorkspacePanelController());
@@ -67,11 +67,15 @@
 	);
 
 	const workspace = $derived(data.workspace);
+	// Tab title: the loaded workspace name, else "Workspaces" (loading / not-found).
+	const pageTitle = $derived(workspace?.name ?? 'Workspaces');
 	const leftSidebar = Sidebar.useSidebar();
 	const isLeftSidebarOpen = $derived(
 		leftSidebar.isMobile ? leftSidebar.openMobile : leftSidebar.open
 	);
 </script>
+
+<PageTitle title={pageTitle} />
 
 <main class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
 	{#if data.isLoading}

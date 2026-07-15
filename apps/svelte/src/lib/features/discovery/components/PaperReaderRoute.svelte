@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { buildExternalPaperMentionLabel, type ContextRef } from '@aqsha/chat-core';
+	import { PageTitle } from '$lib/seo';
 	import { usePaper } from '../api';
 	import ExploreReaderChatShell from './ExploreReaderChatShell.svelte';
 	import PaperReader from './PaperReader.svelte';
@@ -15,6 +16,8 @@
 			: []
 	);
 </script>
+
+<PageTitle title={paperTitle ?? 'Jelajahi'} />
 
 <ExploreReaderChatShell breadcrumb="Paper" {ambientContextRefs}>
 	{#snippet children({ openChat })}

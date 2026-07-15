@@ -3,6 +3,7 @@
 	import { useClerkContext } from 'svelte-clerk';
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { Spinner } from '$lib/components/ui/spinner';
+	import { PageTitle } from '$lib/seo';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import { clerkTokenGetter } from '$lib/auth/token';
 	import { useThread } from '$lib/features/threads/api';
@@ -62,6 +63,9 @@
 		threadDetail.data?.agentKind === 'pro' ? 'pro' : 'lite'
 	);
 
+	// Tab title: the loaded thread title, else "Threads" (also the /app new-thread landing + loading).
+	const pageTitle = $derived(threadDetail.data?.title ?? 'Threads');
+
 	// THX-8: seed the timeline from server memory (400 messages ≈ 200 turns — beyond a sane thread).
 	const history = createQuery(() => ({
 		queryKey: ['mastra', 'thread-messages', threadIdProp],
@@ -113,6 +117,8 @@
 
 	const sideOpen = $derived(isThreadPanelOpen(panel.mode));
 </script>
+
+<PageTitle title={pageTitle} />
 
 {#if loading || !agent}
 	<div class="flex h-svh flex-1 items-center justify-center gap-2 text-muted-foreground">
