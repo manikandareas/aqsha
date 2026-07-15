@@ -8,6 +8,7 @@
 		panelBodyPaddingClass,
 		panelCardToolbarClass
 	} from '$lib/panel-surface';
+	import { DOCUMENT_AUTHORING_ENABLED } from '$lib/features/workspaces/document-authoring';
 	import { useFileDropzone } from '../hooks/use-file-dropzone.svelte';
 	import { createWorkspaceFolderNav } from '../hooks/use-workspace-folder-nav.svelte';
 	import {
@@ -343,10 +344,13 @@
 				<Icon icon={FolderIcon} class="size-4" />
 				Folder baru
 			</ContextMenu.Item>
-			<ContextMenu.Item onSelect={onCreateDocument}>
-				<Icon icon={FileTextIcon} class="size-4" />
-				Dokumen baru
-			</ContextMenu.Item>
+			{#if DOCUMENT_AUTHORING_ENABLED}
+				<!-- Authored blank document — deferred to editor redesign (§0 #9). -->
+				<ContextMenu.Item onSelect={onCreateDocument}>
+					<Icon icon={FileTextIcon} class="size-4" />
+					Dokumen baru
+				</ContextMenu.Item>
+			{/if}
 			<ContextMenu.Item onSelect={onCreateUrl}>
 				<Icon icon={LinkIcon} class="size-4" />
 				Simpan URL

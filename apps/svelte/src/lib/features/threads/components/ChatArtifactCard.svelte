@@ -1,19 +1,26 @@
 <script lang="ts">
-	import { Icon, FileTextIcon } from '$lib/icons';
+	import { toast } from 'svelte-sonner';
+	import { Icon, CheckIcon, FileTextIcon, FolderIcon } from '$lib/icons';
+	import { Button } from '$lib/components/ui/button';
+	import * as Popover from '$lib/components/ui/popover';
+	import { useLinkArtifactToWorkspace } from '$lib/features/artifacts/api';
+	import WorkspacePicker from '$lib/features/workspaces/components/WorkspacePicker.svelte';
 	import type { ArtifactCardModel } from '../lib/timeline-types';
 	import { getMessageInteractions } from './message-interactions';
 
 	/**
-	 * Agent-created document card (Slice 6.5) — a successful `propose_artifact`. Clicking the title
-	 * opens the artifact reader in the right panel (`openArtifact`); in compact chat panels (no slot) it
-	 * is static. Port of `chat-artifact-card.tsx`.
-	 *
-	 * Phase 9 seam: "Save to workspace" (FolderIcon → WorkspacePicker → `linkToWorkspace`) is deferred to
-	 * Phase 9 (workspaces + artifacts APIs). Rendered here without the save affordance until then.
+	 * Agent-created document card (Slice 6.5) — a successful `propose_artifact`. Artifact is
+	 * BORN-HEADLESS (`workspaceId=null`): offer Save-to-workspace (FolderIcon → picker →
+	 * `linkToWorkspace`). Once saved → static "Tersimpan" badge. Clicking the title opens the artifact
+	 * reader in the right panel (`openArtifact`); in compact chat panels (no slot) it is static. Port of
+	 * `chat-artifact-card.tsx`.
 	 */
 	let { model }: { model: ArtifactCardModel } = $props();
 
 	const interactions = getMessageInteractions();
+	const link = useLinkArtifactToWorkspace();
+	let open = $state(false);
+	let saved = $state(false);
 </script>
 
 <div
@@ -40,5 +47,48 @@
 		<div class="flex min-w-0 flex-1 items-start gap-2">
 			{@render titleBlock()}
 		</div>
+	{/if}
+
+	{#if saved}
+		<span
+			class="inline-flex shrink-0 items-center gap-1 self-center px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+		>
+			<Icon icon={CheckIcon} class="size-3.5" />
+			Tersimpan
+		</span>
+	{:else}
+		<Popover.Root bind:open>
+			<Popover.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						type="button"
+						variant="ghost"
+						size="icon"
+						class="size-7 shrink-0 self-center"
+						aria-label="Simpan ke workspace"
+					>
+						<Icon icon={FolderIcon} class="size-4" />
+					</Button>
+				{/snippet}
+			</Popover.Trigger>
+			<Popover.Content align="end" class="w-64 p-2">
+				<p class="px-1 pb-1.5 text-[12px] font-medium text-foreground">Simpan ke workspace</p>
+				<WorkspacePicker
+					disabled={link.isPending}
+					onSelect={(workspaceId) =>
+						link.mutate(
+							{ id: model.artifactId, workspaceId },
+							{
+								onSuccess: () => {
+									toast.success('Disimpan ke workspace');
+									saved = true;
+									open = false;
+								}
+							}
+						)}
+				/>
+			</Popover.Content>
+		</Popover.Root>
 	{/if}
 </div>

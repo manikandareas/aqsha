@@ -33,8 +33,7 @@
 	<div class="mt-5 grid max-w-[17rem] gap-1.5">
 		<p class="text-[15px] font-semibold text-foreground">Belum ada referensi</p>
 		<p class="text-[13px] font-medium leading-relaxed text-muted-foreground">
-			Kumpulkan referensi workspace ini untuk disisipkan ke dokumen dan diekspor sebagai daftar
-			pustaka.
+			Kumpulkan referensi workspace ini untuk dikelola dan diekspor sebagai daftar pustaka.
 		</p>
 	</div>
 

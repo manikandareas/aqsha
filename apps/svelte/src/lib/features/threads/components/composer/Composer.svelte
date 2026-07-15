@@ -26,6 +26,8 @@
 	import { cn } from '$lib/utils';
 	import { useBillingCurrent } from '$lib/features/settings/api';
 	import { isCreditsLow } from '$lib/features/settings/lib/billing-derived';
+	import { useWorkspacesList } from '$lib/features/workspaces/api';
+	import { useContextPickerArtifacts } from '$lib/features/artifacts/api';
 	import {
 		useHydrateContext,
 		useRemoveThreadAttachment,
@@ -93,12 +95,26 @@
 	let commands = $state<PromptCommand[]>([]);
 	let contextRefs = $state<ContextRef[]>([]);
 	let attachments = $state<ComposerAttachment[]>([]);
-	// Phase 9 seam: the @mention workspace picker (workspace list + drill-in artifacts) is fed by the
-	// workspaces/context-picker APIs (Phase 9). Until then the palette shows the empty state and the
-	// drill request is a no-op; the contenteditable + slash-command + pinned-context + attachment paths
-	// are fully live.
-	const contextWorkspaces: ContextWorkspaceOption[] = [];
-	const workspaceItems: ContextItemOption[] = [];
+	// @mention workspace picker: the workspace list feeds the top-level palette; drilling into a
+	// workspace fetches its context-picker artifacts on demand (query dormant until `drillWorkspaceId`
+	// is set by the tokenized editor's `onRequestWorkspaceItems`). Mirrors web `composer.tsx`.
+	let drillWorkspaceId = $state<string | null>(null);
+	const workspacesQuery = useWorkspacesList(() => false);
+	const contextItemsQuery = useContextPickerArtifacts(() => drillWorkspaceId);
+	const contextWorkspaces: ContextWorkspaceOption[] = $derived(
+		(workspacesQuery.data?.pages ?? []).flatMap((page) =>
+			page.items.map((w) => ({ workspaceId: w.id, name: w.name, emoji: w.emoji ?? undefined }))
+		)
+	);
+	const workspaceItems: ContextItemOption[] = $derived.by(() => {
+		const wsId = drillWorkspaceId;
+		if (!wsId) return [];
+		return (contextItemsQuery.data?.items ?? []).map((a) => ({
+			workspaceId: wsId,
+			artifactId: a._id,
+			title: a.title
+		}));
+	});
 	let editorHeight = $state(24);
 	let isSending = $state(false);
 	let uploadError = $state<string | null>(null);
@@ -483,8 +499,8 @@
 							{contextWorkspaces}
 							{ambientWorkspaceId}
 							{workspaceItems}
-							workspaceItemsLoading={false}
-							onRequestWorkspaceItems={() => {}}
+							workspaceItemsLoading={contextItemsQuery.isLoading}
+							onRequestWorkspaceItems={(id) => (drillWorkspaceId = id)}
 							mobilePaletteAnchor={composerShellEl}
 						/>
 					</div>

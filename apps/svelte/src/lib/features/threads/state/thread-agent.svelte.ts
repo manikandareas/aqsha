@@ -115,6 +115,12 @@ export type ThreadAgentOptions = {
 	queryClient: QueryClient;
 	initialAgentKind?: AgentKind;
 	seed?: TimelineMessage[];
+	/**
+	 * Astra's `request_document_edit` tool result routes here. Intentionally UNWIRED pending the
+	 * post-cutover editor redesign (§0 #9): with document editing read-only there is no editor to
+	 * apply the instruction, so leaving this undefined makes the detector a safe no-op instead of a
+	 * dead affordance. The redesign supplies this callback (the web `documentEditBus` equivalent).
+	 */
 	onRequestDocumentEdit?: (edit: { artifactId: string; instruction: string }) => void;
 };
 

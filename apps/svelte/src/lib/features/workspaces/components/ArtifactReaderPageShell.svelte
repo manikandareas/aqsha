@@ -1,8 +1,12 @@
 <script lang="ts">
+	import { buildPaperMentionLabel, type ContextRef } from '@aqsha/chat-core';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import ResponsiveSidePanel from '$lib/components/layout/ResponsiveSidePanel.svelte';
-	import SidePanelFrame from '$lib/components/layout/SidePanelFrame.svelte';
-	import { Icon, XIcon } from '$lib/icons';
+	import {
+		ComposerMentions,
+		setComposerMentions
+	} from '$lib/features/threads/state/composer-mentions.svelte';
+	import ExploreChatSidePanel from '$lib/features/explore/components/ExploreChatSidePanel.svelte';
 	import { useArtifactDetailData } from '$lib/features/workspaces/api/use-workspaces-data';
 	import ArtifactDetailView from './ArtifactDetailView.svelte';
 
@@ -13,15 +17,47 @@
 	 * gotcha), fetches the artifact via `useArtifactDetailData(() => artifactId)`, and passes the data
 	 * DOWN to `ArtifactDetailView` (variant="page"). The reader's header carries a "Chat" open toggle.
 	 *
-	 * SEAM (Phase 9 workspace-chat): web docks a `WorkspaceChatSidePanel` (+ `ComposerMentionsProvider`
-	 * ambient artifact token) in the right rail. That surface is not ported yet, so the side panel here
-	 * is a documented placeholder — the split layout + toggle wiring are in place for the drop-in.
+	 * The Astra chat panel reuses the Explore chat surface (`ExploreChatSidePanel`) with the current
+	 * artifact injected as an ambient `paper` ContextRef via the shared `ComposerMentions` channel — so
+	 * sending a message auto-pins the document as context and archives the new thread to its workspace.
+	 * DIVERGENCE (documented): web's `WorkspaceChatSidePanel` scopes the thread switcher to the
+	 * workspace's threads; reusing `ExploreChatSidePanel` shows the global thread list. Functional parity
+	 * (chat about this artifact) holds via the ambient ref; the switcher scoping is the only difference.
 	 */
 	let { workspaceId, artifactId }: { workspaceId: string; artifactId: string } = $props();
 
 	const data = useArtifactDetailData(() => artifactId);
 
+	// Shared per-tree channel (§3.5) — publisher (this artifact) + consumer (panel composer).
+	const mentions = new ComposerMentions();
+	setComposerMentions(mentions);
+
+	const ambientContextRefs = $derived.by<ContextRef[]>(() => {
+		const title = data.artifact?.artifact?.title;
+		if (!title) return [];
+		const workspaceName =
+			data.workspaces.find((workspace) => workspace._id === workspaceId)?.name ?? 'Workspace';
+		return [
+			{
+				kind: 'paper',
+				workspaceId,
+				artifactId,
+				label: buildPaperMentionLabel(workspaceName, title)
+			}
+		];
+	});
+
+	$effect(() => {
+		mentions.syncAmbientFromPage(ambientContextRefs);
+	});
+
 	let chatOpen = $state(false);
+	let threadId = $state<string | null>(null);
+
+	function handleThreadChange(next: string | null): void {
+		threadId = next;
+		if (next !== null) chatOpen = true;
+	}
 </script>
 
 <main class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
@@ -40,27 +76,11 @@
 		{/snippet}
 		{#snippet side()}
 			<ResponsiveSidePanel open={chatOpen}>
-				<SidePanelFrame>
-					{#snippet header()}
-						<div class="flex h-11 items-center justify-between gap-2 px-1">
-							<span class="text-[13px] font-semibold text-foreground">Chat Astra</span>
-							<button
-								type="button"
-								data-panel-close
-								onclick={() => (chatOpen = false)}
-								aria-label="Tutup chat"
-								class="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-							>
-								<Icon icon={XIcon} class="size-4" />
-							</button>
-						</div>
-					{/snippet}
-					<div class="grid place-items-center gap-2 p-6 text-center">
-						<p class="text-[13px] font-medium text-muted-foreground">
-							Chat Astra tentang artifact ini hadir di fase berikutnya.
-						</p>
-					</div>
-				</SidePanelFrame>
+				<ExploreChatSidePanel
+					activeThreadId={threadId}
+					onActiveThreadIdChange={handleThreadChange}
+					onClose={() => (chatOpen = false)}
+				/>
 			</ResponsiveSidePanel>
 		{/snippet}
 	</DetailSplitLayout>

@@ -12,8 +12,8 @@
 	 * Artifact reading column — port of `apps/web/features/workspaces/components/artifact-render-panels.tsx`
 	 * `ArtifactReadingColumn` (+ its internal viewers: url / pdf / docx / html / svg / mermaid / json /
 	 * csv / plain_text / code). Content-first types read as documents; framed embedded viewers share one
-	 * `ArtifactSurface` shell + height. Markdown is handled upstream (page editor is Phase 10), so it is
-	 * excluded from this union.
+	 * `ArtifactSurface` shell + height. Markdown is handled upstream in `ArtifactDetailView` (read-only
+	 * prose; editing deferred to the editor redesign, §0 #9), so it is excluded from this union.
 	 *
 	 * Code / source rendering (was React `CodeBlock`) is delegated to svelte-streamdown via `Response`
 	 * (fenced code block) — its built-in syntax highlight + copy control replace the bespoke chrome

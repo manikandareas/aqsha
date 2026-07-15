@@ -10,13 +10,16 @@
 	import QuestionsForm from '$lib/features/threads/components/QuestionsForm.svelte';
 	import StatsBlock from '$lib/features/threads/components/stats-viz/StatsBlock.svelte';
 	import { dedupeCards } from '$lib/features/threads/lib/source-card';
+	import ArtifactDetailView from '$lib/features/workspaces/components/ArtifactDetailView.svelte';
+	import { useArtifactDetailData } from '$lib/features/workspaces/api/use-workspaces-data';
 	import type { ThreadPanelController } from './thread-panel-context.svelte';
 
 	/**
 	 * Thread-detail side panel body — resolves the current `?panel=` mode against the controller's
 	 * id-keyed lookups and renders it: Sumber (aggregate / message-scoped), Statistik (aggregate /
 	 * run-scoped), a `/deep` plan (+ gate actions), a clarification form, a search sub-step, or a generic
-	 * tool step. Artifact reader + the Workspace tab are Phase 9 seams. Streamlined port of the
+	 * tool step, or a read-only artifact preview (opened from an in-chat artifact card). The Workspace
+	 * (context) tab remains a deferred sub-feature — see the `context` branch. Streamlined port of the
 	 * `thread-detail-shell` panel slot + its detail panels.
 	 */
 	let { controller }: { controller: ThreadPanelController } = $props();
@@ -48,6 +51,12 @@
 	});
 
 	const aggregateSources = $derived(dedupeCards([...lookups.messageSources.values()].flat()));
+
+	// Artifact preview (opened from an in-chat artifact card). Query stays idle for non-artifact modes
+	// because `useArtifact`/`useArtifactRender` are gated `enabled: Boolean(id())`.
+	const artifactData = useArtifactDetailData(() =>
+		mode.kind === 'artifact' ? mode.artifactId : ''
+	);
 </script>
 
 <SidePanelFrame>
@@ -68,117 +77,134 @@
 		</div>
 	{/snippet}
 
-	<div class={cn('min-h-0 flex-1 overflow-y-auto', panelBodyPaddingClass)}>
-		{#if mode.kind === 'sources'}
-			{@const list = mode.messageId
-				? (lookups.messageSources.get(mode.messageId) ?? [])
-				: aggregateSources}
-			{#if list.length > 0}
-				<SourcesPanel sources={list} />
-			{:else}
-				<p class="text-sm text-muted-foreground">Belum ada sumber riset.</p>
-			{/if}
-		{:else if mode.kind === 'stats'}
-			{#if mode.runKey}
-				{@const item = lookups.stats.find((s) => s.runKey === mode.runKey)}
-				{#if item}
-					<StatsBlock group={item.group} />
-				{:else if lookups.statsLoading}
-					<p class="text-sm text-muted-foreground">Memuat hasil analisis…</p>
+	{#if mode.kind === 'artifact'}
+		<!-- Artifact preview reuses the read-only panel view (its own toolbar suppressed via `embedded`;
+		     this DetailPanel already supplies the header + close). -->
+		<ArtifactDetailView
+			data={artifactData}
+			artifactId={mode.artifactId}
+			variant="panel"
+			embedded
+			onClose={() => controller.close()}
+		/>
+	{:else}
+		<div class={cn('min-h-0 flex-1 overflow-y-auto', panelBodyPaddingClass)}>
+			{#if mode.kind === 'sources'}
+				{@const list = mode.messageId
+					? (lookups.messageSources.get(mode.messageId) ?? [])
+					: aggregateSources}
+				{#if list.length > 0}
+					<SourcesPanel sources={list} />
 				{:else}
-					<p class="text-sm text-muted-foreground">Hasil analisis tidak ditemukan.</p>
+					<p class="text-sm text-muted-foreground">Belum ada sumber riset.</p>
 				{/if}
-			{:else if lookups.stats.length > 0}
-				<div class="flex flex-col gap-6">
-					{#each lookups.stats as item (item.runKey)}
-						<StatsBlock
-							group={item.group}
-							onOpenStats={() => controller.openStatsPanel(item.runKey)}
-						/>
-					{/each}
-				</div>
-			{:else}
-				<p class="text-sm text-muted-foreground">Belum ada hasil analisis di percakapan ini.</p>
-			{/if}
-		{:else if mode.kind === 'plan'}
-			{@const plan = lookups.plans.get(mode.turnId)}
-			{#if plan}
-				<div class="flex flex-col gap-3">
-					{#if plan.plan}
-						<p class="text-sm leading-6 whitespace-pre-wrap text-foreground">{plan.plan}</p>
-					{/if}
-					{#if plan.subQuestions.length > 0}
-						<ol class="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-							{#each plan.subQuestions as q, i (`${i}-${q.slice(0, 24)}`)}
-								<li>{q}</li>
-							{/each}
-						</ol>
-					{/if}
-					{#if plan.resolve}
-						<div class="flex gap-2 pt-1">
-							<Button size="sm" onclick={() => plan.resolve?.(true)}>Setujui</Button>
-							<Button size="sm" variant="ghost" onclick={() => plan.resolve?.(false)}>Tolak</Button>
-						</div>
-					{/if}
-				</div>
-			{:else}
-				<p class="text-sm text-muted-foreground">Rencana tidak ditemukan.</p>
-			{/if}
-		{:else if mode.kind === 'questions'}
-			{#if lookups.ask}
-				<QuestionsForm
-					questions={lookups.ask.questions}
-					findings={lookups.ask.findings}
-					onSubmit={(resume) => lookups.ask?.resolve?.(resume)}
-					onSkip={() => lookups.ask?.skip?.()}
-				/>
-			{:else}
-				<p class="text-sm text-muted-foreground">Tidak ada klarifikasi aktif.</p>
-			{/if}
-		{:else if mode.kind === 'search'}
-			{@const step = lookups.searches.get(searchKey(mode.turnId, mode.subQuestionIndex))}
-			{#if step}
-				<div class="flex flex-col gap-3">
-					<p class="text-sm font-medium text-foreground">{step.subQuestion}</p>
-					{#if step.sources.length > 0}
-						<SourceCardList sources={step.sources} />
+			{:else if mode.kind === 'stats'}
+				{#if mode.runKey}
+					{@const item = lookups.stats.find((s) => s.runKey === mode.runKey)}
+					{#if item}
+						<StatsBlock group={item.group} />
+					{:else if lookups.statsLoading}
+						<p class="text-sm text-muted-foreground">Memuat hasil analisis…</p>
 					{:else}
-						<p class="text-sm text-muted-foreground">Belum ada sumber untuk sub-pertanyaan ini.</p>
+						<p class="text-sm text-muted-foreground">Hasil analisis tidak ditemukan.</p>
 					{/if}
-				</div>
-			{:else}
-				<p class="text-sm text-muted-foreground">Langkah pencarian tidak ditemukan.</p>
+				{:else if lookups.stats.length > 0}
+					<div class="flex flex-col gap-6">
+						{#each lookups.stats as item (item.runKey)}
+							<StatsBlock
+								group={item.group}
+								onOpenStats={() => controller.openStatsPanel(item.runKey)}
+							/>
+						{/each}
+					</div>
+				{:else}
+					<p class="text-sm text-muted-foreground">Belum ada hasil analisis di percakapan ini.</p>
+				{/if}
+			{:else if mode.kind === 'plan'}
+				{@const plan = lookups.plans.get(mode.turnId)}
+				{#if plan}
+					<div class="flex flex-col gap-3">
+						{#if plan.plan}
+							<p class="text-sm leading-6 whitespace-pre-wrap text-foreground">{plan.plan}</p>
+						{/if}
+						{#if plan.subQuestions.length > 0}
+							<ol class="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+								{#each plan.subQuestions as q, i (`${i}-${q.slice(0, 24)}`)}
+									<li>{q}</li>
+								{/each}
+							</ol>
+						{/if}
+						{#if plan.resolve}
+							<div class="flex gap-2 pt-1">
+								<Button size="sm" onclick={() => plan.resolve?.(true)}>Setujui</Button>
+								<Button size="sm" variant="ghost" onclick={() => plan.resolve?.(false)}
+									>Tolak</Button
+								>
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<p class="text-sm text-muted-foreground">Rencana tidak ditemukan.</p>
+				{/if}
+			{:else if mode.kind === 'questions'}
+				{#if lookups.ask}
+					<QuestionsForm
+						questions={lookups.ask.questions}
+						findings={lookups.ask.findings}
+						onSubmit={(resume) => lookups.ask?.resolve?.(resume)}
+						onSkip={() => lookups.ask?.skip?.()}
+					/>
+				{:else}
+					<p class="text-sm text-muted-foreground">Tidak ada klarifikasi aktif.</p>
+				{/if}
+			{:else if mode.kind === 'search'}
+				{@const step = lookups.searches.get(searchKey(mode.turnId, mode.subQuestionIndex))}
+				{#if step}
+					<div class="flex flex-col gap-3">
+						<p class="text-sm font-medium text-foreground">{step.subQuestion}</p>
+						{#if step.sources.length > 0}
+							<SourceCardList sources={step.sources} />
+						{:else}
+							<p class="text-sm text-muted-foreground">
+								Belum ada sumber untuk sub-pertanyaan ini.
+							</p>
+						{/if}
+					</div>
+				{:else}
+					<p class="text-sm text-muted-foreground">Langkah pencarian tidak ditemukan.</p>
+				{/if}
+			{:else if mode.kind === 'step'}
+				{@const step = lookups.steps.get(mode.toolCallId)}
+				{#if step}
+					<div class="flex flex-col gap-3">
+						<p class="text-sm font-medium text-foreground">{step.title}</p>
+						{#if step.detail?.kind === 'text'}
+							<p class="text-sm leading-6 whitespace-pre-wrap text-muted-foreground">
+								{step.detail.text}
+							</p>
+						{:else if step.detail?.kind === 'search-flat'}
+							<SourceCardList sources={step.detail.sources} />
+						{/if}
+						{#if step.rows && step.rows.length > 0}
+							<dl class="grid gap-1.5 text-[13px]">
+								{#each step.rows as row (row.key)}
+									<div class="flex min-w-0 gap-1.5">
+										<dt class="shrink-0 text-muted-foreground">{row.label}:</dt>
+										<dd class="min-w-0 break-words text-foreground">{row.value}</dd>
+									</div>
+								{/each}
+							</dl>
+						{/if}
+					</div>
+				{:else}
+					<p class="text-sm text-muted-foreground">Langkah tidak ditemukan.</p>
+				{/if}
+			{:else if mode.kind === 'context'}
+				<!-- Workspace/library tab in the thread panel is a deferred sub-feature: no affordance opens
+				     it (reachable only via a manual ?panel=c), and it needs a thread workspaceId the model
+				     does not carry. Neutral placeholder until it is built. -->
+				<p class="text-sm text-muted-foreground">Tab Workspace belum tersedia di panel ini.</p>
 			{/if}
-		{:else if mode.kind === 'step'}
-			{@const step = lookups.steps.get(mode.toolCallId)}
-			{#if step}
-				<div class="flex flex-col gap-3">
-					<p class="text-sm font-medium text-foreground">{step.title}</p>
-					{#if step.detail?.kind === 'text'}
-						<p class="text-sm leading-6 whitespace-pre-wrap text-muted-foreground">
-							{step.detail.text}
-						</p>
-					{:else if step.detail?.kind === 'search-flat'}
-						<SourceCardList sources={step.detail.sources} />
-					{/if}
-					{#if step.rows && step.rows.length > 0}
-						<dl class="grid gap-1.5 text-[13px]">
-							{#each step.rows as row (row.key)}
-								<div class="flex min-w-0 gap-1.5">
-									<dt class="shrink-0 text-muted-foreground">{row.label}:</dt>
-									<dd class="min-w-0 break-words text-foreground">{row.value}</dd>
-								</div>
-							{/each}
-						</dl>
-					{/if}
-				</div>
-			{:else}
-				<p class="text-sm text-muted-foreground">Langkah tidak ditemukan.</p>
-			{/if}
-		{:else if mode.kind === 'artifact' || mode.kind === 'context'}
-			<p class="text-sm text-muted-foreground">
-				Panel ini tersedia setelah modul workspace &amp; dokumen (fase berikutnya).
-			</p>
-		{/if}
-	</div>
+		</div>
+	{/if}
 </SidePanelFrame>

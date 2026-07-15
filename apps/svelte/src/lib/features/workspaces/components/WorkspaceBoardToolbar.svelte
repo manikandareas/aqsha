@@ -18,6 +18,7 @@
 	import { panelHeaderBarClass } from '$lib/panel-surface';
 	import { cn } from '$lib/utils';
 	import type { BreadcrumbSegment } from '$lib/features/workspaces/utils/workspace-library-model';
+	import { DOCUMENT_AUTHORING_ENABLED } from '$lib/features/workspaces/document-authoring';
 	import WorkspaceEmojiPopover from './WorkspaceEmojiPopover.svelte';
 	import WorkspaceTitlePopover from './WorkspaceTitlePopover.svelte';
 
@@ -128,10 +129,13 @@
 							<Icon icon={FolderIcon} class="size-4" />
 							Folder
 						</DropdownMenu.Item>
-						<DropdownMenu.Item onSelect={onCreateDocument}>
-							<Icon icon={FileTextIcon} class="size-4" />
-							Dokumen
-						</DropdownMenu.Item>
+						{#if DOCUMENT_AUTHORING_ENABLED}
+							<!-- Authored blank document — deferred to editor redesign (§0 #9). -->
+							<DropdownMenu.Item onSelect={onCreateDocument}>
+								<Icon icon={FileTextIcon} class="size-4" />
+								Dokumen
+							</DropdownMenu.Item>
+						{/if}
 						<DropdownMenu.Item onSelect={onCreateUrl}>
 							<Icon icon={UploadIcon} class="size-4" />
 							Upload

@@ -33,10 +33,10 @@
 	 * and passes data DOWN (§ task). Shared by the full route (`variant="page"`) and the thread-detail
 	 * artifact side panel (`variant="panel"`); only the chrome differs.
 	 *
-	 * DIVERGENCES (documented): markdown editing is Phase 10 — the page variant renders a read-only
-	 * placeholder card (NOT the BlockNote editor), while the panel variant keeps web's read-only prose.
-	 * The render-error / autosave surfaces are not modelled (the data hook exposes no render error and
-	 * markdown autosave belongs to Phase 10).
+	 * DIVERGENCES (documented): document editing is DEFERRED to the post-cutover editor redesign
+	 * (§0 #9 — Phase 10 skipped). Both variants render markdown read-only as prose; the page variant
+	 * adds a small read-only note. Render-error / autosave surfaces are not modelled (belong to the
+	 * editor redesign).
 	 */
 	type ArtifactDetailData = ReturnType<typeof useArtifactDetailData>;
 	type ArtifactDetailVariant = 'page' | 'panel';
@@ -46,6 +46,7 @@
 		artifactId,
 		workspaceId,
 		variant,
+		embedded = false,
 		onClose,
 		chatOpen,
 		onToggleChat
@@ -55,6 +56,11 @@
 		/** Required for the page route; the panel derives it from the loaded artifact. */
 		workspaceId?: string;
 		variant: ArtifactDetailVariant;
+		/**
+		 * Panel only: the host already renders a panel header + close (e.g. the thread `DetailPanel`),
+		 * so skip this view's own `PanelCardToolbar` to avoid a double toolbar. Renders body-only.
+		 */
+		embedded?: boolean;
 		/** Panel only: close the side panel. */
 		onClose?: () => void;
 		/** Page only: toggle the artifact-page chat panel (rendered as a header affordance). */
@@ -251,8 +257,8 @@
 						class="aqsha-prose aqsha-prose-message min-w-0"
 					/>
 				{:else}
-					<!-- Phase 10 seam: the BlockNote document editor lands later. For now, a read-only
-					     placeholder card + the document content rendered as prose. -->
+					<!-- Document editing is deferred to the post-cutover editor redesign (§0 #9); no fixed
+					     timeline is promised. For now the document renders read-only as prose. -->
 					<div class="grid gap-3">
 						<h1
 							class="px-1 pt-2 text-[2rem] leading-[1.15] font-bold tracking-tight text-foreground sm:text-[2.25rem]"
@@ -262,7 +268,7 @@
 						<div
 							class="rounded-[10px] border border-border/80 bg-card/40 px-4 py-3 text-[13px] leading-6 font-medium text-muted-foreground"
 						>
-							Editor dokumen hadir di fase berikutnya. Untuk sekarang, dokumen ini tampil read-only.
+							Dokumen ini tampil read-only untuk saat ini.
 						</div>
 						<Response
 							text={activeRenderPayload.markdown}
@@ -291,7 +297,9 @@
 {/snippet}
 
 {#if variant === 'panel'}
-	{@render header()}
+	{#if !embedded}
+		{@render header()}
+	{/if}
 	<div class="relative min-h-0 flex-1 overflow-y-auto">{@render body()}</div>
 	{@render deleteDialog()}
 {:else}

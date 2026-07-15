@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Icon, FileTextIcon, FolderIcon, UploadIcon } from '$lib/icons';
 	import { Button } from '$lib/components/ui/button';
+	import { DOCUMENT_AUTHORING_ENABLED } from '$lib/features/workspaces/document-authoring';
 
 	/**
 	 * Centered empty-state for the workspace library board — port of
@@ -42,7 +43,10 @@
 				: 'Tambahkan dokumen atau URL ke folder ini.')
 	);
 
-	const showDocument = $derived(showActions && Boolean(onCreateDocument));
+	// Authored blank document deferred to editor redesign (§0 #9) — hidden until an editor exists.
+	const showDocument = $derived(
+		DOCUMENT_AUTHORING_ENABLED && showActions && Boolean(onCreateDocument)
+	);
 	const showUpload = $derived(showActions && Boolean(onCreateUrl));
 	const showFolder = $derived(showActions && isRoot && Boolean(onCreateFolder));
 	const hasActions = $derived(showDocument || showUpload || showFolder);

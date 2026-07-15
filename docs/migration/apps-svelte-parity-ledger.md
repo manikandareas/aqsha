@@ -4,7 +4,7 @@
 
 Baseline: commit `ec04389` (lihat [baseline.md](baseline.md)). Peta sumber: [route-manifest](manifests/route-manifest.md), [feature-manifest](manifests/feature-manifest.md), [import-manifest](manifests/import-manifest.md), [env-manifest](manifests/env-manifest.md).
 
-**Status:** `not-started` · `in-progress` · `parity-complete` · `not-applicable` (butuh approval owner, §11 #1).
+**Status:** `not-started` · `in-progress` · `parity-complete`/`done` · `not-applicable` (butuh approval owner, §11 #1) · `superseded-pending` (**§0 #9** — Phase 10 editor dilewati, di-redesign pasca-cutover; bukan blocker migrasi).
 
 Kolom **Target** diisi path aktual saat porting (placeholder `apps/svelte/…` sekarang). Setiap item wajib mencakup — kecuali disebut N/A — happy/empty/loading/error/forbidden/not-found/retry, pointer+keyboard+focus, deep-link+Back/Forward+refresh, light/dark+desktop/mobile (§3.1).
 
@@ -14,7 +14,9 @@ Kolom **Target** diisi path aktual saat porting (placeholder `apps/svelte/…` s
 |---|---|---|
 | Route/handler Next.js (route-manifest) | 45 file (25 page/route + 6 layout + 6 loading + 3 error + 5 SEO) | ✅ semua terpetakan ke item ledger |
 | Feature area (§8.1–8.9) | 13 `features/*` + shell + platform | ✅ semua terpetakan |
-| Total item ledger | 95 | semua `not-started` |
+| Total item ledger | 95 | 87 `done` · 8 `superseded-pending` (BLK-1..7 + CSS-2, §0 #9) |
+
+> **Phase 10 dilewati (§0 #9, 15 Juli 2026).** Document editing di-redesign pasca-cutover; migrasi selesai tanpa Phase 10 dengan editor **read-only**. BLK-1..7 + CSS-2 = `superseded-pending` (bukan blocker). Alur fase: Phase 9 → **Phase 11 (hardening) = DONE** → Phase 12 (cutover, tersisa). Detail Phase 11: [`apps-svelte-phase11-decision-record.md`](apps-svelte-phase11-decision-record.md).
 
 Route→item: semua URL di [route-manifest](manifests/route-manifest.md) tercakup oleh item Phase 2 (proxy/API), Phase 3 (shell/layout/error/loading), Phase 4 (public/SEO), Phase 5 (onboarding/settings), Phase 7 (`/app`, threads), Phase 8 (explore), Phase 9 (workspaces/artifacts).
 
@@ -47,7 +49,7 @@ Scaffold `@aqsha/svelte` (SvelteKit `2.63` + adapter-node + shadcn-svelte `nova`
 | ID | Scope | Source | Target | Status | Notes |
 |---|---|---|---|---|---|
 | CSS-1 | Golden CSS globals | `app/globals.css` | `src/styles/globals.css` + `src/app.css` | done | ★ Port 1:1 (token/prose/panel/composer/viz/shimmer/keycap/scrollbar/reduced-motion). Fonts self-host woff2 + `@font-face` (Inter/Instrument Serif/JetBrains Mono/Caveat). Dropped React-only imports (shadcn-react, `@blocknote/*`, blocknote-aqsha). react-pdf/streamdown selectors kept verbatim. FlickerSpinner keyframes global here. |
-| CSS-2 | BlockNote skin (copy only) | `app/styles/blocknote-aqsha.css` | `src/styles/blocknote-aqsha.css` | not-started | Deferred — copied + wired with the BlockNote editor in Phase 10 (references `@blocknote/*` classes). |
+| CSS-2 | BlockNote skin (copy only) | `app/styles/blocknote-aqsha.css` | — | superseded-pending | **§0 #9** — editor read-only pada cutover; skin di-wire saat redesign editor (references `@blocknote/*` classes). Not needed for migration. |
 | UIP-1 | Primitives batch 1 | `components/ui/{button,badge,card,input,textarea,separator,skeleton,spinner,avatar}.tsx` | `src/lib/components/ui/` | done | shadcn-svelte + Aqsha-align: button keycap + `data-variant/size`; badge `rounded-4xl` + ghost/link + `data-variant`; card `font-heading` title; Spinner→brand FlickerSpinner. Contract test `button-variants.spec.ts`. |
 | UIP-2 | Overlay primitives | `components/ui/{tooltip,popover,hover-card*,collapsible}.tsx` | `src/lib/components/ui/` | done | tooltip/hover-card/collapsible = stock nova = web; popover aligned (align/sideOffset/class); portal/z-index/focus via bits-ui. |
 | UIP-3 | Menu/dialog primitives | `components/ui/{dialog,sheet,drawer,dropdown-menu,context-menu,select,command}.tsx` | `src/lib/components/ui/` | done | dialog/sheet title `font-heading`; drawer `vaul-svelte@1.0.0-next.7` (Svelte 5); dropdown/context/select/command/tabs default→nova rewrite + icon-glyph fixes (Tick02→Check, UnfoldMore→ChevronDown, radio→filled CircleIcon) + `data-[state=active]` bug fix. |
@@ -112,7 +114,7 @@ Scaffold `@aqsha/svelte` (SvelteKit `2.63` + adapter-node + shadcn-svelte `nova`
 |---|---|---|---|---|---|
 | THX-1 | Thread recent/pinned/create/rename/pin/delete | `features/thread-experience/**`, `features/threads/api.ts` | equivalent | done | `features/threads/api.ts` port (createQuery/createInfiniteQuery/createMutation getters; list/pinned/detail/rename/delete/pin `pinnedAt` soft-cap + `pin_limit_reached` warning). Recent-thread merge (pinned-first dedup) drives the landing start panel. Sidebar thread SECTIONS/row menus = Phase 9. |
 | THX-2 | Thread shell + Lite/Pro selector | `components/thread-shell.tsx`, `features/thread-experience/components/**` | equivalent | done | `ThreadDetailShell` (owns agent + panel slot + contexts) → `MastraChatThreadSurface` (landing hero / conversation) inside `DetailSplitLayout`. `AgentSelector` + `useComposerAgentSelection` (tier default = stored `agent_kind`, Pro-lock → billing) → `ThreadAgent.commitAgentKind`. Workspace-library tab = Phase 9 seam. |
-| THX-3 | Composer contenteditable + chips/slash/mentions/context/attachments | `features/threads/components/**`, `lib/context-selection.ts` | equivalent | done | ★ `TokenizedPromptInput` (contenteditable via `{@attach}` seed + `composer-inline-editor` DOM model; caret/IME `isComposing` guard; paste-as-plain-text; token chips /command+@mention; slash/mention palettes via bits-ui `customAnchor` + chip tooltip). `Composer` (expand/collapse, agent selector, attachments upload/retry, richText markers, `/deep` detect, ambient/selection/draft epoch-merges). @mention workspace picker = Phase 9 seam. |
+| THX-3 | Composer contenteditable + chips/slash/mentions/context/attachments | `features/threads/components/**`, `lib/context-selection.ts` | equivalent | done | ★ `TokenizedPromptInput` (contenteditable via `{@attach}` seed + `composer-inline-editor` DOM model; caret/IME `isComposing` guard; paste-as-plain-text; token chips /command+@mention; slash/mention palettes via bits-ui `customAnchor` + chip tooltip). `Composer` (expand/collapse, agent selector, attachments upload/retry, richText markers, `/deep` detect, ambient/selection/draft epoch-merges). @mention workspace picker = **WIRED Phase 11** (`useWorkspacesList` palette + `useContextPickerArtifacts` drill-in; was empty-stub through Phase 9). |
 | THX-4 | Messages/tools/sources/artifacts/export + reasoning/plan/HITL | `components/ai-elements/**`, `features/threads/components/**` | equivalent | done | `MessageList`/`AssistantMessage`/`UserBubble`/`ProcessBlock`/`ToolRow` (default-deny scalars) + `ChatArtifactCard`/`InlineSources`/`ElapsedLabel`/`Shimmer`/`QuestionsCard`. Rich viz inside the Phase-6 gates: deep-viz 6 charts + `PaperPills` (`DeepVizFigure`→`VizFigureBody`), stats-viz table/decision/figure/summary + `AnalysisRunCard`/`DatasetProfileCard`/`NextStepChips`/`StatsBlock` (`StatsVizFigure`). Export bytes/filename via `artifact-download` (contract test). |
 | THX-5 | `/deep` durable lifecycle | `features/threads/lib/use-mastra-agent.ts`, deep components | equivalent | done | `ThreadAgent` EXTENDED (documented) with `sendDeep`/`consumeWorkflow`/`resolvePlan`/workflow `resolveAsk`/`applyDeepTerminal`/`reconcileDeepTerminal`/`clearDeepRunIdUnlessAlive`/`maybeReattachAfterStreamClose`/re-attach poll (`runById` 2.5s, discover fallback, stall detection)/`retryDeep` (timeTravel)/`restartDeep`/`regenerate` (deep-aware)/`stop` (workflow cancel)/dismiss + server-queue (`queueMessage`) + runId-ownership guards + localStorage runId (`deep-workflow.ts`). |
 | THX-6 | Panels + URL serialization + responsive drawer | `features/thread-experience/utils/thread-panel-model.ts`, `lib/panel-surface.ts` | equivalent | done | ★ `thread-panel-model.ts` pure codec BYTE-EQUIVALENT (contract test `thread-panel-model.spec.ts` — 10 vectors, first-colon split, strict-digit search index) wired via `page.url`+`goto` in `ThreadPanelController`. `DetailPanel` (sources/stats/plan/questions/search/step) in `DetailSplitLayout` (inline ≥1100px / drawer below). Artifact reader + Workspace tab = Phase 9. |
@@ -124,7 +126,7 @@ Scaffold `@aqsha/svelte` (SvelteKit `2.63` + adapter-node + shadcn-svelte `nova`
 | ID | Scope | Source | Target | Status | Notes |
 |---|---|---|---|---|---|
 | EXP-1 | Explore home bento + feed/search/suggestion + URL state | `features/explore/**`, `app/app/(product)/explore/page.tsx` | equivalent | done | ★ URL codec `explore-url-model.ts` pure (q/topic; default `q=""`/null topic OMIT param, invalid topic→null) wired via `page.url`+`goto(replaceState)` in `ExplorePage`, contract-test byte-equivalent (`explore-url-model.spec.ts`). Feed fixture output byte-equivalent (`model.spec.ts` paperToDiscoveryItem exact shape + `feed-blocks.spec.ts` grid/feature/ad cadence). `ExplorePage`/`ExploreHero`/`ExploreAskBar`/`ExploreFindings`/`SectionHeader`/`ExploreFeedSkeleton` + `createInfiniteQuery` feed/search two-state (Jelajah↔Selidiki via `q`), grid animate track, @2xl. **HomeExploreBento + HomeBannerCarousel + ExploreHandwrittenCue wired into `MastraChatThreadSurface` landing** (Phase 7 seam filled). |
-| EXP-2 | Card variants + house ads + record/hide | `features/discovery/house-ads.ts`, `model.ts` | equivalent | done | `DiscoveryItemCard` (variant hero/feature/standard) + `CardMedia`/`PaperCover` + `GenerativeCover` (reuse) + `PdfThumb` (pdfjs-dist direct, page-1→canvas via `/papers/pdf-proxy`, client-only) + `HouseAdBanner` + overflow menu record (research) / hide. Pure model/format/house-ads/nav/types + ask-astra ported verbatim + contract-tested. `SaveToWorkspaceButton` = Phase 9 seam stub (picker lands Phase 9). |
+| EXP-2 | Card variants + house ads + record/hide | `features/discovery/house-ads.ts`, `model.ts` | equivalent | done | `DiscoveryItemCard` (variant hero/feature/standard) + `CardMedia`/`PaperCover` + `GenerativeCover` (reuse) + `PdfThumb` (pdfjs-dist direct, page-1→canvas via `/papers/pdf-proxy`, client-only) + `HouseAdBanner` + overflow menu record (research) / hide. Pure model/format/house-ads/nav/types + ask-astra ported verbatim + contract-tested. `SaveToWorkspaceButton` = **WIRED Phase 11** (Dialog `WorkspacePicker` → `useSaveUrl`; was a stub through Phase 9). |
 | EXP-3 | Paper reader + related + PDF thumb | `app/.../explore/[paperRef]/**`, `features/discovery/**` | equivalent | done | `PaperReader`+`PaperReaderRoute`+`PaperAside`+`reader-ui/*` (ReaderShell/PillCta/Eyebrow/ExpandableText/…). Related = OpenAlex `related`/`references`/`citedBy` (DOI→in-app `doi:` reader, byte-identical `encodeURIComponent`; else OpenAlex). Route `[paperRef]` keyed on decoded param (SvelteKit decodes → matches web `decodeURIComponent`). |
 | EXP-4 | News reader | `app/.../explore/n/[id]/**` | equivalent | done | `NewsReader`+`NewsReaderRoute` (lead/body/media reveal + related `DiscoveryItemCard` grid + favicon). Route `n/[id]` keyed on id. |
 | EXP-5 | Ask Astra context/side panel | `features/discovery/ask-astra.ts` | equivalent | done | ★ EXACT payload contract-test (`ask-astra.spec.ts` — explore-paper/news ContextRef byte-for-byte). Cards/readers "Tanya Astra" → shared `ComposerMentions.setAmbientContextRefs`/`syncAmbientFromPage` (page-level instance set by `ExplorePage`/`ExploreReaderChatShell`, consumed by the panel composer via context+snippet scope). `ExploreChatSidePanel` (SidePanelFrame + recent switcher + delete + new) + `ExploreThreadChat` (lean `ThreadAgent` owner, no panel controller, `bindUrlOnSend={false}`) + `MastraChatThreadSurface` compact. |
@@ -150,28 +152,49 @@ Phase 10 (BLK-1..7, markdown di-placeholder read-only).
 | WSP-6 | Upload queue (max 20/conc 3/progress/continue-on-fail/retry/MIME) | `utils/workspace-file-upload.ts`, `lib/artifact-upload-{limits,policy}.ts` | `utils/workspace-file-upload.ts` (+spec), `lib/artifact-upload-{limits,policy}.ts`, `components/WorkspaceUploadToast.svelte` | done | ★ State machine + `.spec.ts`; toast `enqueue` via `bind:this`. |
 | WSP-7 | Upload toast + enrichment/extraction status | `components/workspace-upload-toast-model.ts` | `components/{workspace-upload-toast-model.ts,WorkspaceUploadToast,WorkspaceUploadToastView,WorkspaceUploadToastRow,WorkspaceUploadToastStatusIcon}.svelte` | done | Sonner `toast.custom` persisten (id tetap). |
 | WSP-8 | Panel URL state (`chat`/`cite`/`cite:<id>`) | `utils/workspace-panel-model.ts`, `lib/panel-surface.ts` | `utils/workspace-panel-model.ts` (+spec), `components/workspace-panel-context.svelte.ts` | done | ★ Codec pure + `.spec.ts` byte-equiv; `WorkspacePanelController` (§2.3). **Browser-verified:** `?panel=cite` + `?panel=cite:<uuid>`. |
-| WSP-9 | Artifact reader page/panel | `features/artifacts/components/**`, `app/.../artifacts/[artifactId]/page.tsx` | `components/{ArtifactReaderPageShell,ArtifactDetailView,ArtifactRenderPanels,ArtifactDetailSidebar,MermaidArtifactViewer}.svelte` | done | title/metadata/Markdown[placeholder Phase 10]/Mermaid/PDF/URL/code/delete. **Browser-verified:** shell + missing-state + route. |
+| WSP-9 | Artifact reader page/panel | `features/artifacts/components/**`, `app/.../artifacts/[artifactId]/page.tsx` | `components/{ArtifactReaderPageShell,ArtifactDetailView,ArtifactRenderPanels,ArtifactDetailSidebar,MermaidArtifactViewer}.svelte` | done | title/metadata/Markdown[read-only, editor=redesign §0 #9]/Mermaid/PDF/URL/code/delete. **Browser-verified:** shell + missing-state + route. **Phase 11:** artifact-page Chat Astra panel WIRED (was placeholder → `ExploreChatSidePanel` + ambient paper ref); thread-panel artifact preview WIRED (`ArtifactDetailView variant=panel embedded` in `DetailPanel`). Divergensi di [`apps-svelte-phase11-decision-record.md`](apps-svelte-phase11-decision-record.md). |
 | WSP-10 | PDF viewer + citation links | `components/*pdf*`, `lib/pdf-worker.ts` | `components/{PdfArtifactViewer,PdfPageCanvas}.svelte` | done | **pdfjs-dist langsung, BUKAN EmbedPDF** (§2.2 — fallback §13). zoom/page/find/fullscreen; text-layer + annotation-link + highlight ditunda. |
-| ART-1 | Artifacts CRUD/render/save/upload/link/save-to-workspace | `features/artifacts/**`, `utils/citation.ts` | `features/artifacts/{api.ts,types.ts,utils/citation.ts}` (+spec), `components/Artifact*.svelte` | done | ★ `citation.spec.ts`. |
+| ART-1 | Artifacts CRUD/render/save/upload/link/save-to-workspace | `features/artifacts/**`, `utils/citation.ts` | `features/artifacts/{api.ts,types.ts,utils/citation.ts}` (+spec), `components/Artifact*.svelte` | done | ★ `citation.spec.ts`. **Phase 11:** save-to-workspace di `ChatArtifactCard` WIRED (Popover `WorkspacePicker` → `useLinkArtifactToWorkspace`; afordansi sebelumnya hilang). Shared `WorkspacePicker.svelte` baru. |
 | ART-2 | Citation Manager list/filter/tags/detail/CRUD/restore | `features/citations/**`, `components/citation/**` | `features/citations/components/{CitationsPanel,CitationDetailView,CitationFormDialog,CitationSettingsDialog}.svelte`, `lib/components/citation/CopyCitationButton.svelte` | done | **Browser-verified:** list 16 (author/venue/status-dot/tag), detail + render IEEE + metadata. |
 | ART-3 | DOI/artifact create, copy, bulk, duplicates/merge | `features/citations/**` | `features/citations/components/{CitationDoiDialog,CitationDuplicatesDialog,CitationExportMenu}.svelte` + api.ts | done | bulk-tag/delete/merge-many; duplicates group merge. |
 | ART-4 | Import `.bib`/`.ris` preview→commit; export BibTeX/RIS/CSL JSON | `features/citations/export-model.ts` | `features/citations/{export-model.ts (+spec),components/CitationImportWizard.svelte}` | done | ★ Byte-exact `export-model.spec.ts` (csl-json stringify regresi). |
 | ART-5 | Provider folders/sync + style/document render/provenance/linked artifact | `features/citations/**` | `features/citations/components/{ProviderSyncWizard,CitationSettingsDialog}.svelte` + api.ts | done | Mendeley/Zotero sync preview→commit (reuse `useIntegrations`/`PROVIDER_META` Phase 5). |
 | ART-6 | Empty/missing/deleted states + panel deep links | `features/citations/**`, `features/artifacts/**` | `features/citations/components/CitationEmptyState.svelte`, `components/ArtifactMissingState.svelte` | done | Panel deep link = WSP-8. |
 
-## Phase 10 — BlockNote Svelte adapter & document editing
+## Phase 10 — BlockNote Svelte adapter & document editing — **DILEWATI (§0 #9)**
+
+> **Superseded 15 Juli 2026 (§0 #9, plan §8.9/§10).** Phase 10 **tidak dieksekusi** dalam migrasi. Document
+> editing di-**redesign** setelah cutover (pilihan engine — pertahankan BlockNote vs ganti total — DITUNDA ke
+> workstream itu), jadi port 1:1 BlockNote = throwaway pada gate termahal migrasi. Pada cutover, editor =
+> **read-only** (state Phase 9: render Markdown/PDF/Mermaid). Nol user → tak ada editing experience live yang
+> perlu dilindungi. BLK-1..7 + CSS-2 (Phase 3) = **`superseded-pending`**. Migrasi lompat **Phase 9 → Phase 11**.
+> Konsekuensi diterima sadar: Astra tak bisa menulis ke dokumen (`documentEditBus`), sitasi tak bisa ditanam.
+> Hygiene Phase 11 (item BLK-HYG): tak ada dead affordance yang menjanjikan edit lalu no-op.
 
 | ID | Scope | Source (`features/workspaces/`) | Target | Status | Notes |
 |---|---|---|---|---|---|
-| BLK-1 | `@blocknote/core` mount/unmount browser-only | `components/blocknote-editor-loader.tsx`, `blocknote-document-editor.tsx` | equivalent | not-started | Pin schema-compatible; cleanup subs; no format upgrade. |
-| BLK-2 | Svelte UI via vanilla events | `blocknote-document-editor.tsx` | equivalent | not-started | formatting/link/file/side/suggestion/table UI dipakai. |
-| BLK-3 | Inline citation + block bibliography schema | `components/blocknote-citation-schema.tsx` | equivalent | not-started | ★ props/node ID unchanged. |
-| BLK-4 | Per-editor citation store + picker | `components/blocknote-citation-store.ts`, `citation-picker-dialog.tsx` | equivalent | not-started | Bukan global store. |
-| BLK-5 | Autosave/debounce/flush/error + edit bus | `utils/artifact-editor-model.ts`, `lib/document-edit-bus.ts` | equivalent | not-started | ★ artifact-editor-model.test.ts; flush on unmount/close. |
-| BLK-6 | XL AI transport + Ask Astra + accept/reject | `blocknote-document-editor.tsx` (xl-ai) | equivalent | not-started | Svelte accept/reject bila React UI tak reusable. |
-| BLK-7 | Keyboard/paste/undo/redo/mobile/dark/export + round-trip | all above | equivalent | not-started | ★ React↔Svelte round-trip zero-loss (both directions). |
+| BLK-1 | `@blocknote/core` mount/unmount browser-only | `components/blocknote-editor-loader.tsx`, `blocknote-document-editor.tsx` | — | superseded-pending | Redesign pasca-cutover (§0 #9). Kalau BlockNote dipertahankan, mount core reusable; kalau engine diganti, gugur. |
+| BLK-2 | Svelte UI via vanilla events | `blocknote-document-editor.tsx` | — | superseded-pending | Redesign pasca-cutover (§0 #9). |
+| BLK-3 | Inline citation + block bibliography schema | `components/blocknote-citation-schema.tsx` | — | superseded-pending | Redesign pasca-cutover (§0 #9). Read-only render tetap tampil (Phase 9). |
+| BLK-4 | Per-editor citation store + picker | `components/blocknote-citation-store.ts`, `citation-picker-dialog.tsx` | — | superseded-pending | Redesign pasca-cutover (§0 #9). |
+| BLK-5 | Autosave/debounce/flush/error + edit bus | `utils/artifact-editor-model.ts`, `lib/document-edit-bus.ts` | — | superseded-pending | Redesign pasca-cutover (§0 #9). |
+| BLK-6 | XL AI transport + Ask Astra + accept/reject | `blocknote-document-editor.tsx` (xl-ai) | — | superseded-pending | Redesign pasca-cutover (§0 #9). |
+| BLK-7 | Keyboard/paste/undo/redo/mobile/dark/export + round-trip | all above | — | superseded-pending | Redesign pasca-cutover (§0 #9). |
 
 ---
+
+## Phase 11 — Hardening, Phase 10 skip, seam completion
+
+**Phase 11 = DONE.** Gate HIJAU: typecheck **0/0** (7340 files), `bun run test` **294 passed / 46 files**,
+lint (prettier+eslint) **0**, build OK, **security audit nol P0/P1** (§4 DR). Detail:
+[`apps-svelte-phase11-decision-record.md`](apps-svelte-phase11-decision-record.md).
+
+- **Phase 10 dilewati (§0 #9):** editor read-only pada cutover; BLK-1..7 + CSS-2 = `superseded-pending`.
+  Hygiene read-only: `DOCUMENT_AUTHORING_ENABLED=false` (gate 3 afordansi buat-dokumen), copy diperbaiki,
+  handler Astra `request_document_edit` = no-op terdokumentasi.
+- **Empat seam Phase 8/9 diselesaikan (wire-to-parity):** save-to-workspace (EXP-2/ART-1), @mention picker
+  (THX-3), artifact-page chat (WSP-9), thread-panel artifact preview (WSP-9). `WorkspacePicker.svelte` baru;
+  `ArtifactDetailView` prop `embedded` baru.
 
 ## Parity bugs & follow-ups (dua-app)
 
@@ -179,4 +202,8 @@ Catat di sini bug existing yang ditemukan saat porting — **jangan perbaiki dia
 
 | Tanggal | Item | Deskripsi | Ditemukan di | Tindakan |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| 2026-07-15 | Editor dokumen | Phase 10 dilewati; editing di-redesign pasca-cutover (§0 #9). Read-only pada cutover. | Phase 11 | Follow-up: workstream redesign (pilih engine + format data). |
+| 2026-07-15 | Thread panel tab Workspace (`context`) | Mode `context` tak reachable (nol pemanggil `openContextPanel`) + butuh komponen library-in-thread + `workspaceId` yang tak ada di model thread. | Phase 11 sweep | Placeholder netral; follow-up sub-fitur (komponen + plumbing workspaceId). |
+| 2026-07-15 | Artifact-page chat thread scope | Gap 3 reuse `ExploreChatSidePanel` → daftar thread global (web = workspace-scoped). Fungsi inti tetap via ambient ref. | Phase 11 | Follow-up: `WorkspaceChatSidePanel.svelte` tipis bila scoping diinginkan. |
+| 2026-07-15 | 4 gap Phase 11 | Browser verification **SELESAI** — semua 4 gap hijau end-to-end (localhost:5173 + backend VPS/Tailscale, owner signed-in). | Phase 11 | DONE (DR §4.1). |
+| 2026-07-15 | Thread seed cold-load | Navigasi langsung/reload thread detail tampil hero kosong sampai kirim pesan (riwayat tak seed). Root cause: latch `historySettled` gate `!isFetching` settle sebelum fetch saat query disabled (Clerk cold-load) → agen seed kosong. | Phase 11 browser-verify | **FIXED** — gate latch `history.isFetched` di `ThreadDetailShell` + `ExploreThreadChat`; verified cold-load reload. |

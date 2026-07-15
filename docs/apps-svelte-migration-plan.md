@@ -28,8 +28,9 @@
 6. **Gerbang go/no-go keras di akhir Phase 1.** Spike jadi **satu vertical slice tersambung** (`sign-in svelte-clerk → buka thread → kirim → Mastra stream → streamdown render`) + **ukur resource dev SvelteKit vs Next**. Kalau satu dealbreaker (auth/streaming/streamdown) gagal → **batalkan setelah ~1 minggu**, jangan dipaksakan.
 7. **Tangga fallback auth:** `svelte-clerk` (primer) → adapter tipis `@clerk/clerk-js` (fallback teknis) → batal/pause (backstop terakhir).
 8. **Redesign = opportunistik saja.** Perbaikan remeh sambil porting (spacing, a11y, dead state) boleh; **tidak ada** kerja redesign terjadwal; layout/hierarki tetap seperti web. Redesign besar = pekerjaan terpisah *setelah* nyaman di Svelte.
+9. **Phase 10 (BlockNote 1:1 port) DILEWATI — document editing di-redesign pasca-migrasi.** Ditambahkan 15 Juli 2026. Editor dokumen akan di-**redesign** (bukan diport 1:1), jadi mem-port BlockNote React→Svelte sekarang = throwaway pada gate termahal migrasi (round-trip zero-loss, XL AI accept/reject, per-editor citation store). Nol user (§0) → tak ada editing experience live yang perlu dilindungi. Konsekuensi yang diterima sadar: pada cutover, **document editing = read-only** (state Phase 9 — view Markdown/PDF/Mermaid); Astra tak bisa menulis ke dokumen (`documentEditBus`), sitasi tak bisa ditanam ke dokumen. **Pilihan engine (pertahankan BlockNote vs ganti total) DITUNDA** ke workstream redesign; BLK-1..7 + CSS-2 = `superseded-pending`. Tidak ada editor interim (read-only cukup untuk dogfooding). Migrasi dianggap "selesai" tanpa Phase 10; redesign = pekerjaan terpisah. Hygiene wajib (Phase 11): tak ada dead affordance yang menjanjikan edit lalu no-op.
 
-**Seksi yang di-superseded:** §1 poin 2/7 (relaxed), §3.1/§3.2 (reframed), §9 gate (di-downgrade), Phase 0 (disederhanakan), Phase 12 (dipangkas jadi keputusan #5), §16 poin 5/6 (dihapus).
+**Seksi yang di-superseded:** §1 poin 2/7 (relaxed), §3.1/§3.2 (reframed), §9 gate (di-downgrade), Phase 0 (disederhanakan), Phase 10 (DILEWATI — keputusan #9), Phase 12 (dipangkas jadi keputusan #5), §16 poin 5/6 (dihapus), §16 #3/#4 & §8.9 (editor read-only — keputusan #9).
 
 ## 1. Tujuan dan hasil akhir
 
@@ -409,9 +410,11 @@ Parity artifacts: list/context/detail/render, create/update/rename/move/delete, 
 
 Parity Citation Manager: list/filter/tags/detail/CRUD/restore, DOI/artifact creation, copy, bulk actions, duplicates/merge, `.bib`/`.ris` preview→commit, BibTeX/RIS/CSL JSON export, provider folders/sync preview→commit, style/document render/provenance/linked artifact, empty/missing/deleted states, panel deep links.
 
-### 8.9 BlockNote editor — fase terakhir
+### 8.9 BlockNote editor — DILEWATI (di-redesign pasca-migrasi, §0 #9)
 
-Source:
+> **Superseded 15 Juli 2026 (§0 #9).** Fitur ini **tidak diport 1:1**. Pada cutover, document editing = **read-only** (view Markdown/PDF/Mermaid — state Phase 9). Parity untuk surface ini turun jadi *read-only + tak ada dead affordance*. Editable document editing = **redesign terpisah** setelah cutover; pilihan engine (pertahankan BlockNote vs ganti total) ditunda ke workstream itu. Source di bawah tetap dicatat sebagai referensi redesign, bukan target port. Item ledger BLK-1..7 + CSS-2 = `superseded-pending`.
+
+Source (referensi redesign, bukan target port):
 
 - `blocknote-document-editor.tsx`, `blocknote-editor-loader.tsx`
 - `blocknote-citation-schema.tsx`, `blocknote-citation-store.ts`
@@ -419,15 +422,13 @@ Source:
 - `apps/web/app/styles/blocknote-aqsha.css`
 - `features/workspaces/utils/artifact-editor-model.ts`.
 
-Parity:
+Parity pada cutover (read-only):
 
-- existing `blocksJson`, Markdown, plain text tanpa data migration;
-- editing/toolbar/link/slash/side-menu/table/file UI yang dipakai;
-- inline `citation` dan block `bibliography` dengan schema/props/node ID sama;
-- citation picker/locator/missing/bibliography;
-- autosave/debounce/saved/error/unmount flush/reconciliation;
-- XL AI transport, Ask Astra selection, AI streaming edit, accept/reject;
-- keyboard/paste/undo/redo/mobile/dark/export compatibility.
+- existing `blocksJson`/Markdown/plain-text **di-render read-only** (Phase 9 — no data migration);
+- inline `citation` dan block `bibliography` **ditampilkan** (tak bisa disunting/ditambah);
+- tak ada dead affordance: tombol/menu edit, "buat dokumen", atau tool Astra edit-dokumen yang menjanjikan lalu no-op → di-hide/guard (Phase 11 hygiene).
+
+Ditunda ke redesign (bukan target migrasi): editing/toolbar/slash/side-menu/table/file UI; citation picker/locator; autosave/flush/reconciliation; XL AI transport + accept/reject; keyboard/paste/undo/redo/export. Semua bergantung keputusan engine yang belum diambil.
 
 ## 9. Strategi CSS dan visual parity
 
@@ -603,7 +604,11 @@ Exclude editable BlockNote. Urutan internal:
 
 Gate: model tests, upload max/concurrency/progress/failure/retry, DnD mouse/touch/keyboard, citation bytes/filenames, provider flows, PDF zoom/search/link/theme parity. Preview may mark document editing read-only, tetapi bukan cutover candidate.
 
-### Phase 10 — BlockNote Svelte adapter dan document editing
+### Phase 10 — BlockNote Svelte adapter dan document editing — **DILEWATI (§0 #9)**
+
+> **Superseded 15 Juli 2026 (§0 #9).** Fase ini **tidak dieksekusi** dalam migrasi. Document editing di-**redesign** setelah cutover (pekerjaan terpisah), jadi port 1:1 BlockNote = throwaway pada gate termahal migrasi. Pada cutover, editor = **read-only** (Phase 9). Langkah-langkah di bawah tetap dicatat sebagai **input untuk redesign**, bukan sebagai fase migrasi. Migrasi lompat Phase 9 → Phase 11.
+
+Input untuk workstream redesign (jika kelak BlockNote dipertahankan; kalau engine diganti, banyak ini gugur):
 
 1. Pin schema-compatible `@blocknote/core`; no simultaneous format upgrade.
 2. Browser-only mount/unmount dan cleanup subscriptions.
@@ -615,9 +620,7 @@ Gate: model tests, upload max/concurrency/progress/failure/retry, DnD mouse/touc
 8. Integrate AI core/transport + Svelte accept/reject UI bila React XL UI tidak reusable.
 9. Round-trip React→Svelte→React dan Svelte→React→Svelte untuk document corpus.
 
-Gate: zero-loss round-trip 100%, editor/autosave/citation tests, paste/undo/slash/citation/AI E2E, visual editor parity, no React runtime island, no database/document migration.
-
-Rollback selama preview boleh mengarahkan edit ke web; production cutover dilarang sebelum editor gate hijau.
+Catatan format data: artifact existing tersimpan `blocksJson` (BlockNote). Kalau redesign mengganti engine, butuh keputusan jalur migrasi data — tapi karena belum production & data nyata minim, ini momen termurah untuk mengganti format. Diputuskan di workstream redesign, bukan di sini.
 
 ### Phase 11 — Full parity dan hardening
 
@@ -734,12 +737,12 @@ Image Svelte harus build workspace deps, menghasilkan adapter-node, run non-root
 12. Explore/discovery.
 13. Workspace/library/upload/DnD.
 14. Artifacts/Citations/PDF.
-15. BlockNote core adapter.
-16. BlockNote citation/AI/autosave.
-17. Lean hardening (§11 di-lean-kan).
+15. ~~BlockNote core adapter.~~ **Dilewati (§0 #9)** — redesign pasca-migrasi.
+16. ~~BlockNote citation/AI/autosave.~~ **Dilewati (§0 #9)** — redesign pasca-migrasi.
+17. Lean hardening (§11 di-lean-kan) — termasuk hygiene read-only editor (no dead affordance).
 18. Deploy subdomain → dogfood → flip domain (§12 disederhanakan).
 
-Jangan gabungkan cutover dengan BlockNote implementation atau dependency major upgrades. **Ingat gerbang go/no-go Phase 1** sebelum berkomitmen ke PR 3+.
+Jangan gabungkan cutover dengan dependency major upgrades. Editor dokumen di-redesign sebagai pekerjaan terpisah setelah cutover (§0 #9). **Ingat gerbang go/no-go Phase 1** sebelum berkomitmen ke PR 3+.
 
 ## 15. Petunjuk agent pelaksana
 
@@ -762,8 +765,8 @@ Per ledger item wajib ada source/target modules, tests sesuai risiko, visual/a11
 
 1. Gerbang go/no-go Phase 1 = GO (§0 #6).
 2. Semua route §7 punya URL/auth/loading/error/redirect yang sama; SEO/metadata untuk route publik.
-3. Semua feature §8 `parity-complete` secara **fungsional** (jalan + terlihat benar, bukan pixel-identik).
-4. BlockNote React↔Svelte round-trip zero loss.
+3. Semua feature §8 `parity-complete` secara **fungsional** (jalan + terlihat benar, bukan pixel-identik). **Pengecualian §8.9 (§0 #9):** document editing = read-only pada cutover; editable = redesign terpisah. Surface ini `parity-complete` bila read-only + tanpa dead affordance.
+4. ~~BlockNote React↔Svelte round-trip zero loss.~~ **Dihapus (§0 #9)** — Phase 10 dilewati; editor di-redesign pasca-migrasi, bukan diport 1:1.
 5. Pure/contract test correctness-critical + ~10 E2E happy-path + lint/typecheck/build hijau (axe = warning, bukan blocking; §0 #4).
 6. Kode Svelte idiomatik (§3.4–3.7): tak ada legacy-mode, tak ada `$effect` abuse, tak ada module-level state, tak ada React/Radix-React/direct-Lucide import.
 7. Cutover subdomain→domain selesai; `apps/web` dihentikan, disimpan di git sebagai reference (dihapus di pekerjaan terpisah).

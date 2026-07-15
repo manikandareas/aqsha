@@ -73,11 +73,15 @@
 		}
 	}));
 
-	// Latch: hold first paint until the on-mount refetch settles (fresh data becomes the seed), then let
-	// background refetches through without blocking (mirror the web `historySettled` guard).
+	// Latch: hold first paint until the history query has actually fetched (fresh data becomes the seed),
+	// then let background refetches through without blocking. Gate on `isFetched`, NOT `!isFetching`: a
+	// query disabled during Clerk cold-load reports `isFetching === false`, which would settle the latch
+	// before the fetch runs → the agent seeds with empty `history.data` and the thread renders the empty
+	// hero until a message is sent. `isFetched` stays false while disabled/pending, flipping true only
+	// after the first fetch resolves (success or error).
 	let historySettled = $state(untrack(() => !isExistingThread));
 	$effect(() => {
-		if (!history.isFetching && !historySettled) historySettled = true;
+		if (history.isFetched && !historySettled) historySettled = true;
 	});
 	const loading = $derived(isExistingThread && !historySettled);
 
