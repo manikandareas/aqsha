@@ -59,7 +59,7 @@
 			class="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
 		/>
 	</Collapsible.Trigger>
-	<Collapsible.Content class="overflow-hidden">
+	<Collapsible.Content>
 		<div class="mt-2 flex min-w-0 flex-col gap-2.5 text-[13px]">
 			{#each parts as part (part.id)}
 				{#if part.kind === 'tool'}

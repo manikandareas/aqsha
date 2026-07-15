@@ -8,8 +8,8 @@
 	 * Full-app / region loading surface. FlickerSpinner + a label with rotating hints that cycle
 	 * every 2.2s (paused under reduced motion). `variant="fixed"` covers the viewport (full-app
 	 * gate); `variant="absolute"` fills the nearest positioned ancestor (a single page region).
-	 * Rotating hints use `{#key}` + `fly` (mode="wait" equivalent), collapsing to no motion when
-	 * reduced.
+	 * Rotating hints crossfade in place — both lines share one grid cell (`[grid-area:1/1]`) inside a
+	 * fixed `h-5` clip so they overlap rather than stacking; collapses to no motion when reduced.
 	 */
 	type Props = {
 		/** Primary line, shown larger and centered. */
@@ -64,10 +64,10 @@
 
 		<div class="flex flex-col items-center gap-2">
 			<p class="font-heading text-lg font-semibold text-foreground">{label}</p>
-			<div class="h-5 overflow-hidden">
+			<div class="grid h-5 overflow-hidden">
 				{#key activeMessage}
 					<p
-						class="text-sm text-muted-foreground"
+						class="text-sm text-muted-foreground [grid-area:1/1]"
 						in:fly={reduce ? { duration: 0 } : { y: 6, duration: 350 }}
 						out:fly={reduce ? { duration: 0 } : { y: -6, duration: 350 }}
 					>

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { slide } from 'svelte/transition';
 	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
@@ -105,6 +107,7 @@
 	const deepSendStatus = useSendStatus('deep_research');
 
 	const busy = $derived(agent.status !== 'ready');
+	const reduce = $derived(prefersReducedMotion.current);
 	const notice = $derived<ComposerNotice | null>(blockedNotice(sendStatus.data));
 	const blocked = $derived(notice !== null);
 	const isEmpty = $derived(agent.messages.length === 0 && !busy);
@@ -241,7 +244,10 @@
 	primary: { label: string; onClick: () => void; disabled?: boolean; stop?: boolean },
 	secondary?: { label: string; onClick: () => void }
 )}
-	<div class={threadTranscriptColumnClass}>
+	<div
+		class={threadTranscriptColumnClass}
+		transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
+	>
 		<div class={toolCardShellClass}>
 			<div class="flex gap-2">
 				<Icon icon={AlertCircleIcon} class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -366,7 +372,10 @@
 				})}
 			{/if}
 			{#if agent.askGate}
-				<div class={threadTranscriptColumnClass}>
+				<div
+					class={threadTranscriptColumnClass}
+					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
+				>
 					<QuestionsCard
 						questions={agent.askGate.questions}
 						findings={agent.askGate.findings}
@@ -377,7 +386,10 @@
 				</div>
 			{/if}
 			{#if agent.planGate}
-				<div class={threadTranscriptColumnClass}>
+				<div
+					class={threadTranscriptColumnClass}
+					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
+				>
 					<ToolCard
 						icon={NotebookIcon}
 						title="Rencana riset"
@@ -394,7 +406,10 @@
 				</div>
 			{/if}
 			{#if agent.approvals.length > 0}
-				<div class={cn(threadTranscriptColumnClass, 'flex flex-col gap-2.5')}>
+				<div
+					class={cn(threadTranscriptColumnClass, 'flex flex-col gap-2.5')}
+					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
+				>
 					{#each agent.approvals as a (a.toolCallId)}
 						<ToolCard
 							icon={WrenchIcon}
@@ -412,7 +427,10 @@
 				</div>
 			{/if}
 			{#if agent.queued.length > 0}
-				<div class={cn(threadTranscriptColumnClass, 'flex flex-col gap-1.5')}>
+				<div
+					class={cn(threadTranscriptColumnClass, 'flex flex-col gap-1.5')}
+					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
+				>
 					{#each agent.queued as q (q.id)}
 						<div
 							class="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[13px]"

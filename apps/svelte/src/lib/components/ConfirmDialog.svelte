@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { slide } from 'svelte/transition';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { readableApiErrorMessage } from '$lib/errors';
@@ -29,6 +31,7 @@
 
 	let isSubmitting = $state(false);
 	let error = $state<string | null>(null);
+	const reduce = $derived(prefersReducedMotion.current);
 
 	async function handleConfirm() {
 		isSubmitting = true;
@@ -52,7 +55,12 @@
 		</Dialog.Header>
 		{@render children?.()}
 		{#if error}
-			<p class="text-[12px] font-medium text-destructive">{error}</p>
+			<p
+				class="text-[12px] font-medium text-destructive"
+				transition:slide={reduce ? { duration: 0 } : { duration: 160 }}
+			>
+				{error}
+			</p>
 		{/if}
 		<Dialog.Footer>
 			<Dialog.Close>

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { slide } from 'svelte/transition';
 	import { Icon, PlusIcon } from '$lib/icons';
 	import { viewerContext } from '$lib/auth';
 	import { cn } from '$lib/utils';
@@ -38,23 +40,34 @@
 			? `${firstName}, mulai dari topik yang lagi hangat.`
 			: 'Mulai dari topik yang lagi hangat.'
 	);
+
+	const reduce = $derived(prefersReducedMotion.current);
 </script>
 
-{#if compact}
-	<section class="pt-6 pb-2">
-		<ExploreAskBar value={query} onSubmit={onSubmitQuery} />
-	</section>
-{:else}
-	<section class="pt-10 pb-2 @2xl:pt-12">
+<!-- Ask bar stays mounted across states; only the greeting + pills collapse so submitting a search
+     eases the feed up instead of the whole hero hard-swapping ~180px. -->
+<section
+	class={cn(
+		'pb-2 transition-[padding] duration-200 ease-out motion-reduce:transition-none',
+		compact ? 'pt-6' : 'pt-10 @2xl:pt-12'
+	)}
+>
+	{#if !compact}
 		<h1
 			class="font-heading mb-6 max-w-[760px] text-[clamp(30px,3.6vw,46px)] leading-[1.07] font-medium tracking-tight text-balance text-foreground"
+			transition:slide={reduce ? { duration: 0 } : { duration: 200 }}
 		>
 			{greeting}
 		</h1>
+	{/if}
 
-		<ExploreAskBar value={query} onSubmit={onSubmitQuery} />
+	<ExploreAskBar value={query} onSubmit={onSubmitQuery} />
 
-		<div class="mt-6 flex flex-wrap items-center gap-2">
+	{#if !compact}
+		<div
+			class="mt-6 flex flex-wrap items-center gap-2"
+			transition:slide={reduce ? { duration: 0 } : { duration: 200 }}
+		>
 			{#each PILLS as pill (pill.id ?? 'all')}
 				{@const active = pill.id === activeTopic}
 				<button
@@ -78,5 +91,5 @@
 				<Icon icon={PlusIcon} class="size-3.5" /> Atur
 			</button>
 		</div>
-	</section>
-{/if}
+	{/if}
+</section>

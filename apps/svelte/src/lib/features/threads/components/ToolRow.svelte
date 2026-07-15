@@ -204,7 +204,7 @@
 				class="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-focus-visible:opacity-100 group-data-[state=open]:rotate-180 group-data-[state=open]:opacity-100"
 			/>
 		</Collapsible.Trigger>
-		<Collapsible.Content class="overflow-hidden">
+		<Collapsible.Content>
 			{#if detail && detail.kind === 'search'}
 				<div class="mt-1.5 text-[12px]">
 					<DeepSearchCards subSearches={detail.subSearches} {sourcesBySubQ} {turnId} />

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { scale } from 'svelte/transition';
 	import { cn } from '$lib/utils';
 	import { Icon, CheckIcon } from '$lib/icons';
 
@@ -12,6 +14,8 @@
 		onclick,
 		children
 	}: { selected: boolean; onclick: () => void; children: Snippet } = $props();
+
+	const reduce = $derived(prefersReducedMotion.current);
 </script>
 
 <button
@@ -34,7 +38,9 @@
 		)}
 	>
 		{#if selected}
-			<Icon icon={CheckIcon} class="size-3" />
+			<span transition:scale={reduce ? { duration: 0 } : { duration: 150, start: 0.4 }}>
+				<Icon icon={CheckIcon} class="size-3" />
+			</span>
 		{/if}
 	</span>
 </button>

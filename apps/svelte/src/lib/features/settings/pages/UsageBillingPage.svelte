@@ -218,10 +218,11 @@
 						type="button"
 						onclick={() => (days = w)}
 						class={cn(
-							'rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors duration-150',
+							// Border reserved on both states (color-only swap) so the active segment can't widen.
+							'rounded-md border px-2.5 py-1 text-[12px] font-medium transition-colors duration-150',
 							active
-								? 'border border-border/40 bg-card text-foreground'
-								: 'text-muted-foreground hover:text-foreground'
+								? 'border-border/40 bg-card text-foreground'
+								: 'border-transparent text-muted-foreground hover:text-foreground'
 						)}
 					>
 						{w}h

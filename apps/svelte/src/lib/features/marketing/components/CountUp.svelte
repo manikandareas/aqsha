@@ -48,4 +48,4 @@
 	};
 </script>
 
-<span {@attach attach}>{reduce ? to : value}{suffix}</span>
+<span class="tabular-nums" {@attach attach}>{reduce ? to : value}{suffix}</span>

@@ -4,6 +4,8 @@
 </script>
 
 <script lang="ts">
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { fly } from 'svelte/transition';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import { Icon, ArrowUpRightIcon } from '$lib/icons';
@@ -44,6 +46,7 @@
 	const hero = $derived(items[0]);
 	const rest = $derived(items.slice(1));
 	const showFeed = $derived(!query.isPending && items.length > 0);
+	const reduce = $derived(prefersReducedMotion.current);
 
 	const handlers: DiscoveryCardHandlers = {
 		onAskAstra: (item) => {
@@ -61,9 +64,11 @@
 </script>
 
 {#if showFeed}
+	<!-- Fade + rise the teaser in (transform/opacity) so the resolved feed materializes instead of hard-cutting. -->
 	<div
 		id={HOME_EXPLORE_SECTION_ID}
 		class="mx-auto w-full max-w-5xl scroll-mt-6 px-4 pt-4 pb-20 @2xl:px-8"
+		in:fly={reduce ? { duration: 0 } : { y: 8, duration: 300 }}
 	>
 		<section>
 			<SectionHeader title="Jelajahi" subtitle="Paper & berita pilihan buat kamu">

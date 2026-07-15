@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { slide } from 'svelte/transition';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import { Icon, CheckCircle2Icon, SparklesIcon } from '$lib/icons';
@@ -153,24 +155,35 @@
 			hide.mutate(item.itemRef, { onError: () => toast.error('Gagal menyembunyikan.') });
 		}
 	};
+
+	const reduce = $derived(prefersReducedMotion.current);
 </script>
 
-<section class={searchMode ? 'pt-16' : 'pt-8'}>
+<!-- Ease the padding + slide the search header in so switching Jelajah↔Selidiki doesn't jump the feed. -->
+<section
+	class={cn(
+		'transition-[padding] duration-200 ease-out motion-reduce:transition-none',
+		searchMode ? 'pt-16' : 'pt-8'
+	)}
+>
 	{#if searchMode}
-		<SectionHeader
-			title={`Hasil untuk “${q}”`}
-			subtitle="Paper & berita yang cocok dengan pencarianmu"
-		>
-			{#snippet right()}
-				<span class="shrink-0 font-mono text-[11px] text-muted-foreground">{items.length} item</span
-				>
-			{/snippet}
-		</SectionHeader>
+		<div class="mb-5" transition:slide={reduce ? { duration: 0 } : { duration: 200 }}>
+			<SectionHeader
+				title={`Hasil untuk “${q}”`}
+				subtitle="Paper & berita yang cocok dengan pencarianmu"
+			>
+				{#snippet right()}
+					<span class="shrink-0 font-mono text-[11px] text-muted-foreground"
+						>{items.length} item</span
+					>
+				{/snippet}
+			</SectionHeader>
+		</div>
 	{/if}
 
 	<div
 		class={cn(
-			searchMode ? '@container/feed mt-5' : '@container/feed',
+			'@container/feed',
 			active.isPlaceholderData && 'opacity-60 transition-opacity duration-200'
 		)}
 	>

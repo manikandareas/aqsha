@@ -384,18 +384,23 @@
 												{#if selected}<Icon icon={CheckIcon} class="size-3" />{/if}
 											</span>
 										{:else}
+											<!-- Same size-4 footprint as the checkbox so entering selection mode doesn't shift titles. -->
 											<span
 												aria-hidden="true"
 												title={CITATION_STATUS_LABELS[item.metadataStatus]}
-												class={cn(
-													'size-1.5 shrink-0 rounded-full',
-													item.metadataStatus === 'verified'
-														? 'bg-mint'
-														: item.metadataStatus === 'needs_review'
-															? 'bg-amber-400'
-															: 'bg-destructive/70'
-												)}
-											></span>
+												class="flex size-4 shrink-0 items-center justify-center"
+											>
+												<span
+													class={cn(
+														'size-1.5 rounded-full',
+														item.metadataStatus === 'verified'
+															? 'bg-mint'
+															: item.metadataStatus === 'needs_review'
+																? 'bg-amber-400'
+																: 'bg-destructive/70'
+													)}
+												></span>
+											</span>
 										{/if}
 										<span
 											class="truncate text-[13px] font-semibold text-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] @3xl:[-webkit-line-clamp:1]"

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { slide } from 'svelte/transition';
 	import { Icon, ArrowDownAZIcon, FilterIcon, SearchIcon, XIcon } from '$lib/icons';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -68,6 +70,7 @@
 	// query keeps a dot on the icon so the active filter stays visible even collapsed.
 	let searchExpanded = $state(false);
 	let searchInputEl = $state<HTMLInputElement | null>(null);
+	const reduce = $derived(prefersReducedMotion.current);
 
 	const collapseSearch = () => (searchExpanded = false);
 
@@ -80,58 +83,63 @@
 
 <div class="flex min-w-0 items-center gap-1">
 	{#if searchExpanded}
-		<InputGroup
-			class="h-7 w-[168px] min-w-0 max-w-[55vw] rounded-full border-border/70 bg-muted/20 shadow-none transition-colors focus-within:border-ring focus-within:bg-background sm:w-[200px] sm:max-w-none"
-		>
-			<InputGroupAddon>
-				<Icon icon={SearchIcon} class="size-3.5 shrink-0 text-muted-foreground" />
-			</InputGroupAddon>
-			<InputGroupInput
-				bind:ref={searchInputEl}
-				value={query}
-				oninput={(event) => onQueryChange(event.currentTarget.value)}
-				onkeydown={(event) => {
-					if (event.key === 'Escape') {
-						onQueryChange('');
-						collapseSearch();
-					}
-				}}
-				onblur={() => {
-					if (!hasQuery) collapseSearch();
-				}}
-				placeholder="Cari dokumen…"
-				class="h-7 min-w-0 text-[12px]"
-				aria-label="Cari dokumen"
-			/>
-			<InputGroupAddon align="inline-end">
-				<button
-					type="button"
-					onclick={() => {
-						onQueryChange('');
-						collapseSearch();
+		<!-- Grow/shrink horizontally so expanding search eases the filter/sort buttons over instead of snapping. -->
+		<div class="min-w-0" transition:slide={reduce ? { duration: 0 } : { axis: 'x', duration: 200 }}>
+			<InputGroup
+				class="h-7 w-[168px] min-w-0 max-w-[55vw] rounded-full border-border/70 bg-muted/20 shadow-none transition-colors focus-within:border-ring focus-within:bg-background sm:w-[200px] sm:max-w-none"
+			>
+				<InputGroupAddon>
+					<Icon icon={SearchIcon} class="size-3.5 shrink-0 text-muted-foreground" />
+				</InputGroupAddon>
+				<InputGroupInput
+					bind:ref={searchInputEl}
+					value={query}
+					oninput={(event) => onQueryChange(event.currentTarget.value)}
+					onkeydown={(event) => {
+						if (event.key === 'Escape') {
+							onQueryChange('');
+							collapseSearch();
+						}
 					}}
-					aria-label="Bersihkan pencarian"
-					class="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
-				>
-					<Icon icon={XIcon} class="size-3" />
-				</button>
-			</InputGroupAddon>
-		</InputGroup>
+					onblur={() => {
+						if (!hasQuery) collapseSearch();
+					}}
+					placeholder="Cari dokumen…"
+					class="h-7 min-w-0 text-[12px]"
+					aria-label="Cari dokumen"
+				/>
+				<InputGroupAddon align="inline-end">
+					<button
+						type="button"
+						onclick={() => {
+							onQueryChange('');
+							collapseSearch();
+						}}
+						aria-label="Bersihkan pencarian"
+						class="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+					>
+						<Icon icon={XIcon} class="size-3" />
+					</button>
+				</InputGroupAddon>
+			</InputGroup>
+		</div>
 	{:else}
-		<Button
-			type="button"
-			variant="ghost"
-			size="icon-sm"
-			onclick={expandSearch}
-			class={cn('relative', controlButtonClass, hasQuery && controlButtonActiveClass)}
-			aria-label={hasQuery ? `Pencarian aktif: ${query.trim()}` : 'Cari dokumen'}
-		>
-			<Icon icon={SearchIcon} class="size-3.5" />
-			{#if hasQuery}
-				<span aria-hidden="true" class="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
-				></span>
-			{/if}
-		</Button>
+		<div transition:slide={reduce ? { duration: 0 } : { axis: 'x', duration: 200 }}>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon-sm"
+				onclick={expandSearch}
+				class={cn('relative', controlButtonClass, hasQuery && controlButtonActiveClass)}
+				aria-label={hasQuery ? `Pencarian aktif: ${query.trim()}` : 'Cari dokumen'}
+			>
+				<Icon icon={SearchIcon} class="size-3.5" />
+				{#if hasQuery}
+					<span aria-hidden="true" class="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
+					></span>
+				{/if}
+			</Button>
+		</div>
 	{/if}
 
 	<DropdownMenu.Root>

@@ -138,7 +138,11 @@
 					disabled={prefsLocked}
 				/>
 			</SettingsRow>
-			<SettingsRow label="Gaya jawaban" description={activeStyle.hint}>
+			<SettingsRow
+				label="Gaya jawaban"
+				description={activeStyle.hint}
+				descriptionClass="min-h-[2.5rem]"
+			>
 				<SettingsSegmentedControl>
 					{#each STYLE_OPTIONS as option (option.id)}
 						{@const active = styleValue === option.id}

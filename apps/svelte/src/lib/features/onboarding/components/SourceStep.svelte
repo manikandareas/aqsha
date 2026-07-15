@@ -16,9 +16,13 @@
 </script>
 
 <script lang="ts">
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { slide } from 'svelte/transition';
 	import { Input } from '$lib/components/ui/input';
 	import SelectableOption from './SelectableOption.svelte';
 	import StepHeading from './StepHeading.svelte';
+
+	const reduce = $derived(prefersReducedMotion.current);
 
 	let {
 		value,
@@ -46,12 +50,16 @@
 		{/each}
 	</div>
 	{#if value === SOURCE_OTHER.id}
-		<Input
-			value={other}
-			oninput={(event) => onotherchange((event.currentTarget as HTMLInputElement).value)}
-			placeholder="Ceritakan dari mana, ya"
-			class="mt-3 h-11 rounded-xl px-3.5 text-sm"
-			{@attach (node) => node.focus()}
-		/>
+		<!-- Slide (not an instant mount) so selecting "Lainnya" eases the field in instead of snapping
+		     the button row down. Padding lives on the wrapper so slide animates the gap too. -->
+		<div class="pt-3" transition:slide={reduce ? { duration: 0 } : { duration: 200 }}>
+			<Input
+				value={other}
+				oninput={(event) => onotherchange((event.currentTarget as HTMLInputElement).value)}
+				placeholder="Ceritakan dari mana, ya"
+				class="h-11 rounded-xl px-3.5 text-sm"
+				{@attach (node) => node.focus()}
+			/>
+		</div>
 	{/if}
 </div>

@@ -26,8 +26,9 @@
 
 	/**
 	 * Onboarding wizard. The pure step machine + validation lives in `lib/onboarding-machine.ts`; the
-	 * flow state + complete mutation in `state.svelte.ts`. Step transitions use `{#key}` + `fly`
-	 * (mode="wait" equivalent), collapsing to no motion when reduced.
+	 * flow state + complete mutation in `state.svelte.ts`. Outgoing and incoming steps share one grid
+	 * cell (`[grid-area:1/1]`) so `{#key}` + `fly` crossfades them in place instead of tiling them in
+	 * flow and shoving the buttons; collapses to no motion when reduced.
 	 */
 	const api = getApiClient();
 	const flow = createOnboardingFlow();
@@ -106,9 +107,10 @@
 		{/if}
 
 		<form {onsubmit}>
-			<div class="relative">
+			<div class="grid">
 				{#key flow.step}
 					<div
+						class="[grid-area:1/1]"
 						in:fly={reduce ? { duration: 0 } : { y: 8, duration: 220 }}
 						out:fly={reduce ? { opacity: 1, duration: 0 } : { y: -8, duration: 220 }}
 					>

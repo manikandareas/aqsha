@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Icon, ArrowUpRightIcon } from '$lib/icons';
 	import { useBillingCurrent, useProfile, useUsageActivity } from '../api';
 	import CreditMeter from '../components/CreditMeter.svelte';
@@ -36,7 +37,12 @@
 	</SettingsPanelHeader>
 	<SettingsPanelBody>
 		{#if billing.isPending}
-			<p class="text-[13px] text-muted-foreground">Memuat billing…</p>
+			<!-- Mirror CreditMeter's shape so the loaded meter drops in without shifting the footer. -->
+			<div class="space-y-3">
+				<Skeleton class="h-8 w-32" />
+				<Skeleton class="h-1.5 w-full" />
+				<Skeleton class="h-3 w-40" />
+			</div>
 		{:else if billing.data}
 			<CreditMeter
 				creditsUsed={billing.data.creditsUsed}
@@ -64,7 +70,11 @@
 	/>
 	<SettingsPanelBody>
 		{#if usage.isPending}
-			<p class="text-[13px] text-muted-foreground">Memuat penggunaan…</p>
+			<!-- Mirror UsageChart's shape (h-28 bars + caption) to avoid a load-time jump. -->
+			<div class="space-y-3">
+				<Skeleton class="h-28 w-full" />
+				<Skeleton class="h-3 w-48" />
+			</div>
 		{:else if usage.data}
 			<UsageChart days={usage.data} />
 		{:else}

@@ -31,6 +31,8 @@
 
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { slide } from 'svelte/transition';
 	import type { AskQuestionsResumeData } from '@aqsha/chat-core';
 	import { Icon, CheckIcon } from '$lib/icons';
 	import { Button } from '$lib/components/ui/button';
@@ -55,6 +57,8 @@
 		onSkip: () => void;
 		scrollable?: boolean;
 	} = $props();
+
+	const reduce = $derived(prefersReducedMotion.current);
 
 	let drafts = $state<Record<string, Draft>>(untrack(() => initDrafts(questions)));
 
@@ -184,6 +188,7 @@
 							change(question.id, { ...draft, other: e.currentTarget.value, otherActive: true })}
 						placeholder="Tulis jawaban lain…"
 						class="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-[13px] leading-5 text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring"
+						transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
 					/>
 				{/if}
 			</div>

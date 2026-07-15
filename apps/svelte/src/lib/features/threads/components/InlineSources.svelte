@@ -54,7 +54,7 @@
 					class="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
 				/>
 			</Collapsible.Trigger>
-			<Collapsible.Content class="overflow-hidden">
+			<Collapsible.Content>
 				<SourcesPanel {sources} class="mt-2" />
 			</Collapsible.Content>
 		</Collapsible.Root>

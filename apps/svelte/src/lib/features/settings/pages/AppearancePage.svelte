@@ -46,10 +46,11 @@
 					onclick={() => theme.setMode(option.key)}
 					disabled={!mounted}
 					class={cn(
-						'flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-2.5 text-[12px] font-medium transition-[background-color,color,transform] duration-150 ease-out active:scale-[0.98] disabled:cursor-default disabled:opacity-70',
+						// Border reserved on both states (color-only swap) so the active segment can't widen.
+						'flex cursor-pointer items-center justify-center gap-1.5 rounded-md border px-2.5 py-2.5 text-[12px] font-medium transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.98] disabled:cursor-default disabled:opacity-70',
 						active
-							? 'border border-border/40 bg-card text-foreground'
-							: 'text-muted-foreground hover:text-foreground'
+							? 'border-border/40 bg-card text-foreground'
+							: 'border-transparent text-muted-foreground hover:text-foreground'
 					)}
 				>
 					<Icon

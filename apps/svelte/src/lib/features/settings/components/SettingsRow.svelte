@@ -7,12 +7,15 @@
 		label,
 		description,
 		children,
-		class: className
+		class: className,
+		descriptionClass
 	}: {
 		label: string;
 		description?: string;
 		children?: Snippet;
 		class?: string;
+		/** Reserve a stable height here when the description text is dynamic, so swapping it can't reflow the row. */
+		descriptionClass?: string;
 	} = $props();
 </script>
 
@@ -25,7 +28,9 @@
 	<div class="min-w-0">
 		<p class="text-[13px] font-medium text-foreground">{label}</p>
 		{#if description}
-			<p class="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{description}</p>
+			<p class={cn('mt-0.5 text-[12px] leading-relaxed text-muted-foreground', descriptionClass)}>
+				{description}
+			</p>
 		{/if}
 	</div>
 	{#if children}

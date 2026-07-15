@@ -26,4 +26,4 @@
 	});
 </script>
 
-<Shimmer as="span" class="font-medium" text={label} />
+<Shimmer as="span" class="font-medium tabular-nums" text={label} />

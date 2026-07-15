@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { slide } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
@@ -258,7 +260,7 @@
 		hasComposerContext ||
 			(!isContentEmpty && (content.includes('\n') || editorHeight > 34 || commands.length > 0))
 	);
-	const shellExpanded = $derived(isExpanded);
+	const reduce = $derived(prefersReducedMotion.current);
 
 	// DUR-6: `busy` no longer blocks submit — a message during an active run is QUEUED (server for plain
 	// chat, client for the rest) via `send`/`sendDeep`, not dropped. The Stop button stays while the
@@ -398,8 +400,7 @@
 <div class="flex w-full flex-col gap-8">
 	<div
 		bind:this={composerShellEl}
-		class="@container/composer w-full overflow-hidden border border-border/85 bg-card/95 text-foreground transition-[border-radius] duration-150"
-		style="border-radius: {shellExpanded ? 24 : 23}px"
+		class="@container/composer w-full overflow-hidden rounded-[24px] border border-border/85 bg-card/95 text-foreground"
 	>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
@@ -419,7 +420,10 @@
 
 			{#if notice}
 				{@const isCooldown = Boolean(notice.retryAt)}
-				<div class="grid gap-2 border-b border-border/60 px-4 py-2.5">
+				<div
+					class="grid gap-2 border-b border-border/60 px-4 py-2.5"
+					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
+				>
 					{#if isCooldown}
 						<div
 							class="rounded-lg border border-lemon-soft-border bg-lemon-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-lemon-foreground"
@@ -442,7 +446,10 @@
 
 			<!-- Attachment / upload-error chip row -->
 			{#if attachmentsView.length > 0 || uploadError}
-				<div class="flex flex-wrap items-center gap-2 px-3.5 pt-3 pb-1">
+				<div
+					class="flex flex-wrap items-center gap-2 px-3.5 pt-3 pb-1"
+					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
+				>
 					{#each attachmentsView as file (file.artifactId)}
 						<FileChip
 							id={file.artifactId}
@@ -464,12 +471,11 @@
 
 			<div
 				class={cn(
-					'flex min-h-0 w-full transition-[padding,gap] duration-[180ms]',
+					// Restructure atomically (no partial padding/gap easing while flex-direction snaps).
+					'flex min-h-0 w-full',
 					isExpanded
 						? 'flex-col gap-3 p-3.5 pt-2 pb-2.5'
-						: shellExpanded
-							? 'min-h-[46px] flex-row items-center gap-2 p-2 pr-1.5 pl-2.5'
-							: 'min-h-[46px] flex-row items-center gap-2 py-1 pr-1.5 pl-2'
+						: 'min-h-[46px] flex-row items-center gap-2 py-1 pr-1.5 pl-2'
 				)}
 			>
 				<div
@@ -544,7 +550,7 @@
 					<span>jalankan perintah</span>
 					{#if showCredits && billing.data}
 						<span class="text-muted-foreground/40" aria-hidden="true">·</span>
-						<span class={cn(creditsLow && 'font-semibold text-amber-600 dark:text-amber-500')}>
+						<span class={cn(creditsLow && 'text-amber-600 dark:text-amber-500')}>
 							sisa {billing.data.creditsRemaining.toLocaleString('id-ID')} kredit
 						</span>
 					{/if}

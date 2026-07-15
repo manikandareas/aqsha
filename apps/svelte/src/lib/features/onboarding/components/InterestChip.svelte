@@ -15,9 +15,10 @@
 	{onclick}
 	aria-pressed={selected}
 	class={cn(
-		'rounded-full border px-3.5 py-1.5 text-sm transition-colors',
+		// Weight stays constant across states — toggling it re-measures the pill and re-wraps the row.
+		'rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
 		selected
-			? 'border-primary bg-primary/10 font-medium text-primary'
+			? 'border-primary bg-primary/10 text-primary'
 			: 'border-border/60 text-muted-foreground hover:border-border hover:text-foreground'
 	)}
 >

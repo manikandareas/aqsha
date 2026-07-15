@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { slide } from 'svelte/transition';
 	import {
 		Icon,
 		ArchiveIcon,
@@ -68,6 +70,7 @@
 
 	const inSubfolder = $derived(breadcrumb.length > 1);
 	const showTitleControls = $derived(showWorkspaceSettings && !titleSlot);
+	const reduce = $derived(prefersReducedMotion.current);
 </script>
 
 <div
@@ -189,6 +192,7 @@
 		<nav
 			aria-label="Lokasi folder"
 			class="flex min-w-0 items-center gap-1 pb-2 text-[12px] font-medium text-muted-foreground"
+			transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
 		>
 			{#each breadcrumb as segment, index (segment.id)}
 				{@const isLast = index === breadcrumb.length - 1}
