@@ -5,6 +5,7 @@ import {
 	BACK_TARGET,
 	buildCompletePayload,
 	EMPTY_ANSWERS,
+	HOME_AFTER_ONBOARDING,
 	isQuestionStep,
 	isStepValid,
 	type OnboardingAnswers,
@@ -56,10 +57,11 @@ describe('onboarding transitions', () => {
 		expect(BACK_TARGET.finish).toBeUndefined();
 	});
 
-	it('primary labels match web copy', () => {
-		expect(PRIMARY_LABEL.welcome).toBe('Mulai');
+	it('uses the approved onboarding destination and journey CTAs', () => {
+		expect(HOME_AFTER_ONBOARDING).toBe('/app');
+		expect(PRIMARY_LABEL.welcome).toBe('Mulai dari satu ide');
 		expect(PRIMARY_LABEL.source).toBe('Selesai');
-		expect(PRIMARY_LABEL.finish).toBe('Mulai jelajah');
+		expect(PRIMARY_LABEL.finish).toBe('Mulai research');
 	});
 });
 

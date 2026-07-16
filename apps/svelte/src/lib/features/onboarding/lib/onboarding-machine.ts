@@ -24,7 +24,7 @@ export const EMPTY_ANSWERS: OnboardingAnswers = {
 	sourceOther: ''
 };
 
-export const HOME_AFTER_ONBOARDING = '/app/explore';
+export const HOME_AFTER_ONBOARDING = '/app';
 
 /** Where the "Kembali" button goes per step. Absent → no back button. */
 export const BACK_TARGET: Partial<Record<OnboardingStep, OnboardingStep>> = {
@@ -34,17 +34,17 @@ export const BACK_TARGET: Partial<Record<OnboardingStep, OnboardingStep>> = {
 };
 
 export const PRIMARY_LABEL: Record<OnboardingStep, string> = {
-	welcome: 'Mulai',
+	welcome: 'Mulai dari satu ide',
 	background: 'Lanjut',
 	interests: 'Lanjut',
 	source: 'Selesai',
-	finish: 'Mulai jelajah'
+	finish: 'Mulai research'
 };
 
 export const STEP_LABEL: Partial<Record<OnboardingStep, string>> = {
-	background: 'Latar belakang',
-	interests: 'Minat',
-	source: 'Sumber'
+	background: 'Titik berangkat',
+	interests: 'Arah rasa penasaran',
+	source: 'Awal perkenalan'
 };
 
 /** The non-submit forward transition (welcome→background→interests→source). */
