@@ -2,7 +2,6 @@
 	import { Calendar as CalendarPrimitive } from 'bits-ui';
 	import * as Calendar from './index.js';
 	import { cn, type WithoutChildrenOrChild } from '../../utils.js';
-	import type { ButtonVariant } from '../button/button.svelte';
 	import { isEqualMonth, type DateValue } from '@internationalized/date';
 	import type { Snippet } from 'svelte';
 
@@ -12,7 +11,6 @@
 		placeholder = $bindable(),
 		class: className,
 		weekdayFormat = 'short',
-		buttonVariant = 'ghost',
 		captionLayout = 'label',
 		locale = 'en-US',
 		months: monthsProp,
@@ -23,7 +21,6 @@
 		disableDaysOutsideMonth = false,
 		...restProps
 	}: WithoutChildrenOrChild<CalendarPrimitive.RootProps> & {
-		buttonVariant?: ButtonVariant;
 		captionLayout?: 'dropdown' | 'dropdown-months' | 'dropdown-years' | 'label';
 		months?: CalendarPrimitive.MonthSelectProps['months'];
 		years?: CalendarPrimitive.YearSelectProps['years'];
@@ -61,8 +58,8 @@ get along, so we shut typescript up by casting `value` to `never`.
 	{#snippet children({ months, weekdays })}
 		<Calendar.Months>
 			<Calendar.Nav>
-				<Calendar.PrevButton variant={buttonVariant} />
-				<Calendar.NextButton variant={buttonVariant} />
+				<Calendar.PrevButton />
+				<Calendar.NextButton />
 			</Calendar.Nav>
 			{#each months as month, monthIndex (month)}
 				<Calendar.Month>

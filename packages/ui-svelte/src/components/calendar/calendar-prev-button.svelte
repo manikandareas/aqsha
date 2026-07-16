@@ -2,31 +2,24 @@
 	import { Calendar as CalendarPrimitive } from 'bits-ui';
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import { ArrowLeftIcon } from '@hugeicons/core-free-icons';
-	import { buttonVariants, type ButtonVariant } from '../button/index.js';
+	import { calendarNavButtonClass } from '../../recipes.js';
 	import { cn } from '../../utils.js';
 
 	let {
 		ref = $bindable(null),
 		class: className,
 		children,
-		variant = 'ghost',
 		...restProps
-	}: CalendarPrimitive.PrevButtonProps & {
-		variant?: ButtonVariant;
-	} = $props();
+	}: CalendarPrimitive.PrevButtonProps = $props();
 </script>
 
 {#snippet Fallback()}
-	<HugeiconsIcon icon={ArrowLeftIcon} strokeWidth={2} class={cn('size-4', className)} />
+	<HugeiconsIcon icon={ArrowLeftIcon} strokeWidth={2} class="size-3.5" />
 {/snippet}
 
 <CalendarPrimitive.PrevButton
 	bind:ref
-	class={cn(
-		buttonVariants({ variant }),
-		'size-(--cell-size) bg-transparent p-0 select-none disabled:opacity-50 rtl:rotate-180',
-		className
-	)}
+	class={cn(calendarNavButtonClass, className)}
 	{...restProps}
 >
 	{#if children}

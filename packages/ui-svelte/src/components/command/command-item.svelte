@@ -3,6 +3,7 @@
 	import { cn } from '../../utils.js';
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import { CheckIcon } from '@hugeicons/core-free-icons';
+	import { commandItemClass } from '../../recipes.js';
 
 	let {
 		ref = $bindable(null),
@@ -15,16 +16,13 @@
 <CommandPrimitive.Item
 	bind:ref
 	data-slot="command-item"
-	class={cn(
-		"group/command-item data-selected:bg-muted data-selected:text-foreground data-selected:*:[svg]:text-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none in-data-[slot=dialog-content]:rounded-lg! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-		className
-	)}
+	class={cn(commandItemClass, className)}
 	{...restProps}
 >
 	{@render children?.()}
 	<HugeiconsIcon
 		icon={CheckIcon}
 		strokeWidth={2}
-		class="ml-auto opacity-0 group-has-[[data-slot=command-shortcut]]/command-item:hidden group-data-[checked=true]/command-item:opacity-100"
+		class="text-mint-foreground ml-auto opacity-0 group-has-[[data-slot=command-shortcut]]/command-item:hidden group-data-[checked=true]/command-item:opacity-100"
 	/>
 </CommandPrimitive.Item>

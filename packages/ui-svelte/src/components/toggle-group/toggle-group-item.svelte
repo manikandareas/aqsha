@@ -29,7 +29,7 @@
 			size: size ?? ctx.size
 		}),
 		// Inside a group the choice is exclusive, so the on-state speaks ink, not mint.
-		'rounded-sm border-0 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary',
+		'h-7 rounded-sm border-0 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary',
 		className
 	)}
 	{value}

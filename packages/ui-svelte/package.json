@@ -15,6 +15,7 @@
 			"default": "./src/components/*/index.ts"
 		},
 		"./utils": "./src/utils.ts",
+		"./recipes": "./src/recipes.ts",
 		"./styles/tokens.css": "./src/styles/tokens.css",
 		"./styles/components.css": "./src/styles/components.css"
 	},

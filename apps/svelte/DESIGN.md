@@ -209,7 +209,7 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 **Mono Font:** JetBrains Mono (with `ui-monospace, SFMono-Regular, monospace`)
 **Accent Font:** Caveat (hand) — used sparingly, like a pencil note
 
-**Character:** A contrast pairing, not a lookalike pair: an editorial serif for headings against a neutral humanist sans for everything that does work. Base letter-spacing is a deliberate `+0.01em` across the interface. UI type walks a fixed staircase: **0.68 / 0.75 / 0.82 / 0.9 / 1rem** — micro-labels, small labels, control text, field/button text, body.
+**Character:** A contrast pairing, not a lookalike pair: an editorial serif for headings against a neutral humanist sans for everything that does work. Base letter-spacing is a deliberate `+0.01em` across the interface. UI type walks a fixed staircase: **0.68 / 0.75 / 0.82 / 0.9 / 1rem** — micro-labels, small labels, control text, field/button text, body. In code, use the named utilities `text-micro`, `text-label`, `text-control`, and `text-field` (defined in `@aqsha/ui-svelte` tokens) instead of arbitrary rem values.
 
 ### Hierarchy
 
@@ -264,7 +264,7 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 
 Two families share one primitive:
 
-- **Quiet badges** (`h-5`, sentence case, `font-medium`): metadata — default/secondary/ghost tints; outline now carries the 2px border on a card face.
+- **Quiet badges** (`h-5`, sentence case, `font-medium`): metadata — default/secondary/ghost tints; outline carries the 2px border on a card face. **`eyebrow`** is a quiet outline section label (sentence case, semibold) for design-lab / marketing markers.
 - **Solid chips** (`h-6`, `font-extrabold`, uppercase, +0.04em, white text): loud state tokens on the `-strong` faces. `chip-mint` = done/linked, `chip-lavender` = `/command` (JetBrains Mono, no uppercase), `chip-coral` = new/highlight, `chip-lemon` = draft (light lemon face + `--lemon-chip-ink`).
 
 ### Cards / Containers

@@ -36,6 +36,7 @@
 	import * as Pagination from '@aqsha/ui-svelte/components/pagination';
 	import * as InputOTP from '@aqsha/ui-svelte/components/input-otp';
 	import * as Avatar from '@aqsha/ui-svelte/components/avatar';
+	import * as Carousel from '@aqsha/ui-svelte/components/carousel';
 
 	let sliderValue = $state([40]);
 	let progressValue = $state(56);
@@ -97,6 +98,7 @@
 			<Badge>Default</Badge>
 			<Badge variant="secondary">Secondary</Badge>
 			<Badge variant="outline">Outline</Badge>
+			<Badge variant="eyebrow">Design system</Badge>
 			<Badge variant="destructive">Destructive</Badge>
 			<Badge variant="chip-mint">Selesai</Badge>
 			<Badge variant="chip-lavender">/deep</Badge>
@@ -201,9 +203,19 @@
 				<Alert.Description>Sumber menolak akses. Coba unggah manual.</Alert.Description>
 			</Alert.Root>
 		</div>
-		<div class="flex gap-3">
+		<div class="flex flex-wrap gap-3">
+			<Button
+				size="sm"
+				variant="outline"
+				onclick={() => toast.info('Tip: tautkan sumber sebelum menempel')}
+			>
+				Toast info
+			</Button>
 			<Button size="sm" variant="outline" onclick={() => toast.success('Workspace disimpan')}>
 				Toast sukses
+			</Button>
+			<Button size="sm" variant="outline" onclick={() => toast.warning('Kuota hampir habis')}>
+				Toast peringatan
 			</Button>
 			<Button size="sm" variant="outline" onclick={() => toast.error('Koneksi terputus')}>
 				Toast error
@@ -237,8 +249,8 @@
 						<Button variant="outline" {...props}>Sheet</Button>
 					{/snippet}
 				</Sheet.Trigger>
-				<Sheet.Content class="p-5">
-					<Sheet.Header class="p-0">
+				<Sheet.Content>
+					<Sheet.Header>
 						<Sheet.Title>Detail sumber</Sheet.Title>
 						<Sheet.Description>Panel samping 360px dengan tepi 2px.</Sheet.Description>
 					</Sheet.Header>
@@ -307,7 +319,7 @@
 
 	<section class="flex flex-col gap-4">
 		<h2 class="font-heading text-2xl">Command</h2>
-		<Command.Root class="border-border lip-modal max-w-lg rounded-lg border-2">
+		<Command.Root class="max-w-lg">
 			<Command.Input placeholder="Cari perintah…" />
 			<Command.List>
 				<Command.Empty>Tidak ada hasil.</Command.Empty>
@@ -380,6 +392,35 @@
 				</Card.CardContent>
 			</Card.Card>
 		</div>
+	</section>
+
+	<section class="flex flex-col gap-4">
+		<h2 class="font-heading text-2xl">Carousel</h2>
+		<Carousel.Root class="max-w-xl" opts={{ align: 'start' }}>
+			<Carousel.Content>
+				{#each ['Literature review', 'Argument outline', 'Field notes'] as judul, i (judul)}
+					<Carousel.Item class="basis-[calc(100%-60px)]">
+						<div class="border-border bg-card flex h-full flex-col gap-2.5 rounded-lg border-2 p-5">
+							<Badge
+								variant={i === 0 ? 'chip-mint' : i === 1 ? 'chip-coral' : 'chip-lemon'}
+								class="self-start">Template</Badge
+							>
+							<p class="font-heading text-xl leading-tight">{judul}</p>
+							<p class="text-muted-foreground text-control leading-normal">
+								Bagian untuk tema, celah riset, dan tabel sumber berjalan.
+							</p>
+						</div>
+					</Carousel.Item>
+				{/each}
+			</Carousel.Content>
+			<div class="mt-4 flex items-center justify-between">
+				<Carousel.Dots />
+				<div class="flex gap-2">
+					<Carousel.Previous class="static translate-y-0" />
+					<Carousel.Next class="static translate-y-0" />
+				</div>
+			</div>
+		</Carousel.Root>
 	</section>
 
 	<Separator />

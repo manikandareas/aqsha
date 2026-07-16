@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { ContextMenu as ContextMenuPrimitive } from 'bits-ui';
 	import { cn } from '../../utils.js';
+	import { ContextMenu as ContextMenuPrimitive } from 'bits-ui';
+	import { menuItemClass, menuItemDestructiveClass } from '../../recipes.js';
 
 	let {
 		ref = $bindable(null),
@@ -19,9 +20,6 @@
 	data-slot="context-menu-item"
 	data-inset={inset}
 	data-variant={variant}
-	class={cn(
-		"group/context-menu-item relative flex cursor-default items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-[0.82rem] text-muted-foreground outline-hidden select-none focus:bg-mint-soft focus:text-foreground data-highlighted:bg-mint-soft data-highlighted:text-foreground not-data-[variant=destructive]:focus:**:text-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 data-[variant=destructive]:*:[svg]:text-destructive",
-		className
-	)}
+	class={cn('group/context-menu-item', menuItemClass, menuItemDestructiveClass, className)}
 	{...restProps}
 />

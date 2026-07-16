@@ -2,8 +2,6 @@
 	import type { HTMLAttributes } from 'svelte/elements';
 	import type { WithElementRef } from '../../utils.js';
 	import { cn } from '../../utils.js';
-	import { HugeiconsIcon } from '@hugeicons/svelte';
-	import { MinusSignIcon } from '@hugeicons/core-free-icons';
 
 	let {
 		ref = $bindable(null),
@@ -23,6 +21,6 @@
 	{#if children}
 		{@render children?.()}
 	{:else}
-		<HugeiconsIcon icon={MinusSignIcon} strokeWidth={2} />
+		<div class="bg-border h-[3px] w-3 rounded-[2px]"></div>
 	{/if}
 </div>

@@ -12,13 +12,13 @@
 <CalendarPrimitive.Day
 	bind:ref
 	class={cn(
-		'flex size-(--cell-size) flex-col items-center justify-center gap-1 rounded-(--cell-radius) p-0 leading-none font-normal whitespace-nowrap select-none',
+		'flex size-(--cell-size) flex-col items-center justify-center gap-1 rounded-(--cell-radius) p-0 text-control leading-none font-medium whitespace-nowrap select-none',
 		'[&:last-child[data-selected=true]_button]:rounded-r-(--cell-radius)',
 		'not-data-selected:hover:bg-muted',
 		'[&[data-today]:not([data-selected])]:border-border [&[data-today]:not([data-selected])]:border-2 [&[data-today]:not([data-selected])]:font-bold [&[data-today][data-disabled]]:text-muted-foreground',
 		'data-[selected]:bg-mint-strong data-[selected]:font-extrabold data-[selected]:text-white data-[selected]:shadow-[0_2px_0_0_color-mix(in_oklch,var(--mint-strong)_62%,black_38%)]',
 		// Outside months
-		'[&[data-outside-month]:not([data-selected])]:text-muted-foreground [&[data-outside-month]:not([data-selected])]:hover:text-accent-foreground',
+		'[&[data-outside-month]:not([data-selected])]:text-muted-foreground [&[data-outside-month]:not([data-selected])]:opacity-45',
 		// Disabled
 		'data-[disabled]:text-muted-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
 		// Unavailable

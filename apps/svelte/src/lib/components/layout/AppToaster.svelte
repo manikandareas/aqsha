@@ -3,9 +3,10 @@
 	import { mode } from 'mode-watcher';
 
 	/**
-	 * Global toast host (`svelte-sonner`). Same copy/duration/action surface, same layout knobs
-	 * (closeButton, expand, gap 10, offset 20, bottom-right, visibleToasts 4) and the Aqsha toast
-	 * card class. Theme follows the resolved mode-watcher mode; `undefined` during SSR falls back to
+	 * Global toast host (`svelte-sonner`). Surface + kind hues live in
+	 * `@aqsha/ui-svelte` `.alert-surface` / `[data-sonner-toast]` CSS — this
+	 * host only wires layout, typography, and action chrome. Theme follows
+	 * the resolved mode-watcher mode; `undefined` during SSR falls back to
 	 * `light`.
 	 */
 </script>
@@ -19,14 +20,14 @@
 	theme={mode.current ?? 'light'}
 	toastOptions={{
 		classes: {
-			// Alert-family surface: 2px border + hard 3px lip over the soft card shadow.
-			toast: 'border-2! border-border! bg-card! text-card-foreground! rounded-lg! lip-pop',
-			success:
-				'[--alert-hue:var(--mint)] border-[color-mix(in_oklch,var(--alert-hue)_55%,var(--card))]! bg-[color-mix(in_oklch,var(--alert-hue)_26%,var(--card))]! shadow-[0_3px_0_0_color-mix(in_oklch,var(--alert-hue)_55%,var(--card)),var(--shadow-soft-card)]!',
-			warning:
-				'[--alert-hue:var(--lemon)] border-[color-mix(in_oklch,var(--alert-hue)_55%,var(--card))]! bg-[color-mix(in_oklch,var(--alert-hue)_26%,var(--card))]! shadow-[0_3px_0_0_color-mix(in_oklch,var(--alert-hue)_55%,var(--card)),var(--shadow-soft-card)]!',
-			error:
-				'[--alert-hue:var(--destructive)] border-[color-mix(in_oklch,var(--alert-hue)_55%,var(--card))]! bg-[color-mix(in_oklch,var(--alert-hue)_26%,var(--card))]! shadow-[0_3px_0_0_color-mix(in_oklch,var(--alert-hue)_55%,var(--card)),var(--shadow-soft-card)]!'
+			toast: 'gap-3! px-4! py-[11px]!',
+			title: 'text-control! font-semibold!',
+			description: 'text-label! text-muted-foreground!',
+			actionButton:
+				'border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold! shadow-[0_2px_0_0_var(--border)]! hover:bg-muted!',
+			cancelButton:
+				'border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold! shadow-[0_2px_0_0_var(--border)]! hover:bg-muted!',
+			closeButton: 'border-2! border-border! bg-card! text-foreground! hover:bg-muted!'
 		}
 	}}
 	visibleToasts={4}

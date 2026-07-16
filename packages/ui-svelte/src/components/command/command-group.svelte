@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Command as CommandPrimitive, useId } from 'bits-ui';
 	import { cn } from '../../utils.js';
+	import { menuGroupHeadingClass } from '../../recipes.js';
 
 	let {
 		ref = $bindable(null),
@@ -17,15 +18,12 @@
 <CommandPrimitive.Group
 	bind:ref
 	data-slot="command-group"
-	class={cn(
-		'text-foreground **:[[cmdk-group-heading]]:text-muted-foreground overflow-hidden p-1 **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium',
-		className
-	)}
+	class={cn('text-foreground overflow-hidden', className)}
 	value={value ?? heading ?? `----${useId()}`}
 	{...restProps}
 >
 	{#if heading}
-		<CommandPrimitive.GroupHeading class="text-muted-foreground px-2 py-1.5 text-xs font-medium">
+		<CommandPrimitive.GroupHeading class={menuGroupHeadingClass}>
 			{heading}
 		</CommandPrimitive.GroupHeading>
 	{/if}

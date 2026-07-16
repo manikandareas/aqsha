@@ -15,7 +15,7 @@
 	bind:this={ref}
 	data-slot="band"
 	class={cn(
-		'bg-band text-band-ink flex flex-col gap-6 rounded-lg px-[34px] py-10 [&_a]:text-band-ink/70 [&_a]:font-medium [&_a:hover]:text-band-ink',
+		'bg-band text-band-ink flex flex-col gap-6 rounded-lg px-[34px] py-10 [&_a]:text-band-ink/70 [&_a]:text-control [&_a]:font-medium [&_a:hover]:text-band-ink',
 		className
 	)}
 	{...restProps}

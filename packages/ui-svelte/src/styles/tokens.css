@@ -258,4 +258,10 @@
 	--tracking-wide: calc(var(--tracking-normal) + 0.025em);
 	--tracking-wider: calc(var(--tracking-normal) + 0.05em);
 	--tracking-widest: calc(var(--tracking-normal) + 0.1em);
+
+	/* UI type staircase: micro / label / control / field / body (1rem = default). */
+	--text-micro: 0.68rem;
+	--text-label: 0.75rem;
+	--text-control: 0.82rem;
+	--text-field: 0.9rem;
 }
