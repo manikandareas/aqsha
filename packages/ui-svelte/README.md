@@ -34,4 +34,4 @@ Raw-source package: exports uncompiled `.svelte`/`.ts`; the consuming app's Vite
 
 Token names follow shadcn-svelte (`--background`, `--primary`, `--ring`, `--radius-*`), with Aqsha accents (`--mint`, `--lavender`, `--coral`, `--lemon` + `-soft`/`-strong`/`-foreground` derivatives) and `--band`/`--band-ink` for the dark footer band.
 
-State semantics: **mint = on/off** (checkbox, switch, solo toggle) · **ink/primary = exclusive choice** (radio, tabs, toggle group, pagination).
+State semantics: **mint = on/off** (checkbox, switch, solo toggle) · **primary (emerald) = exclusive choice** (radio, tabs, toggle group, pagination).

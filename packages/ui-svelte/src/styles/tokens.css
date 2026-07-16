@@ -1,7 +1,7 @@
 /* Aqsha UI design tokens — shadcn-svelte naming over the Aqsha UI Design System.
    System rules: 2px borders on every surface & control (1px only for internal
    hairlines); radii from --radius-sm/md/lg; focus color = --ring (mint);
-   mint = on/off state · ink (primary) = exclusive choice; no gradients.
+   mint = on/off state · primary (emerald) = exclusive choice; no gradients.
 
    Consumers import this before their own layers; Tailwind v4 reads the
    @theme inline block. Font families referenced here must be provided by the
@@ -16,10 +16,10 @@
 	--card-foreground: oklch(0.235 0 0);
 	--popover: oklch(0.953 0.0156 86.4257);
 	--popover-foreground: oklch(0.235 0 0);
-	--primary: oklch(0.3012 0 0);
-	--primary-foreground: oklch(0.9169 0.0175 99.616);
-	--secondary: oklch(0.8647 0.0201 87.5232);
-	--secondary-foreground: oklch(0.3012 0 0);
+	--primary: oklch(0.55 0.14 160);
+	--primary-foreground: oklch(0.97 0.02 160);
+	--secondary: oklch(0.35 0.06 165);
+	--secondary-foreground: oklch(0.94 0.03 160);
 	--muted: oklch(0.834 0.0232 87.163);
 	--muted-foreground: oklch(0.4688 0.0136 84.5932);
 	--accent: oklch(0.9169 0.0175 99.616);
@@ -37,8 +37,8 @@
 	--chart-5: oklch(0.834 0.0232 87.163);
 	--sidebar: oklch(0.862 0.0205 86.5);
 	--sidebar-foreground: oklch(0.235 0 0);
-	--sidebar-primary: oklch(0.3012 0 0);
-	--sidebar-primary-foreground: oklch(0.9169 0.0175 99.616);
+	--sidebar-primary: oklch(0.55 0.14 160);
+	--sidebar-primary-foreground: oklch(0.97 0.02 160);
 	--sidebar-accent: oklch(0.9169 0.0175 99.616);
 	--sidebar-accent-foreground: oklch(0.3012 0 0);
 	--sidebar-border: oklch(0.8434 0.0231 87.1621);
@@ -87,10 +87,10 @@
 	--card-foreground: oklch(0.9173 0.0133 82.4015);
 	--popover: oklch(0.2264 0 0);
 	--popover-foreground: oklch(0.9173 0.0133 82.4015);
-	--primary: oklch(0.852 0.0205 100.6306);
-	--primary-foreground: oklch(0.3329 0 0);
-	--secondary: oklch(0.34 0 0);
-	--secondary-foreground: oklch(0.852 0.0205 100.6306);
+	--primary: oklch(0.72 0.13 160);
+	--primary-foreground: oklch(0.22 0.05 165);
+	--secondary: oklch(0.42 0.06 165);
+	--secondary-foreground: oklch(0.94 0.03 160);
 	--muted: oklch(0.285 0 0);
 	--muted-foreground: oklch(0.6348 0.0113 81.7875);
 	--accent: oklch(0.3329 0 0);
@@ -107,8 +107,8 @@
 	--chart-5: oklch(0.3523 0 0);
 	--sidebar: oklch(0.148 0 0);
 	--sidebar-foreground: oklch(0.9173 0.0133 82.4015);
-	--sidebar-primary: oklch(0.852 0.0205 100.6306);
-	--sidebar-primary-foreground: oklch(0.3329 0 0);
+	--sidebar-primary: oklch(0.72 0.13 160);
+	--sidebar-primary-foreground: oklch(0.22 0.05 165);
 	--sidebar-accent: oklch(0.3329 0 0);
 	--sidebar-accent-foreground: oklch(0.852 0.0205 100.6306);
 	--sidebar-border: oklch(0.2931 0 0);

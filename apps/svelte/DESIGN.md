@@ -5,10 +5,11 @@ colors:
   paper-bg: 'oklch(0.9195 0.0169 88.003)'
   paper-raised: 'oklch(0.953 0.0156 86.4257)'
   ink: 'oklch(0.235 0 0)'
-  ink-strong: 'oklch(0.3012 0 0)'
   ink-soft: 'oklch(0.4688 0.0136 84.5932)'
-  primary-foreground: 'oklch(0.9169 0.0175 99.616)'
-  tan-secondary: 'oklch(0.8647 0.0201 87.5232)'
+  primary: 'oklch(0.55 0.14 160)'
+  primary-foreground: 'oklch(0.97 0.02 160)'
+  pine-secondary: 'oklch(0.35 0.06 165)'
+  secondary-foreground: 'oklch(0.94 0.03 160)'
   muted: 'oklch(0.834 0.0232 87.163)'
   line: 'oklch(0.8434 0.0231 87.1621)'
   ring-mint: 'oklch(0.6863 0.1743 154)'
@@ -81,14 +82,14 @@ spacing:
   lg: '24px'
 components:
   button-primary:
-    backgroundColor: '{colors.ink-strong}'
+    backgroundColor: '{colors.primary}'
     textColor: '{colors.primary-foreground}'
     rounded: '{rounded.md}'
     padding: '0 16px'
     height: '40px'
   button-secondary:
-    backgroundColor: '{colors.tan-secondary}'
-    textColor: '{colors.ink-strong}'
+    backgroundColor: '{colors.pine-secondary}'
+    textColor: '{colors.secondary-foreground}'
     rounded: '{rounded.md}'
     padding: '0 16px'
     height: '40px'
@@ -99,13 +100,13 @@ components:
     padding: '0 16px'
     height: '40px'
   button-sm:
-    backgroundColor: '{colors.ink-strong}'
+    backgroundColor: '{colors.primary}'
     textColor: '{colors.primary-foreground}'
     rounded: '{rounded.sm}'
     padding: '0 12px'
     height: '32px'
   button-lg:
-    backgroundColor: '{colors.ink-strong}'
+    backgroundColor: '{colors.primary}'
     textColor: '{colors.primary-foreground}'
     rounded: '{rounded.md}'
     padding: '0 24px'
@@ -156,15 +157,15 @@ This system explicitly rejects three things, drawn from the product's anti-refer
 
 ## 2. Colors: Warm Paper & Ink
 
-A cream-manuscript base and charcoal ink, with a small set of soft-candy accents reserved for state, tokens, and evidence — never for decoration.
+A cream-manuscript base and charcoal ink, with two solid greens carrying action (emerald primary, deep-pine secondary) and a small set of soft-candy accents reserved for state, tokens, and evidence — never for decoration.
 
 ### Primary
 
-- **Ink Charcoal** (`oklch(0.3012 0 0)`, light / `oklch(0.852 0.0205 100.6)` on dark): The solid-action color — the face of primary keycap buttons and the mark of an **exclusive choice** (active tab, selected radio, current page). Neutral (chroma 0) on purpose, so the accents stay the only chromatic voices.
+- **Emerald** (`oklch(0.55 0.14 160)`, light / `oklch(0.72 0.13 160)` on dark): The solid-action color — the face of primary keycap buttons and the mark of an **exclusive choice** (active tab, selected radio, current page). A deeper, quieter green than the bright mint state color, so the two never read as the same signal.
 
 ### Secondary
 
-- **Warm Tan** (`oklch(0.8647 0.0201 87.5)`): The second neutral layer — secondary keycap buttons, chip fills, quiet toolbars — a shade warmer than the content surface.
+- **Deep Pine** (`oklch(0.35 0.06 165)` light / `oklch(0.42 0.06 165)` dark): The second solid — secondary keycap buttons, chip fills, quiet toolbars — a dark, low-chroma green. Hierarchy against the emerald primary comes from light-versus-dark, not from a different hue.
 
 ### Tertiary — The Accent Set
 
@@ -188,7 +189,7 @@ Each accent carries four tuned tints via `color-mix`: a solid (`--mint`), a `-fo
 
 ### Focus
 
-- **Mint Ring** (`--ring`, `oklch(0.6863 0.1743 154)` light / `oklch(0.72 0.14 154)` dark): Focus-visible borders and halos are mint everywhere. Focus is a state, and mint is the state color — the ink stays reserved for choices.
+- **Mint Ring** (`--ring`, `oklch(0.6863 0.1743 154)` light / `oklch(0.72 0.14 154)` dark): Focus-visible borders and halos are mint everywhere. Focus is a state, and mint is the state color — the emerald primary stays reserved for choices.
 
 ### Evidence Stance (fixed, do not alter piecemeal)
 
@@ -196,9 +197,9 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 
 ### Named Rules
 
-**The Mint-State, Ink-Choice Rule.** Mint marks **binary state** — a checkbox checked, a switch on, a solo toggle engaged, a field focused. Ink (primary) marks an **exclusive choice** — the selected radio, the active tab, the current page, the picked segment. Never swap them: a mint radio or an ink switch reads as the wrong grammar.
+**The Mint-State, Primary-Choice Rule.** Mint marks **binary state** — a checkbox checked, a switch on, a solo toggle engaged, a field focused. Primary (emerald) marks an **exclusive choice** — the selected radio, the active tab, the current page, the picked segment. Never swap them: a mint radio or an emerald-solid switch reads as the wrong grammar.
 
-**The Ink-Carries-Weight Rule.** The primary/solid color is neutral charcoal, not a brand hue. Chromatic accents appear only on state, tokens, and data. If an accent is decorating rather than signaling, remove it.
+**The Primary-Carries-Weight Rule.** Only the emerald/pine solids may fill a control's face; body text stays neutral charcoal ink. The candy accents appear only on state, tokens, and data — if an accent is decorating rather than signaling, remove it.
 
 **The Whole-Palette Rule.** The stance-meter hex values and the accent tints are validated as a set. Never swap one color in isolation; re-validate the whole ramp.
 
@@ -253,7 +254,7 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 ### Buttons
 
 - **Shape:** `rounded-md` (12px; `sm` uses 8px); heights **sm 32 / default 40 / lg 46** — default aligns with inputs. Text is Inter 700 at 0.82–1rem.
-- **Primary / Secondary / Destructive-solid:** Flat-faced keycaps (`--btn-face` drives the color: charcoal, warm tan, or `destructive-strong`) with the 4px lip and bottom-out press.
+- **Primary / Secondary / Destructive-solid:** Flat-faced keycaps (`--btn-face` drives the color: emerald, deep pine, or `destructive-strong`) with the 4px lip and bottom-out press.
 - **Outline:** 2px `border-border`, paper face, 3px flat lip, `hover:bg-muted`.
 - **Ghost:** Muted text → foreground on hover; a bare 2px active nudge, no depth classes.
 - **Destructive (quiet):** `destructive-soft` fill, destructive text, 35% destructive border, 3px lip mixed toward the card. The solid keycap version is for the truly irreversible.
@@ -286,8 +287,8 @@ Two families share one primitive:
 
 - **Checkbox:** 24px, `rounded-sm`, 2px border + 2px static lip; checked = **mint-strong** fill with a white check.
 - **Switch:** 44×26 pill; on = **mint-strong** track, 20px raised-paper thumb slides right.
-- **Radio:** 24px circle, 2px border + static lip; selected = **ink** — primary border, lip, and a 10px primary dot.
-- **Toggle (solo):** on = mint-strong. **Toggle group / Tabs:** pills inside a 2px-bordered 12px frame with 5px padding; the active pill is **ink** (primary fill, primary-foreground text).
+- **Radio:** 24px circle, 2px border + static lip; selected = **primary** — primary border, lip, and a 10px primary dot.
+- **Toggle (solo):** on = mint-strong. **Toggle group / Tabs:** pills inside a 2px-bordered 12px frame with 5px padding; the active pill is **primary** (primary fill, primary-foreground text).
 - **Slider:** 12px muted track, coral range, 24px thumb — paper face, 2px primary border, 3px primary lip that compresses on drag.
 - **Progress:** Same 12px track; coral fill.
 
@@ -302,12 +303,12 @@ Two families share one primitive:
 ### Data
 
 - **Table:** Card-faced wrapper with 2px border and `rounded-lg`; `th` in the micro voice on a muted-tinted header row above a 2px rule; body rows separated by 1px hairlines; hover = muted tint, selected row = `mint-soft`.
-- **Pagination:** 34px squares, 2px border; the current page is an ink square with a 2px lip (exclusive choice).
+- **Pagination:** 34px squares, 2px border; the current page is a primary (emerald) square with a 2px lip (exclusive choice).
 - **Calendar:** Framed card (2px border, `rounded-lg`); weekday cells in the micro voice; today = 2px border; the selected day = **mint-strong** with a 2px lip.
 
 ### Navigation
 
-- **Sidebar:** A slightly darker warm surface (`--sidebar`) than content; active item carried by `sidebar-primary` ink and fill at constant font-weight so nothing shifts on selection.
+- **Sidebar:** A slightly darker warm surface (`--sidebar`) than content; active item carried by `sidebar-primary` (emerald) text and fill at constant font-weight so nothing shifts on selection.
 - **Footer band:** The `band` surface — dark warm panel, `rounded-lg`, band-ink links at 70% that resolve to full on hover.
 - **Mobile:** Sidebar collapses to a sheet/drawer; structure is responsive, type is not fluid.
 
