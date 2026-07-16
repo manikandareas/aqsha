@@ -1,16 +1,15 @@
 <script lang="ts">
-	import { INTEREST_OPTIONS, MIN_INTERESTS } from '../lib/onboarding-options';
+	import { INTEREST_OPTIONS } from '../lib/onboarding-options';
+	import { ONBOARDING_COPY } from '../lib/onboarding-content';
 	import InterestChip from './InterestChip.svelte';
 	import StepHeading from './StepHeading.svelte';
 
 	let { value, ontoggle }: { value: string[]; ontoggle: (id: string) => void } = $props();
+	const copy = ONBOARDING_COPY.interests;
 </script>
 
 <div>
-	<StepHeading
-		title="Bidang apa yang kamu minati?"
-		subtitle={`Pilih minimal ${MIN_INTERESTS}. Ini langsung membentuk feed Jelajah kamu.`}
-	/>
+	<StepHeading eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.description} />
 	<div class="flex flex-wrap gap-2">
 		{#each INTEREST_OPTIONS as option (option.id)}
 			<InterestChip selected={value.includes(option.id)} onclick={() => ontoggle(option.id)}>
@@ -18,5 +17,7 @@
 			</InterestChip>
 		{/each}
 	</div>
-	<p class="mt-4 font-mono text-xs text-muted-foreground">{value.length} dipilih</p>
+	<p class="mt-4 font-mono text-xs text-muted-foreground" aria-live="polite">
+		{value.length} dipilih
+	</p>
 </div>

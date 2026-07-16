@@ -19,10 +19,12 @@
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { slide } from 'svelte/transition';
 	import { Input } from '@aqsha/ui-svelte/components/input';
+	import { ONBOARDING_COPY } from '../lib/onboarding-content';
 	import SelectableOption from './SelectableOption.svelte';
 	import StepHeading from './StepHeading.svelte';
 
 	const reduce = $derived(prefersReducedMotion.current);
+	const copy = ONBOARDING_COPY.source;
 
 	let {
 		value,
@@ -38,10 +40,7 @@
 </script>
 
 <div>
-	<StepHeading
-		title="Dari mana kamu tahu Aqsha?"
-		subtitle="Membantu kami tahu cara orang menemukan Aqsha."
-	/>
+	<StepHeading eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.description} />
 	<div class="grid gap-2.5">
 		{#each SHUFFLED_SOURCES as option (option.id)}
 			<SelectableOption selected={value === option.id} onclick={() => onselect(option.id)}>
