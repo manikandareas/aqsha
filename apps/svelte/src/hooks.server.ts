@@ -31,7 +31,7 @@ const PUBLIC_PATTERNS: RegExp[] = [
 	/^\/manifest\.webmanifest$/,
 	/^\/sentry-tunnel(?:\/.*)?$/,
 	// Component showcase; its load() 404s outside dev, so the allow-list entry is inert in prod.
-	/^\/design-lab$/
+	/^\/design-lab(?:\/.*)?$/
 ];
 
 function isPublicPath(pathname: string): boolean {

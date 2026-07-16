@@ -9,12 +9,18 @@
 </script>
 
 <div>
-	<StepHeading eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.description} />
-	<div class="grid gap-2.5">
-		{#each BACKGROUND_OPTIONS as option (option.id)}
-			<SelectableOption selected={value === option.id} onclick={() => onselect(option.id)}>
-				{option.label}
-			</SelectableOption>
+	<StepHeading title={copy.title} subtitle={copy.description} />
+	<div class="stagger mx-auto grid w-full max-w-md gap-2.5">
+		{#each BACKGROUND_OPTIONS as option, i (option.id)}
+			<div style="--i: {i}">
+				<SelectableOption
+					index={i + 1}
+					selected={value === option.id}
+					onclick={() => onselect(option.id)}
+				>
+					{option.label}
+				</SelectableOption>
+			</div>
 		{/each}
 	</div>
 </div>

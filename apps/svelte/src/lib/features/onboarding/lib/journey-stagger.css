@@ -1,0 +1,20 @@
+/* Shared chapter-enter stagger for onboarding steps. Per-step cadence via --stagger-step /
+   --stagger-duration on the .stagger element; child index via --i. */
+
+.stagger > * {
+	animation: journey-rise-in var(--stagger-duration, 420ms) cubic-bezier(0.25, 1, 0.5, 1) both;
+	animation-delay: calc(var(--i, 0) * var(--stagger-step, 40ms));
+}
+
+@keyframes journey-rise-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.stagger > * {
+		animation: none;
+	}
+}

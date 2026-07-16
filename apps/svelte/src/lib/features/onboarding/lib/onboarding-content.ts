@@ -5,7 +5,6 @@ import { BACKGROUND_OPTIONS, INTEREST_OPTIONS, MIN_INTERESTS } from './onboardin
 import type { OnboardingAnswers, OnboardingStep } from './onboarding-machine';
 
 type JourneyStepCopy = Readonly<{
-	eyebrow: string;
 	title: string;
 	description: string;
 }>;
@@ -24,49 +23,45 @@ export const FEYNMAN_QUOTE = {
 // not universally available full text.
 export const ONBOARDING_COPY = {
 	welcome: {
-		eyebrow: 'Mulai sebelum merasa siap',
 		title: 'Kamu nggak harus tahu semuanya untuk mulai.',
 		description:
 			'Bawa satu ide yang masih mentah. Kita akan mencari pertanyaan, sumber, dan arah berikutnya bersama.'
 	},
 	background: {
-		eyebrow: 'Titik berangkat',
 		title: 'Kamu saat ini...',
 		description: 'Setiap perjalanan research punya titik berangkat yang berbeda.'
 	},
 	interests: {
-		eyebrow: 'Arah rasa penasaran',
 		title: 'Apa yang membuatmu terus penasaran?',
 		description: `Pilih minimal ${MIN_INTERESTS}. Di antara sekitar 320 juta karya ilmiah, mari mulai dari hal yang benar-benar berarti buatmu.`
 	},
 	source: {
-		eyebrow: 'Awal perkenalan',
 		title: 'Dari mana kamu menemukan Aqsha?',
 		description: 'Sebelum kita mulai, bantu kami memahami bagaimana perjalananmu sampai ke sini.'
 	},
 	finish: {
-		eyebrow: 'Langkah pertamamu',
 		title: 'Rasa penasaranmu sekarang punya arah.',
 		description: 'Aqsha siap membantu mencari dan memeriksa; keputusan akhirnya tetap milikmu.'
 	}
 } satisfies Record<OnboardingStep, JourneyStepCopy>;
 
+/** Decorative hand-written margin note per step (JourneyOrnaments). */
+export const STEP_HAND_NOTE: Record<OnboardingStep, string> = {
+	welcome: 'mulai dari ide mentah',
+	background: 'tandai titik berangkatmu',
+	interests: 'nyalakan bintangmu',
+	source: 'salam kenal!',
+	finish: 'perjalananmu dimulai'
+};
+
 export type FinishReflection = Readonly<{
 	backgroundLabel: string | null;
 	visibleInterestLabels: string[];
 	remainingInterestCount: number;
-	interestSummary: string;
 }>;
 
 const labelById = (options: ReadonlyArray<{ id: string; label: string }>, id: string | null) =>
 	id ? (options.find((option) => option.id === id)?.label ?? null) : null;
-
-const formatCompleteList = (labels: string[]): string => {
-	if (labels.length === 0) return 'bidang yang kamu pilih';
-	if (labels.length === 1) return labels[0]!;
-	if (labels.length === 2) return `${labels[0]} dan ${labels[1]}`;
-	return `${labels.slice(0, -1).join(', ')}, dan ${labels.at(-1)}`;
-};
 
 /**
  * Reflect explicit answers back as human labels: at most three interests named, the rest counted.
@@ -78,15 +73,10 @@ export function buildFinishReflection(answers: OnboardingAnswers): FinishReflect
 		.filter((label): label is string => label !== null);
 	const visibleInterestLabels = interestLabels.slice(0, 3);
 	const remainingInterestCount = Math.max(0, interestLabels.length - visibleInterestLabels.length);
-	const interestSummary =
-		remainingInterestCount > 0
-			? `${visibleInterestLabels.join(', ')}, dan ${remainingInterestCount} bidang lain`
-			: formatCompleteList(visibleInterestLabels);
 
 	return {
 		backgroundLabel: labelById(BACKGROUND_OPTIONS, answers.background),
 		visibleInterestLabels,
-		remainingInterestCount,
-		interestSummary
+		remainingInterestCount
 	};
 }

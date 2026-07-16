@@ -1,44 +1,41 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { prefersReducedMotion } from 'svelte/motion';
-	import { fly } from 'svelte/transition';
 	import { createQuery } from '@tanstack/svelte-query';
 	import { getApiClient } from '$lib/api';
+	import { getAuthState } from '$lib/auth';
 	import { queryKeys, unwrap } from '$lib/query';
 	import { readableApiErrorMessage } from '$lib/errors';
-	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { FlickerSpinner } from '$lib/components/ui/flicker-spinner';
-	import { Icon, ArrowLeftIcon, ArrowRight, Loader2Icon } from '$lib/icons';
 	import {
 		BACK_TARGET,
+		canPrimary as canPrimaryOf,
 		HOME_AFTER_ONBOARDING,
-		PRIMARY_LABEL,
-		STEP_LABEL
+		primaryIntent
 	} from './lib/onboarding-machine';
+	import type { JourneyActions, JourneyViewModel } from './lib/journey-view';
 	import { createOnboardingFlow } from './state.svelte';
 	import OnboardingLayout from './components/OnboardingLayout.svelte';
+	import OnboardingJourney from './components/OnboardingJourney.svelte';
 	import OnboardingStatusError from './components/OnboardingStatusError.svelte';
-	import OnboardingStepIndicator from './components/OnboardingStepIndicator.svelte';
-	import WelcomeStep from './components/WelcomeStep.svelte';
-	import BackgroundStep from './components/BackgroundStep.svelte';
-	import InterestsStep from './components/InterestsStep.svelte';
-	import SourceStep from './components/SourceStep.svelte';
-	import FinishStep from './components/FinishStep.svelte';
+	import JourneyCentered from './components/JourneyCentered.svelte';
 
 	/**
-	 * Onboarding wizard. The pure step machine + validation lives in `lib/onboarding-machine.ts`; the
-	 * flow state + complete mutation in `state.svelte.ts`. Outgoing and incoming steps share one grid
-	 * cell (`[grid-area:1/1]`) so `{#key}` + `fly` crossfades them in place instead of tiling them in
-	 * flow and shoving the buttons; collapses to no motion when reduced.
+	 * Onboarding orchestrator: status query + gating, back/primary handling, submit mutation, and
+	 * navigation to `/app`. Presentation (journey rail, chapter motion, action row) lives in
+	 * `components/OnboardingJourney.svelte`; the pure step machine + validation in
+	 * `lib/onboarding-machine.ts`; flow state + complete mutation in `state.svelte.ts`.
 	 */
 	const api = getApiClient();
 	const flow = createOnboardingFlow();
-	const reduce = $derived(prefersReducedMotion.current);
 
+	// Gate on Clerk being signed-in: a hard reload fires this before clerk-js loads, and a
+	// tokenless request 401s into the error state instead of resolving to welcome.
+	const auth = getAuthState();
 	const statusQuery = createQuery(() => ({
 		queryKey: queryKeys.onboarding.status(),
-		queryFn: async () => unwrap(await api.onboarding.status.get())
+		queryFn: async () => unwrap(await api.onboarding.status.get()),
+		enabled: auth.isSignedIn
 	}));
 	const status = $derived(statusQuery.data);
 
@@ -59,128 +56,68 @@
 			: null
 	);
 
-	const isQuestionStep = $derived(flow.questionIndex >= 0);
-	const canPrimary = $derived(
-		!flow.isSubmitting && (!isQuestionStep || flow.isStepValid(flow.step))
+	const model = $derived.by(
+		(): JourneyViewModel => ({
+			step: flow.step,
+			answers: flow.answers,
+			isSubmitting: flow.isSubmitting,
+			errorMessage: flow.errorMessage,
+			canPrimary: canPrimaryOf(flow.step, flow.answers, flow.isSubmitting)
+		})
 	);
-	const backTarget = $derived(BACK_TARGET[flow.step]);
-
-	function handleBack() {
-		const target = BACK_TARGET[flow.step];
-		if (target) flow.setStep(target);
-	}
 
 	async function handlePrimary() {
-		switch (flow.step) {
-			case 'welcome':
-				flow.setStep('background');
+		const intent = primaryIntent(flow.step);
+		switch (intent.type) {
+			case 'advance':
+				flow.setStep(intent.step);
 				return;
-			case 'background':
-				flow.setStep('interests');
-				return;
-			case 'interests':
-				flow.setStep('source');
-				return;
-			case 'source': {
+			case 'submit': {
 				const ok = await flow.submit();
 				if (ok) flow.setStep('finish');
 				return;
 			}
-			case 'finish':
+			case 'complete':
 				void goto(resolve(HOME_AFTER_ONBOARDING), { replaceState: true });
 				return;
 		}
 	}
 
-	function onsubmit(event: SubmitEvent) {
-		event.preventDefault();
-		if (canPrimary) void handlePrimary();
-	}
+	const actions: JourneyActions = {
+		back() {
+			const target = BACK_TARGET[flow.step];
+			if (target) flow.setStep(target);
+		},
+		primary() {
+			void handlePrimary();
+		},
+		setBackground: flow.setBackground,
+		toggleInterest: flow.toggleInterest,
+		setSource: flow.setSource,
+		setSourceOther: flow.setSourceOther
+	};
 </script>
 
 {#if flow.step === 'welcome' && statusQuery.isError}
 	<OnboardingLayout>
-		<OnboardingStatusError
-			message={statusErrorMessage ?? 'Belum bisa memeriksa status onboarding.'}
-			onretry={() => void statusQuery.refetch()}
-		/>
+		<JourneyCentered>
+			<OnboardingStatusError
+				message={statusErrorMessage ?? 'Belum bisa memeriksa status onboarding.'}
+				onretry={() => void statusQuery.refetch()}
+			/>
+		</JourneyCentered>
 	</OnboardingLayout>
 {:else if flow.step === 'welcome' && (statusQuery.isPending || status?.completed)}
 	<!-- Wait for status before showing welcome — avoids flashing the wizard to a user we're redirecting. -->
 	<OnboardingLayout>
-		<div
-			class="flex justify-center text-muted-foreground"
-			role="status"
-			aria-label="Memuat onboarding"
-		>
-			<FlickerSpinner class="size-5" />
-		</div>
+		<JourneyCentered>
+			<div class="text-muted-foreground" role="status" aria-label="Memuat onboarding">
+				<FlickerSpinner class="size-5" />
+			</div>
+		</JourneyCentered>
 	</OnboardingLayout>
 {:else}
 	<OnboardingLayout>
-		{#if isQuestionStep}
-			<OnboardingStepIndicator
-				index={flow.questionIndex + 1}
-				total={flow.totalQuestions}
-				label={STEP_LABEL[flow.step] ?? ''}
-			/>
-		{:else}
-			<div class="mb-8 h-5"></div>
-		{/if}
-
-		<form {onsubmit} aria-busy={flow.isSubmitting}>
-			<div class="grid">
-				{#key flow.step}
-					<div
-						class="[grid-area:1/1]"
-						in:fly={reduce ? { duration: 0 } : { y: 8, duration: 220 }}
-						out:fly={reduce ? { opacity: 1, duration: 0 } : { y: -8, duration: 220 }}
-					>
-						{#if flow.step === 'welcome'}
-							<WelcomeStep />
-						{:else if flow.step === 'background'}
-							<BackgroundStep value={flow.answers.background} onselect={flow.setBackground} />
-						{:else if flow.step === 'interests'}
-							<InterestsStep value={flow.answers.interests} ontoggle={flow.toggleInterest} />
-						{:else if flow.step === 'source'}
-							<SourceStep
-								value={flow.answers.source}
-								other={flow.answers.sourceOther}
-								onselect={flow.setSource}
-								onotherchange={flow.setSourceOther}
-							/>
-						{:else if flow.step === 'finish'}
-							<FinishStep answers={flow.answers} />
-						{/if}
-					</div>
-				{/key}
-			</div>
-
-			{#if flow.errorMessage}
-				<p class="mt-4 text-sm text-destructive" role="alert" aria-live="assertive">
-					{flow.errorMessage}
-				</p>
-			{/if}
-
-			<div class="mt-8 flex items-center justify-between gap-3">
-				{#if backTarget}
-					<Button type="button" variant="ghost" onclick={handleBack}>
-						<Icon icon={ArrowLeftIcon} class="size-4" />
-						Kembali
-					</Button>
-				{:else}
-					<span></span>
-				{/if}
-				<Button type="submit" disabled={!canPrimary} class="h-11 px-6">
-					{#if flow.isSubmitting}
-						<Icon icon={Loader2Icon} class="size-4 animate-spin" />
-					{/if}
-					{PRIMARY_LABEL[flow.step]}
-					{#if !flow.isSubmitting && flow.step !== 'finish'}
-						<Icon icon={ArrowRight} class="size-4" />
-					{/if}
-				</Button>
-			</div>
-		</form>
+		<OnboardingJourney {model} {actions} />
 	</OnboardingLayout>
 {/if}

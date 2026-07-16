@@ -4,12 +4,14 @@ import {
 	ADVANCE_TARGET,
 	BACK_TARGET,
 	buildCompletePayload,
+	canPrimary,
 	EMPTY_ANSWERS,
 	HOME_AFTER_ONBOARDING,
 	isQuestionStep,
 	isStepValid,
 	type OnboardingAnswers,
 	PRIMARY_LABEL,
+	primaryIntent,
 	questionIndexOf,
 	QUESTION_STEPS,
 	toggleInterest
@@ -49,6 +51,14 @@ describe('onboarding transitions', () => {
 		expect(ADVANCE_TARGET.source).toBeUndefined();
 	});
 
+	it('primaryIntent maps advance / submit / complete without a driver switch', () => {
+		expect(primaryIntent('welcome')).toEqual({ type: 'advance', step: 'background' });
+		expect(primaryIntent('background')).toEqual({ type: 'advance', step: 'interests' });
+		expect(primaryIntent('interests')).toEqual({ type: 'advance', step: 'source' });
+		expect(primaryIntent('source')).toEqual({ type: 'submit' });
+		expect(primaryIntent('finish')).toEqual({ type: 'complete' });
+	});
+
 	it('BACK_TARGET mirrors the forward chain in reverse', () => {
 		expect(BACK_TARGET.background).toBe('welcome');
 		expect(BACK_TARGET.interests).toBe('background');
@@ -60,8 +70,17 @@ describe('onboarding transitions', () => {
 	it('uses the approved onboarding destination and journey CTAs', () => {
 		expect(HOME_AFTER_ONBOARDING).toBe('/app');
 		expect(PRIMARY_LABEL.welcome).toBe('Mulai dari satu ide');
-		expect(PRIMARY_LABEL.source).toBe('Selesai');
+		expect(PRIMARY_LABEL.source).toBe('Lanjut');
 		expect(PRIMARY_LABEL.finish).toBe('Mulai research');
+	});
+});
+
+describe('canPrimary', () => {
+	it('blocks while submitting and when the current question is invalid', () => {
+		expect(canPrimary('welcome', EMPTY_ANSWERS, false)).toBe(true);
+		expect(canPrimary('welcome', EMPTY_ANSWERS, true)).toBe(false);
+		expect(canPrimary('background', EMPTY_ANSWERS, false)).toBe(false);
+		expect(canPrimary('background', answers({ background: 'mahasiswa_s1' }), false)).toBe(true);
 	});
 });
 

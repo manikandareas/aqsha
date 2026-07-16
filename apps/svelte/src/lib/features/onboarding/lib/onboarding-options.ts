@@ -15,7 +15,7 @@ export const BACKGROUND_OPTIONS: OnboardingOption[] = [
 	{ id: 'lainnya', label: 'Lainnya' }
 ];
 
-export const INTEREST_OPTIONS: OnboardingOption[] = [
+export const INTEREST_OPTIONS = [
 	{ id: 'ai_cs', label: 'Kecerdasan buatan & ilmu komputer' },
 	{ id: 'kesehatan', label: 'Kedokteran & kesehatan' },
 	{ id: 'biologi', label: 'Biologi & ilmu hayati' },
@@ -31,7 +31,9 @@ export const INTEREST_OPTIONS: OnboardingOption[] = [
 	{ id: 'hukum', label: 'Hukum' },
 	{ id: 'neuroscience', label: 'Ilmu saraf' },
 	{ id: 'linguistik', label: 'Linguistik & sastra' }
-];
+] as const satisfies ReadonlyArray<OnboardingOption>;
+
+export type InterestId = (typeof INTEREST_OPTIONS)[number]['id'];
 
 // Attribution sources. "lainnya" is rendered separately (always last, with a
 // free-text field), so it is kept out of the randomizable list below.

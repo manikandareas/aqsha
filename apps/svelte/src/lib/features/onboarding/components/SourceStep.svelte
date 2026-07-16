@@ -40,25 +40,31 @@
 </script>
 
 <div>
-	<StepHeading eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.description} />
-	<div class="grid gap-2.5">
-		{#each SHUFFLED_SOURCES as option (option.id)}
-			<SelectableOption selected={value === option.id} onclick={() => onselect(option.id)}>
-				{option.label}
-			</SelectableOption>
-		{/each}
-	</div>
-	{#if value === SOURCE_OTHER.id}
-		<!-- Slide (not an instant mount) so selecting "Lainnya" eases the field in instead of snapping
-		     the button row down. Padding lives on the wrapper so slide animates the gap too. -->
-		<div class="pt-3" transition:slide={reduce ? { duration: 0 } : { duration: 200 }}>
-			<Input
-				value={other}
-				oninput={(event) => onotherchange((event.currentTarget as HTMLInputElement).value)}
-				placeholder="Ceritakan dari mana, ya"
-				class="h-11 rounded-xl px-3.5 text-sm"
-				{@attach (node) => node.focus()}
-			/>
+	<StepHeading title={copy.title} subtitle={copy.description} />
+	<div class="mx-auto w-full max-w-md">
+		<!-- Two columns keep all nine options above the fold; "Lainnya" spans the row so the
+		     explicit override reads as its own tier. -->
+		<div class="stagger grid gap-2 sm:grid-cols-2">
+			{#each SHUFFLED_SOURCES as option, i (option.id)}
+				<div style="--i: {i}" class={option.id === SOURCE_OTHER.id ? 'sm:col-span-2' : ''}>
+					<SelectableOption selected={value === option.id} onclick={() => onselect(option.id)}>
+						{option.label}
+					</SelectableOption>
+				</div>
+			{/each}
 		</div>
-	{/if}
+		{#if value === SOURCE_OTHER.id}
+			<!-- Slide (not an instant mount) so selecting "Lainnya" eases the field in instead of snapping
+			     the button row down. Padding lives on the wrapper so slide animates the gap too. -->
+			<div class="pt-3" transition:slide={reduce ? { duration: 0 } : { duration: 200 }}>
+				<Input
+					value={other}
+					oninput={(event) => onotherchange((event.currentTarget as HTMLInputElement).value)}
+					placeholder="Ceritakan dari mana, ya"
+					class="h-11 rounded-xl px-3.5 text-sm"
+					{@attach (node) => node.focus()}
+				/>
+			</div>
+		{/if}
+	</div>
 </div>

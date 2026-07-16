@@ -23,18 +23,19 @@ describe('FinishStep', () => {
 			)
 			.toBeInTheDocument();
 		expect(container.textContent).toContain('Mahasiswa S1');
-		expect(container.textContent).toContain(
-			'Kecerdasan buatan & ilmu komputer, Pendidikan, Psikologi, dan 1 bidang lain'
-		);
+		expect(container.textContent).toContain('Kecerdasan buatan & ilmu komputer');
+		expect(container.textContent).toContain('Pendidikan');
+		expect(container.textContent).toContain('Psikologi');
+		expect(container.textContent).toContain('+1 bidang lain');
 		expect(container.textContent).not.toContain('mahasiswa_s1');
 		expect(container.textContent).not.toContain('ai_cs');
 	});
 
-	it('omits the background clause when no display label exists', () => {
+	it('omits the starting-point milestone when no display label exists', () => {
 		const { container } = render(FinishStep, {
 			answers: { ...answers, background: 'unknown' }
 		});
-		expect(container.textContent).not.toContain('Titik berangkatmu:');
-		expect(container.textContent).toContain('Rasa penasaranmu:');
+		expect(container.textContent).not.toContain('unknown');
+		expect(container.textContent).toContain('Kecerdasan buatan & ilmu komputer');
 	});
 });

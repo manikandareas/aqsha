@@ -21,15 +21,15 @@ colors:
   band-ink: 'oklch(0.95 0.014 88)'
 typography:
   display:
-    fontFamily: 'Instrument Serif, ui-serif, Georgia, serif'
+    fontFamily: 'Fredoka, ui-rounded, ui-sans-serif, system-ui, sans-serif'
     fontSize: 'clamp(2rem, 5vw, 4rem)'
-    fontWeight: 400
+    fontWeight: 500
     lineHeight: 1.1
     letterSpacing: '0'
   headline:
-    fontFamily: 'Instrument Serif, ui-serif, Georgia, serif'
+    fontFamily: 'Fredoka, ui-rounded, ui-sans-serif, system-ui, sans-serif'
     fontSize: '1.55rem'
-    fontWeight: 800
+    fontWeight: 700
     lineHeight: 1.2
     letterSpacing: '0'
   title:
@@ -141,7 +141,7 @@ components:
 
 **Creative North Star: "The Calm Study Desk"**
 
-Aqsha looks like a tidy, warm desk where a student researcher can see everything in reach and nothing is shouting. The base is warm paper — a cream body (`oklch(0.92 0.017 88)`) with slightly raised paper cards — carrying charcoal ink text and a small family of soft-candy accents. What changed in v2 is the physicality: every surface and control now wears a confident **2px border**, and depth is a hard, playful "lip" — buttons are keycaps you can press, and even floating surfaces (menus, popovers, dialogs) rest on a solid lip instead of hovering on blur. It reads as a place to think and write, built from sturdy paper pieces. Instrument Serif sets the headings; Inter does the honest work of UI and body; Caveat shows up like a pencil annotation. The personality is **calm, clear, playful** — playful in the tactility, quiet on the pages.
+Aqsha looks like a tidy, warm desk where a student researcher can see everything in reach and nothing is shouting. The base is warm paper — a cream body (`oklch(0.92 0.017 88)`) with slightly raised paper cards — carrying charcoal ink text and a small family of soft-candy accents. What changed in v2 is the physicality: every surface and control now wears a confident **2px border**, and depth is a hard, playful "lip" — buttons are keycaps you can press, and even floating surfaces (menus, popovers, dialogs) rest on a solid lip instead of hovering on blur. It reads as a place to think and write, built from sturdy paper pieces. Fredoka sets the headings; Inter does the honest work of UI and body; Caveat shows up like a pencil annotation. The personality is **calm, clear, playful** — playful in the tactility, quiet on the pages.
 
 This system explicitly rejects three things, drawn from the product's anti-references. It is **not** a fear-driven AI-safety interface — no red-warning-everywhere, no "zero hallucination" theater; guidance points to the next action, never scolds. It is **not** generic AI SaaS — no sparkle icons, no hero-metric templates, no gradient-purple "AI product" chrome, no endless identical feature-card grids. And it is **not** strict-academic or institutional — no seals, shields, crests, or journal-portal severity. Serious research capability, delivered without severity.
 
@@ -204,17 +204,17 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 
 ## 3. Typography
 
-**Display Font:** Instrument Serif (with `ui-serif, Georgia, serif`)
+**Display Font:** Fredoka (with `ui-rounded, ui-sans-serif, system-ui, sans-serif`)
 **Body / UI Font:** Inter (with `ui-sans-serif, system-ui, sans-serif`)
 **Mono Font:** JetBrains Mono (with `ui-monospace, SFMono-Regular, monospace`)
 **Accent Font:** Caveat (hand) — used sparingly, like a pencil note
 
-**Character:** A contrast pairing, not a lookalike pair: an editorial serif for headings against a neutral humanist sans for everything that does work. Base letter-spacing is a deliberate `+0.01em` across the interface. UI type walks a fixed staircase: **0.68 / 0.75 / 0.82 / 0.9 / 1rem** — micro-labels, small labels, control text, field/button text, body. In code, use the named utilities `text-micro`, `text-label`, `text-control`, and `text-field` (defined in `@aqsha/ui-svelte` tokens) instead of arbitrary rem values.
+**Character:** A contrast pairing, not a lookalike pair: a friendly rounded display sans for headings against a neutral humanist sans for everything that does work. Base letter-spacing is a deliberate `+0.01em` across the interface. UI type walks a fixed staircase: **0.68 / 0.75 / 0.82 / 0.9 / 1rem** — micro-labels, small labels, control text, field/button text, body. In code, use the named utilities `text-micro`, `text-label`, `text-control`, and `text-field` (defined in `@aqsha/ui-svelte` tokens) instead of arbitrary rem values.
 
 ### Hierarchy
 
-- **Display** (Instrument Serif, 400, `clamp(2rem, 5vw, 4rem)`, line-height 1.1): Hero and marketing headlines.
-- **Headline** (Instrument Serif, 800, 1.55–2rem, line-height 1.2): In-app section and prose headings.
+- **Display** (Fredoka, 500, `clamp(2rem, 5vw, 4rem)`, line-height 1.1): Hero and marketing headlines.
+- **Headline** (Fredoka, 700, 1.55–2rem, line-height 1.2): In-app section and prose headings.
 - **Title** (Inter, 600, ~0.94rem, line-height 1.4): Card titles, panel headers, dense UI headings.
 - **Body** (Inter, 400, 1rem, line-height 1.72): Reading prose. Capped at 65–75ch for long-form.
 - **Control** (Inter, 500–700, 0.82–0.9rem): Buttons (700), fields (500), menu items, tabs.
@@ -226,7 +226,7 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 
 **The Sentence-Case Rule.** UI copy is sentence case. No all-caps labels and no uppercase eyebrows above sections. The two scoped exceptions are structural micro-labels (table `th`, calendar weekday cells) and solid chip text — both are grammar, not copy.
 
-**The Serif-for-Voice, Sans-for-Work Rule.** Headings and moments of voice use Instrument Serif; anything a user reads to complete a task uses Inter. Never set a button, input, table cell, or data label in the serif or the hand.
+**The Display-for-Voice, Sans-for-Work Rule.** Headings and moments of voice use Fredoka; anything a user reads to complete a task uses Inter. Never set a button, input, table cell, or data label in the display face or the hand.
 
 ## 4. Elevation
 
@@ -322,7 +322,7 @@ The defining control of the system: a solid button rendered as a physical keycap
 - **Do** give every surface and control a 2px border, and reserve 1px for internal hairlines (table rows, menu separators, avatar rings).
 - **Do** put depth on everything that floats or presses — keycap lips on solid buttons, pop/modal lips on menus and dialogs, static lips on checkboxes and kbd.
 - **Do** follow the state grammar: mint for on/off and focus, ink for exclusive choice. Mint = `@mention`, lavender = `/command`.
-- **Do** set headings in Instrument Serif and everything a user reads-to-act in Inter; Caveat only as a decorative aside.
+- **Do** set headings in Fredoka and everything a user reads-to-act in Inter; Caveat only as a decorative aside.
 - **Do** hold body, placeholder, and muted text to ≥4.5:1 on the warm paper; solid chips carry white text only on the `-strong` faces.
 - **Do** write UI copy in sentence case, use `tabular-nums` for figures, and give every animation a `prefers-reduced-motion` fallback.
 - **Do** treat dark mode as a first-class theme; verify contrast, lips, and chip faces in both.

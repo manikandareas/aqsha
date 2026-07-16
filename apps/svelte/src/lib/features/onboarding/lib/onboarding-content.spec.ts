@@ -27,8 +27,7 @@ describe('onboarding journey content', () => {
 		expect(buildFinishReflection(answers())).toEqual({
 			backgroundLabel: 'Mahasiswa S1',
 			visibleInterestLabels: ['Kecerdasan buatan & ilmu komputer', 'Pendidikan', 'Psikologi'],
-			remainingInterestCount: 0,
-			interestSummary: 'Kecerdasan buatan & ilmu komputer, Pendidikan, dan Psikologi'
+			remainingInterestCount: 0
 		});
 	});
 
@@ -40,9 +39,6 @@ describe('onboarding journey content', () => {
 		);
 		expect(reflection.visibleInterestLabels).toHaveLength(3);
 		expect(reflection.remainingInterestCount).toBe(2);
-		expect(reflection.interestSummary).toBe(
-			'Kecerdasan buatan & ilmu komputer, Pendidikan, Psikologi, dan 2 bidang lain'
-		);
 	});
 
 	it('omits unknown background and ignores unknown interests without crashing', () => {
@@ -56,8 +52,7 @@ describe('onboarding journey content', () => {
 		).toEqual({
 			backgroundLabel: null,
 			visibleInterestLabels: [],
-			remainingInterestCount: 0,
-			interestSummary: 'bidang yang kamu pilih'
+			remainingInterestCount: 0
 		});
 	});
 });

@@ -3,29 +3,32 @@
 	import { fly } from 'svelte/transition';
 
 	/**
-	 * Deliberately not a progress bar. A quiet monospace counter ("01 / 03") with the active number lit
-	 * and the current section named. Number transitions use `{#key}` + `fly` (no motion when reduced).
+	 * Compact solid step badge ("Langkah 1 dari 5") above every chapter heading. Ink face per the
+	 * exclusive-choice grammar — the badge names where you are in the sequence. The number ticks
+	 * via `{#key}` + `fly` (no motion when reduced); role/aria-label keep progress legible without
+	 * color or motion.
 	 */
-	let { index, total, label }: { index: number; total: number; label: string } = $props();
+	let { index, total }: { index: number; total: number } = $props();
 
-	const pad = (n: number) => String(n).padStart(2, '0');
 	const reduce = $derived(prefersReducedMotion.current);
 </script>
 
-<div class="mb-8 flex items-center gap-3 font-mono text-xs tracking-[0.2em] text-muted-foreground">
-	<span class="relative inline-block h-[1.2em] w-[1.4em] text-center text-foreground">
-		{#key pad(index)}
+<div
+	role="status"
+	aria-label={`Langkah ${index} dari ${total}`}
+	class="inline-flex h-7 items-center gap-[0.35em] rounded-full bg-primary px-3.5 text-xs font-semibold text-primary-foreground"
+>
+	<span>Langkah</span>
+	<span class="relative inline-block h-[1.25em] w-[1ch] overflow-hidden text-center">
+		{#key index}
 			<span
-				class="absolute inset-0 inline-block"
-				in:fly={reduce ? { duration: 0 } : { y: 6, duration: 200 }}
-				out:fly={reduce ? { duration: 0 } : { y: -6, duration: 200 }}
+				class="absolute inset-0 inline-block tabular-nums"
+				in:fly={reduce ? { duration: 0 } : { y: 8, duration: 200 }}
+				out:fly={reduce ? { duration: 0 } : { y: -8, duration: 200 }}
 			>
-				{pad(index)}
+				{index}
 			</span>
 		{/key}
 	</span>
-	<span aria-hidden="true" class="text-muted-foreground/40">/</span>
-	<span>{pad(total)}</span>
-	<span aria-hidden="true" class="h-3 w-px bg-border"></span>
-	<span class="tracking-normal">{label}</span>
+	<span>dari {total}</span>
 </div>

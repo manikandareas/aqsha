@@ -46,7 +46,7 @@
 	/* Base radius 16px; the @theme scale derives sm 8 / md 12 / lg 16 / xl 20. */
 	--radius: 1rem;
 	--font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--font-serif: 'Instrument Serif', ui-serif, Georgia, serif;
+	--font-serif: 'Fredoka', ui-rounded, ui-sans-serif, system-ui, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 	--font-hand: 'Caveat', ui-sans-serif, cursive;
 	--shadow-x: 0px;

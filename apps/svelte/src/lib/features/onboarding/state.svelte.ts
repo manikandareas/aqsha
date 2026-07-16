@@ -8,8 +8,6 @@ import {
 	isStepValid as isStepValidPure,
 	type OnboardingAnswers,
 	type OnboardingStep,
-	questionIndexOf,
-	QUESTION_STEPS,
 	toggleInterest as toggleInterestPure
 } from './lib/onboarding-machine';
 
@@ -81,10 +79,6 @@ export function createOnboardingFlow() {
 			return complete.error
 				? readableApiErrorMessage(complete.error, 'Belum bisa menyimpan. Coba lagi, ya.')
 				: null;
-		},
-		get questionIndex() {
-			return questionIndexOf(step);
-		},
-		totalQuestions: QUESTION_STEPS.length
+		}
 	};
 }

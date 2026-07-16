@@ -37,14 +37,8 @@ export const PRIMARY_LABEL: Record<OnboardingStep, string> = {
 	welcome: 'Mulai dari satu ide',
 	background: 'Lanjut',
 	interests: 'Lanjut',
-	source: 'Selesai',
+	source: 'Lanjut',
 	finish: 'Mulai research'
-};
-
-export const STEP_LABEL: Partial<Record<OnboardingStep, string>> = {
-	background: 'Titik berangkat',
-	interests: 'Arah rasa penasaran',
-	source: 'Awal perkenalan'
 };
 
 /** The non-submit forward transition (welcome→background→interests→source). */
@@ -54,6 +48,23 @@ export const ADVANCE_TARGET: Partial<Record<OnboardingStep, OnboardingStep>> = {
 	interests: 'source'
 };
 
+/**
+ * What the primary button means on this step. Drivers handle `submit` / `complete` side effects;
+ * `advance` is a pure step change via ADVANCE_TARGET.
+ */
+export type PrimaryIntent =
+	| { type: 'advance'; step: OnboardingStep }
+	| { type: 'submit' }
+	| { type: 'complete' };
+
+export function primaryIntent(step: OnboardingStep): PrimaryIntent {
+	if (step === 'source') return { type: 'submit' };
+	if (step === 'finish') return { type: 'complete' };
+	const next = ADVANCE_TARGET[step];
+	if (!next) return { type: 'complete' };
+	return { type: 'advance', step: next };
+}
+
 /** Zero-based index of `step` among the question steps, or -1 if not a question step. */
 export function questionIndexOf(step: OnboardingStep): number {
 	return QUESTION_STEPS.indexOf(step);
@@ -61,6 +72,15 @@ export function questionIndexOf(step: OnboardingStep): number {
 
 export function isQuestionStep(step: OnboardingStep): boolean {
 	return questionIndexOf(step) >= 0;
+}
+
+/** Primary enabled when not submitting and the current question (if any) is valid. */
+export function canPrimary(
+	step: OnboardingStep,
+	answers: OnboardingAnswers,
+	isSubmitting: boolean
+): boolean {
+	return !isSubmitting && (!isQuestionStep(step) || isStepValid(step, answers));
 }
 
 /** Can the primary button advance from this step given the current answers? */

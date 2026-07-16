@@ -8,7 +8,7 @@
    CVD-validated evidence-viz palette, scrollbar tokens, and feature CSS. */
 
 /* ─── Self-hosted fonts ───
-   Inter → --font-sans, Instrument Serif → --font-serif/--font-heading,
+   Inter → --font-sans, Fredoka → --font-serif/--font-heading,
    JetBrains Mono → --font-mono, Caveat → --font-hand. woff2 in static/fonts;
    latin subset from @fontsource(-variable) devDeps. font-display: swap. */
 @font-face {
@@ -20,11 +20,11 @@
 }
 
 @font-face {
-	font-family: 'Instrument Serif';
+	font-family: 'Fredoka';
 	font-style: normal;
-	font-weight: 400;
+	font-weight: 300 700;
 	font-display: swap;
-	src: url('/fonts/instrument-serif-latin-400-normal.woff2') format('woff2');
+	src: url('/fonts/fredoka-latin-wght-normal.woff2') format('woff2');
 }
 
 @font-face {
@@ -133,7 +133,7 @@
 }
 
 .font-heading {
-	font-family: var(--font-serif), serif;
+	font-family: var(--font-serif), sans-serif;
 }
 
 .font-hand {
@@ -264,8 +264,8 @@
 :where(.aqsha-prose, .artifact-prose) h3,
 :where(.aqsha-prose, .artifact-prose) h4 {
 	color: var(--foreground);
-	font-family: var(--font-serif), serif;
-	font-weight: 800;
+	font-family: var(--font-serif), sans-serif;
+	font-weight: 700;
 	letter-spacing: 0;
 	max-width: 100%;
 	overflow-wrap: anywhere;
