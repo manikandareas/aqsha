@@ -7,6 +7,11 @@ coverage
 *.log
 .claude/
 .cursor/
+.codex/
+.impeccable/
+.superpowers/
+.github/hooks/
+apps/svelte/.impeccable/
 apps/api/.env
 apps/api/.env.local
 apps/app/.env.local
