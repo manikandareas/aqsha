@@ -1,14 +1,14 @@
 // Pure onboarding step machine. No runes, no imports beyond options: framework-agnostic +
-// unit-testable. The Svelte state layer (`state.svelte.ts`) and the page component drive UI from
-// these constants + predicates for validation timing, progress, and back/next targets.
+// unit-testable. The Svelte state layer (`state.svelte.ts`) and drivers bind UI from these
+// constants + predicates for validation timing and back/next targets.
 
 import { MIN_INTERESTS, SOURCE_OTHER } from './onboarding-options';
 
 export const ONBOARDING_STEPS = ['welcome', 'background', 'interests', 'source', 'finish'] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
-/** Steps that count toward the "01 / 03" progress indicator. */
-export const QUESTION_STEPS: OnboardingStep[] = ['background', 'interests', 'source'];
+/** Steps that require a valid answer before the primary button advances. */
+const QUESTION_STEPS = new Set<OnboardingStep>(['background', 'interests', 'source']);
 
 export type OnboardingAnswers = {
 	background: string | null;
@@ -30,7 +30,8 @@ export const HOME_AFTER_ONBOARDING = '/app';
 export const BACK_TARGET: Partial<Record<OnboardingStep, OnboardingStep>> = {
 	background: 'welcome',
 	interests: 'background',
-	source: 'interests'
+	source: 'interests',
+	finish: 'source'
 };
 
 export const PRIMARY_LABEL: Record<OnboardingStep, string> = {
@@ -41,37 +42,29 @@ export const PRIMARY_LABEL: Record<OnboardingStep, string> = {
 	finish: 'Mulai research'
 };
 
-/** The non-submit forward transition (welcome→background→interests→source). */
+/** The non-submit forward transition (welcome→background→interests→source→finish). */
 export const ADVANCE_TARGET: Partial<Record<OnboardingStep, OnboardingStep>> = {
 	welcome: 'background',
 	background: 'interests',
-	interests: 'source'
+	interests: 'source',
+	source: 'finish'
 };
 
 /**
- * What the primary button means on this step. Drivers handle `submit` / `complete` side effects;
- * `advance` is a pure step change via ADVANCE_TARGET.
+ * What the primary button means on this step. `advance` is a pure step change via ADVANCE_TARGET;
+ * the terminal step (finish, "Mulai research") is `submit` — drivers post the answers and, on
+ * success, navigate to the app.
  */
-export type PrimaryIntent =
-	| { type: 'advance'; step: OnboardingStep }
-	| { type: 'submit' }
-	| { type: 'complete' };
+export type PrimaryIntent = { type: 'advance'; step: OnboardingStep } | { type: 'submit' };
 
 export function primaryIntent(step: OnboardingStep): PrimaryIntent {
-	if (step === 'source') return { type: 'submit' };
-	if (step === 'finish') return { type: 'complete' };
 	const next = ADVANCE_TARGET[step];
-	if (!next) return { type: 'complete' };
-	return { type: 'advance', step: next };
-}
-
-/** Zero-based index of `step` among the question steps, or -1 if not a question step. */
-export function questionIndexOf(step: OnboardingStep): number {
-	return QUESTION_STEPS.indexOf(step);
+	if (next) return { type: 'advance', step: next };
+	return { type: 'submit' };
 }
 
 export function isQuestionStep(step: OnboardingStep): boolean {
-	return questionIndexOf(step) >= 0;
+	return QUESTION_STEPS.has(step);
 }
 
 /** Primary enabled when not submitting and the current question (if any) is valid. */

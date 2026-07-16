@@ -9,6 +9,11 @@ type JourneyStepCopy = Readonly<{
 	description: string;
 }>;
 
+type JourneyQuote = Readonly<{
+	text: string;
+	attribution: string;
+}>;
+
 // Quote stays in its original English (1974 Caltech commencement); the interpretation is Aqsha's
 // framing, not a translation.
 export const FEYNMAN_QUOTE = {
@@ -17,7 +22,15 @@ export const FEYNMAN_QUOTE = {
 	sourceUrl: 'https://magazine.caltech.edu/post/feynman-at-100',
 	interpretation:
 		'Sesuatu yang terdengar meyakinkan belum tentu benar. Aqsha membantu mencari dan memeriksa; kamu tetap menentukan apa yang layak dipercaya.'
-} as const;
+} as const satisfies JourneyQuote & {
+	sourceUrl: string;
+	interpretation: string;
+};
+
+export const EINSTEIN_QUOTE = {
+	text: 'Imagination is more important than knowledge.',
+	attribution: 'Albert Einstein'
+} as const satisfies JourneyQuote;
 
 // The catalog claim must stay "sekitar 320 juta karya ilmiah" — OpenAlex counts scholarly works,
 // not universally available full text.
@@ -52,6 +65,15 @@ export const STEP_HAND_NOTE: Record<OnboardingStep, string> = {
 	interests: 'nyalakan bintangmu',
 	source: 'salam kenal!',
 	finish: 'perjalananmu dimulai'
+};
+
+/** Chapter accent tokens inked onto margin doodles via --journey-accent / --journey-accent-ink. */
+export const STEP_ACCENT: Record<OnboardingStep, { accent: string; ink: string }> = {
+	welcome: { accent: 'var(--lemon)', ink: 'var(--lemon-foreground)' },
+	background: { accent: 'var(--coral)', ink: 'var(--coral-foreground)' },
+	interests: { accent: 'var(--mint)', ink: 'var(--mint-foreground)' },
+	source: { accent: 'var(--lavender)', ink: 'var(--lavender-foreground)' },
+	finish: { accent: 'var(--mint)', ink: 'var(--mint-foreground)' }
 };
 
 export type FinishReflection = Readonly<{

@@ -12,8 +12,6 @@ import {
 	type OnboardingAnswers,
 	PRIMARY_LABEL,
 	primaryIntent,
-	questionIndexOf,
-	QUESTION_STEPS,
 	toggleInterest
 } from './onboarding-machine';
 
@@ -22,49 +20,40 @@ const answers = (over: Partial<OnboardingAnswers> = {}): OnboardingAnswers => ({
 	...over
 });
 
-describe('onboarding step machine — question steps + progress', () => {
-	it('QUESTION_STEPS = background/interests/source in order', () => {
-		expect(QUESTION_STEPS).toEqual(['background', 'interests', 'source']);
-	});
-
-	it('questionIndexOf → 0-based index, -1 for welcome/finish', () => {
-		expect(questionIndexOf('background')).toBe(0);
-		expect(questionIndexOf('interests')).toBe(1);
-		expect(questionIndexOf('source')).toBe(2);
-		expect(questionIndexOf('welcome')).toBe(-1);
-		expect(questionIndexOf('finish')).toBe(-1);
-	});
-
-	it('isQuestionStep only for the three question steps', () => {
+describe('onboarding step machine — question steps', () => {
+	it('isQuestionStep only for steps that require a valid answer', () => {
 		expect(isQuestionStep('welcome')).toBe(false);
 		expect(isQuestionStep('background')).toBe(true);
+		expect(isQuestionStep('interests')).toBe(true);
+		expect(isQuestionStep('source')).toBe(true);
 		expect(isQuestionStep('finish')).toBe(false);
 	});
 });
 
 describe('onboarding transitions', () => {
-	it('ADVANCE_TARGET chains welcome→background→interests→source', () => {
+	it('ADVANCE_TARGET chains welcome→background→interests→source→finish', () => {
 		expect(ADVANCE_TARGET.welcome).toBe('background');
 		expect(ADVANCE_TARGET.background).toBe('interests');
 		expect(ADVANCE_TARGET.interests).toBe('source');
-		// source advances via submit, not ADVANCE_TARGET
-		expect(ADVANCE_TARGET.source).toBeUndefined();
+		expect(ADVANCE_TARGET.source).toBe('finish');
+		// finish submits ("Mulai research"), not advances
+		expect(ADVANCE_TARGET.finish).toBeUndefined();
 	});
 
-	it('primaryIntent maps advance / submit / complete without a driver switch', () => {
+	it('primaryIntent advances every step and submits only on finish', () => {
 		expect(primaryIntent('welcome')).toEqual({ type: 'advance', step: 'background' });
 		expect(primaryIntent('background')).toEqual({ type: 'advance', step: 'interests' });
 		expect(primaryIntent('interests')).toEqual({ type: 'advance', step: 'source' });
-		expect(primaryIntent('source')).toEqual({ type: 'submit' });
-		expect(primaryIntent('finish')).toEqual({ type: 'complete' });
+		expect(primaryIntent('source')).toEqual({ type: 'advance', step: 'finish' });
+		expect(primaryIntent('finish')).toEqual({ type: 'submit' });
 	});
 
 	it('BACK_TARGET mirrors the forward chain in reverse', () => {
 		expect(BACK_TARGET.background).toBe('welcome');
 		expect(BACK_TARGET.interests).toBe('background');
 		expect(BACK_TARGET.source).toBe('interests');
+		expect(BACK_TARGET.finish).toBe('source');
 		expect(BACK_TARGET.welcome).toBeUndefined();
-		expect(BACK_TARGET.finish).toBeUndefined();
 	});
 
 	it('uses the approved onboarding destination and journey CTAs', () => {

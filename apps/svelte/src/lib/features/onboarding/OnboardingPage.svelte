@@ -7,24 +7,17 @@
 	import { queryKeys, unwrap } from '$lib/query';
 	import { readableApiErrorMessage } from '$lib/errors';
 	import { FlickerSpinner } from '$lib/components/ui/flicker-spinner';
-	import {
-		BACK_TARGET,
-		canPrimary as canPrimaryOf,
-		HOME_AFTER_ONBOARDING,
-		primaryIntent
-	} from './lib/onboarding-machine';
-	import type { JourneyActions, JourneyViewModel } from './lib/journey-view';
+	import { HOME_AFTER_ONBOARDING } from './lib/onboarding-machine';
+	import { journeyActionsOf, journeyModelOf } from './lib/journey-driver';
 	import { createOnboardingFlow } from './state.svelte';
 	import OnboardingLayout from './components/OnboardingLayout.svelte';
 	import OnboardingJourney from './components/OnboardingJourney.svelte';
 	import OnboardingStatusError from './components/OnboardingStatusError.svelte';
-	import JourneyCentered from './components/JourneyCentered.svelte';
 
 	/**
-	 * Onboarding orchestrator: status query + gating, back/primary handling, submit mutation, and
-	 * navigation to `/app`. Presentation (journey rail, chapter motion, action row) lives in
-	 * `components/OnboardingJourney.svelte`; the pure step machine + validation in
-	 * `lib/onboarding-machine.ts`; flow state + complete mutation in `state.svelte.ts`.
+	 * Onboarding orchestrator: status query + gating, submit mutation, and navigation to `/app`.
+	 * Presentation lives in `OnboardingJourney`; the pure step machine in `onboarding-machine.ts`;
+	 * flow state + complete mutation in `state.svelte.ts`; model/actions binding in `journey-driver.ts`.
 	 */
 	const api = getApiClient();
 	const flow = createOnboardingFlow();
@@ -56,65 +49,32 @@
 			: null
 	);
 
-	const model = $derived.by(
-		(): JourneyViewModel => ({
-			step: flow.step,
-			answers: flow.answers,
-			isSubmitting: flow.isSubmitting,
-			errorMessage: flow.errorMessage,
-			canPrimary: canPrimaryOf(flow.step, flow.answers, flow.isSubmitting)
-		})
-	);
-
-	async function handlePrimary() {
-		const intent = primaryIntent(flow.step);
-		switch (intent.type) {
-			case 'advance':
-				flow.setStep(intent.step);
-				return;
-			case 'submit': {
-				const ok = await flow.submit();
-				if (ok) flow.setStep('finish');
-				return;
-			}
-			case 'complete':
-				void goto(resolve(HOME_AFTER_ONBOARDING), { replaceState: true });
-				return;
-		}
-	}
-
-	const actions: JourneyActions = {
-		back() {
-			const target = BACK_TARGET[flow.step];
-			if (target) flow.setStep(target);
-		},
-		primary() {
-			void handlePrimary();
-		},
-		setBackground: flow.setBackground,
-		toggleInterest: flow.toggleInterest,
-		setSource: flow.setSource,
-		setSourceOther: flow.setSourceOther
-	};
+	const model = $derived(journeyModelOf(flow));
+	const actions = journeyActionsOf(flow, async () => {
+		// "Mulai research" on finish: only navigate once the answers are saved — on failure
+		// the error renders above the action row and the user can retry or go back.
+		const ok = await flow.submit();
+		if (ok) void goto(resolve(HOME_AFTER_ONBOARDING), { replaceState: true });
+	});
 </script>
 
 {#if flow.step === 'welcome' && statusQuery.isError}
 	<OnboardingLayout>
-		<JourneyCentered>
+		<div class="flex min-h-svh items-center justify-center px-6">
 			<OnboardingStatusError
 				message={statusErrorMessage ?? 'Belum bisa memeriksa status onboarding.'}
 				onretry={() => void statusQuery.refetch()}
 			/>
-		</JourneyCentered>
+		</div>
 	</OnboardingLayout>
 {:else if flow.step === 'welcome' && (statusQuery.isPending || status?.completed)}
 	<!-- Wait for status before showing welcome — avoids flashing the wizard to a user we're redirecting. -->
 	<OnboardingLayout>
-		<JourneyCentered>
+		<div class="flex min-h-svh items-center justify-center px-6">
 			<div class="text-muted-foreground" role="status" aria-label="Memuat onboarding">
 				<FlickerSpinner class="size-5" />
 			</div>
-		</JourneyCentered>
+		</div>
 	</OnboardingLayout>
 {:else}
 	<OnboardingLayout>

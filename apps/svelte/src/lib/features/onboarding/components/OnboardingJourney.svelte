@@ -1,12 +1,10 @@
 <script lang="ts">
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Icon, ArrowLeftIcon, ArrowRight, Loader2Icon } from '$lib/icons';
-	import {
-		BACK_TARGET,
-		ONBOARDING_STEPS,
-		PRIMARY_LABEL
-	} from '../lib/onboarding-machine';
+	import { Icon, ArrowLeftIcon, ArrowRight, Loader2Icon, MoonIcon, SunIcon } from '$lib/icons';
+	import { themeContext } from '$lib/theme';
+	import { BACK_TARGET, ONBOARDING_STEPS, PRIMARY_LABEL } from '../lib/onboarding-machine';
+	import { STEP_ACCENT } from '../lib/onboarding-content';
 	import { pageEnter, pageExit } from '../lib/journey-transitions';
 	import type { JourneyActions, JourneyViewModel } from '../lib/journey-view';
 	import JourneyOrnaments from './JourneyOrnaments.svelte';
@@ -23,9 +21,9 @@
 	 * motion, and the anchored action row. Pure view — status query, mutation, and navigation live
 	 * in OnboardingPage; the design lab drives this same component with local state.
 	 *
-	 * Each chapter sets its own accent (lemon → coral → mint → lavender → mint); this shell inks
-	 * the margin doodles with it via `data-step`. Outgoing and incoming steps share one grid cell
-	 * (`[grid-area:1/1]`) so the swap crossfades in place instead of shoving the action row.
+	 * Each chapter sets its own accent via STEP_ACCENT; this shell inks the margin doodles with it.
+	 * Outgoing and incoming steps share one grid cell (`[grid-area:1/1]`) so the swap crossfades
+	 * in place instead of shoving the action row. Finish density is CSS under `[data-step='finish']`.
 	 */
 	let {
 		model,
@@ -38,6 +36,11 @@
 	const reduce = $derived(prefersReducedMotion.current);
 	const stepNumber = $derived(ONBOARDING_STEPS.indexOf(model.step) + 1);
 	const backTarget = $derived(BACK_TARGET[model.step]);
+	const accent = $derived(STEP_ACCENT[model.step]);
+
+	// Resolved mode is undefined during SSR; default to light so the pre-hydration icon is stable.
+	const theme = themeContext.get();
+	const isDark = $derived(theme.mode === 'dark');
 
 	// Direction feeds the page-lift transition so going back reads as returning.
 	let direction = $state<1 | -1>(1);
@@ -68,14 +71,30 @@
 </script>
 
 <div
-	class="journey relative mx-auto flex min-h-svh w-full max-w-6xl px-6 py-6 sm:px-10 sm:py-8"
+	class="journey relative mx-auto flex w-full max-w-6xl px-6 sm:px-10"
 	data-step={model.step}
+	style="--journey-accent: {accent.accent}; --journey-accent-ink: {accent.ink}"
 >
 	<JourneyOrnaments step={model.step} interests={model.answers.interests} />
 
 	<div class="relative flex min-w-0 flex-1 flex-col">
-		<div class="flex min-h-10 items-start">
-			<span class="text-xl font-semibold tracking-normal text-foreground">Aqsha</span>
+		<div class="journey-chrome flex items-start justify-between">
+			<span class="journey-brand font-semibold tracking-normal text-foreground">Aqsha</span>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				class="size-9 text-muted-foreground hover:text-foreground"
+				aria-label={isDark ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'}
+				onclick={() => theme.toggle()}
+			>
+				<!-- HugeiconsIcon renders its glyph once at init; the #if remounts it on theme flips. -->
+				{#if isDark}
+					<Icon icon={SunIcon} class="size-4.5" />
+				{:else}
+					<Icon icon={MoonIcon} class="size-4.5" />
+				{/if}
+			</Button>
 		</div>
 
 		<form
@@ -83,9 +102,9 @@
 			aria-busy={model.isSubmitting}
 			class="mx-auto flex w-full max-w-md min-w-0 flex-1 flex-col"
 		>
-			<div class="flex min-h-0 flex-1 flex-col pt-4 pb-8 sm:pt-7">
+			<div class="journey-body flex min-h-0 flex-1 flex-col">
 				<!-- The badge stays mounted across chapters, so its digit ticks while content swaps. -->
-				<div class="mb-5 flex justify-center">
+				<div class="journey-badge flex justify-center">
 					<OnboardingStepIndicator index={stepNumber} total={ONBOARDING_STEPS.length} />
 				</div>
 
@@ -100,15 +119,9 @@
 							{#if model.step === 'welcome'}
 								<WelcomeStep />
 							{:else if model.step === 'background'}
-								<BackgroundStep
-									value={model.answers.background}
-									onselect={actions.setBackground}
-								/>
+								<BackgroundStep value={model.answers.background} onselect={actions.setBackground} />
 							{:else if model.step === 'interests'}
-								<InterestsStep
-									value={model.answers.interests}
-									ontoggle={actions.toggleInterest}
-								/>
+								<InterestsStep value={model.answers.interests} ontoggle={actions.toggleInterest} />
 							{:else if model.step === 'source'}
 								<SourceStep
 									value={model.answers.source}
@@ -159,25 +172,71 @@
 </div>
 
 <style>
-	/* The travelling ink picks up the current chapter's accent (stroke + note color). */
-	.journey[data-step='welcome'] {
-		--journey-accent: var(--lemon);
-		--journey-accent-ink: var(--lemon-foreground);
+	.journey {
+		min-height: 100svh;
+		padding-block: 1.5rem;
 	}
-	.journey[data-step='background'] {
-		--journey-accent: var(--coral);
-		--journey-accent-ink: var(--coral-foreground);
+
+	.journey-chrome {
+		min-height: 2.5rem;
 	}
-	.journey[data-step='interests'] {
-		--journey-accent: var(--mint);
-		--journey-accent-ink: var(--mint-foreground);
+
+	.journey-brand {
+		font-size: 1.25rem;
 	}
-	.journey[data-step='source'] {
-		--journey-accent: var(--lavender);
-		--journey-accent-ink: var(--lavender-foreground);
+
+	.journey-body {
+		padding-top: 1rem;
+		padding-bottom: 2rem;
 	}
+
+	.journey-badge {
+		margin-bottom: 1.25rem;
+	}
+
+	/* Finish locks to one viewport so the send-off never scrolls on desktop laptops. */
 	.journey[data-step='finish'] {
-		--journey-accent: var(--mint);
-		--journey-accent-ink: var(--mint-foreground);
+		height: 100svh;
+		overflow: hidden;
+		padding-block: 1rem;
+	}
+
+	.journey[data-step='finish'] .journey-chrome {
+		min-height: 2rem;
+	}
+
+	.journey[data-step='finish'] .journey-brand {
+		font-size: 1.125rem;
+	}
+
+	.journey[data-step='finish'] .journey-body {
+		padding-top: 0.5rem;
+		padding-bottom: 1.25rem;
+	}
+
+	.journey[data-step='finish'] .journey-badge {
+		margin-bottom: 0.75rem;
+	}
+
+	@media (min-width: 640px) {
+		.journey {
+			padding-block: 2rem;
+		}
+
+		.journey-body {
+			padding-top: 1.75rem;
+		}
+
+		.journey[data-step='finish'] {
+			padding-block: 1.25rem;
+		}
+
+		.journey[data-step='finish'] .journey-body {
+			padding-top: 0.75rem;
+		}
+
+		.journey[data-step='finish'] .journey-badge {
+			margin-bottom: 1rem;
+		}
 	}
 </style>

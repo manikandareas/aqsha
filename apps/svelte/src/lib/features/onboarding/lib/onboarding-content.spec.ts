@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { OnboardingAnswers } from './onboarding-machine';
-import { buildFinishReflection, FEYNMAN_QUOTE, ONBOARDING_COPY } from './onboarding-content';
+import {
+	buildFinishReflection,
+	EINSTEIN_QUOTE,
+	FEYNMAN_QUOTE,
+	ONBOARDING_COPY,
+	STEP_ACCENT
+} from './onboarding-content';
 
 const answers = (over: Partial<OnboardingAnswers> = {}): OnboardingAnswers => ({
 	background: 'mahasiswa_s1',
@@ -21,6 +27,19 @@ describe('onboarding journey content', () => {
 		});
 		expect(ONBOARDING_COPY.interests.description).toContain('sekitar 320 juta karya ilmiah');
 		expect(ONBOARDING_COPY.interests.description).not.toContain('akses penuh');
+	});
+
+	it('keeps the Einstein send-off quote in the content model', () => {
+		expect(EINSTEIN_QUOTE).toEqual({
+			text: 'Imagination is more important than knowledge.',
+			attribution: 'Albert Einstein'
+		});
+	});
+
+	it('defines an accent for every journey step', () => {
+		expect(Object.keys(STEP_ACCENT).sort()).toEqual(
+			['background', 'finish', 'interests', 'source', 'welcome'].sort()
+		);
 	});
 
 	it('maps background and up to three interests to human labels', () => {

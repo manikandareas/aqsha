@@ -5,11 +5,11 @@ import { readableApiErrorMessage } from '$lib/errors';
 import {
 	buildCompletePayload,
 	EMPTY_ANSWERS,
-	isStepValid as isStepValidPure,
 	type OnboardingAnswers,
 	type OnboardingStep,
 	toggleInterest as toggleInterestPure
 } from './lib/onboarding-machine';
+import type { JourneySession } from './lib/journey-driver';
 
 /**
  * Onboarding flow state. Function-local `$state` (created per component init, NOT module scope) holds
@@ -20,7 +20,9 @@ import {
  *
  * Must be called during component init (uses the query + api-client context).
  */
-export function createOnboardingFlow() {
+export function createOnboardingFlow(): JourneySession & {
+	submit(): Promise<boolean>;
+} {
 	const api = getApiClient();
 	const queryClient = useQueryClient();
 
@@ -59,9 +61,6 @@ export function createOnboardingFlow() {
 		},
 		setSourceOther(value: string) {
 			answers = { ...answers, sourceOther: value };
-		},
-		isStepValid(target: OnboardingStep): boolean {
-			return isStepValidPure(target, answers);
 		},
 		async submit(): Promise<boolean> {
 			if (!buildCompletePayload(answers)) return false;
