@@ -20,7 +20,9 @@
 	class="min-h-svh"
 >
 	<AppSidebar />
-	<Sidebar.Inset class="relative min-h-svh bg-background text-foreground">
+	<!-- No min-h here: the inset variant adds m-2, so the pane stretches to the provider's
+	     min-h-svh row instead (margin-aware), avoiding a 100svh+margin overflow. -->
+	<Sidebar.Inset class="relative bg-background text-foreground">
 		{@render children()}
 	</Sidebar.Inset>
 </Sidebar.Provider>

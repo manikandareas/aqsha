@@ -164,9 +164,9 @@
 				></div>
 			</div>
 		{/if}
-		<p class="line-clamp-1 text-[12px] leading-snug text-muted-foreground">{slide.subtitle}</p>
+		<p class="line-clamp-2 text-[12px] leading-snug text-muted-foreground">{slide.subtitle}</p>
 	</div>
-	<div class="relative h-12 w-20 shrink-0 sm:h-14 sm:w-24">
+	<div class="relative h-14 w-24 shrink-0 sm:h-16 sm:w-28">
 		{#if slide.image}
 			<img src={slide.image} alt="" class="absolute inset-0 h-full w-full object-contain" />
 		{/if}
@@ -175,7 +175,7 @@
 
 {#snippet slideCard(slide: BannerSlide, hidden: boolean)}
 	{@const slideClass =
-		'flex w-full shrink-0 items-center gap-3 px-4 py-3 sm:gap-4 sm:px-5 focus-visible:outline-none'}
+		'flex w-full shrink-0 items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-5 sm:py-4 focus-visible:outline-none'}
 	{#if slide.external}
 		<a
 			href={slide.href}

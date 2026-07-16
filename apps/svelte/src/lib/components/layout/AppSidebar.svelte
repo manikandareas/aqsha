@@ -162,7 +162,6 @@
 				<a
 					{...props}
 					href={resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: workspace._id })}
-					class="flex min-w-0 max-w-full items-center gap-2 overflow-hidden"
 				>
 					{@render workspaceEmojiGlyph(workspace.emoji, active)}
 					<span class="min-w-0 flex-1 truncate font-normal">{workspace.name}</span>
@@ -190,7 +189,6 @@
 					href={resolve('/app/(product)/threads/[threadId]', { threadId: thread.threadId })}
 					aria-label={thread.title}
 					title={thread.title}
-					class="flex min-w-0 max-w-full items-center gap-2 overflow-hidden"
 				>
 					<Icon icon={MessageSquareIcon} class="size-3.5 shrink-0" />
 					<span class="min-w-0 flex-1 truncate font-normal">
@@ -215,7 +213,7 @@
 	</Sidebar.MenuItem>
 {/snippet}
 
-<Sidebar.Root collapsible="offcanvas" variant="transparent">
+<Sidebar.Root collapsible="offcanvas" variant="inset">
 	<Sidebar.Header class="gap-3 px-3 pb-3 pt-3.5">
 		<div class="flex items-center gap-1.5 pl-1.5 pr-2.5">
 			<button

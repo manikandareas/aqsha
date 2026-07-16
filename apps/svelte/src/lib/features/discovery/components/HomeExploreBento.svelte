@@ -67,7 +67,7 @@
 	<!-- Fade + rise the teaser in (transform/opacity) so the resolved feed materializes instead of hard-cutting. -->
 	<div
 		id={HOME_EXPLORE_SECTION_ID}
-		class="mx-auto w-full max-w-5xl scroll-mt-6 px-4 pt-4 pb-20 @2xl:px-8"
+		class="mx-auto w-full max-w-5xl scroll-mt-6 px-4 pt-14 pb-20 @2xl:px-8"
 		in:fly={reduce ? { duration: 0 } : { y: 8, duration: 300 }}
 	>
 		<section>

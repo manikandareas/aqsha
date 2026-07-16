@@ -115,7 +115,7 @@
 				data-sidebar="sidebar"
 				data-slot="sidebar-inner"
 				class={cn(
-					'group-data-[variant=floating]:ring-sidebar-border group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 flex size-full flex-col',
+					'group-data-[variant=floating]:ring-sidebar-border group-data-[variant=floating]:rounded-xl group-data-[variant=floating]:ring-1 flex size-full flex-col',
 					sidebarSurfaceClass(variant)
 				)}
 			>

@@ -35,7 +35,8 @@
 	--chart-3: oklch(0.4688 0.0136 84.5932);
 	--chart-4: oklch(0.7057 0.025 82.0932);
 	--chart-5: oklch(0.834 0.0232 87.163);
-	--sidebar: oklch(0.862 0.0205 86.5);
+	/* Sidebar rail sits one step lighter than the page (same surface as --card). */
+	--sidebar: oklch(0.953 0.0156 86.4257);
 	--sidebar-foreground: oklch(0.235 0 0);
 	--sidebar-primary: oklch(0.55 0.14 160);
 	--sidebar-primary-foreground: oklch(0.97 0.02 160);
@@ -105,7 +106,8 @@
 	--chart-3: oklch(0.6348 0.0113 81.7875);
 	--chart-4: oklch(0.4681 0.0069 84.5829);
 	--chart-5: oklch(0.3523 0 0);
-	--sidebar: oklch(0.148 0 0);
+	/* Dark keeps the same relationship: rail lighter than the page (matches --card). */
+	--sidebar: oklch(0.2264 0 0);
 	--sidebar-foreground: oklch(0.9173 0.0133 82.4015);
 	--sidebar-primary: oklch(0.72 0.13 160);
 	--sidebar-primary-foreground: oklch(0.22 0.05 165);

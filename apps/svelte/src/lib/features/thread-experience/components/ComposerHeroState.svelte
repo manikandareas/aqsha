@@ -22,7 +22,7 @@
 	} = $props();
 </script>
 
-<div class="mx-auto flex w-full max-w-2xl flex-col items-center gap-4 text-center">
+<div class="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 text-center">
 	<header
 		class={cn('mb-4 flex flex-col items-center justify-center gap-2 text-center', headerClass)}
 	>
