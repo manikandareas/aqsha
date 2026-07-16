@@ -6,6 +6,7 @@
 	import { createQuery } from '@tanstack/svelte-query';
 	import { getApiClient } from '$lib/api';
 	import { queryKeys, unwrap } from '$lib/query';
+	import { readableApiErrorMessage } from '$lib/errors';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { FlickerSpinner } from '$lib/components/ui/flicker-spinner';
 	import { Icon, ArrowLeftIcon, ArrowRight, Loader2Icon } from '$lib/icons';
@@ -17,6 +18,7 @@
 	} from './lib/onboarding-machine';
 	import { createOnboardingFlow } from './state.svelte';
 	import OnboardingLayout from './components/OnboardingLayout.svelte';
+	import OnboardingStatusError from './components/OnboardingStatusError.svelte';
 	import OnboardingStepIndicator from './components/OnboardingStepIndicator.svelte';
 	import WelcomeStep from './components/WelcomeStep.svelte';
 	import BackgroundStep from './components/BackgroundStep.svelte';
@@ -44,9 +46,18 @@
 	// so a late "completed" status can't skip the finish screen.
 	$effect(() => {
 		if (flow.step === 'welcome' && status?.completed) {
-			void goto(resolve('/app/explore'), { replaceState: true });
+			void goto(resolve(HOME_AFTER_ONBOARDING), { replaceState: true });
 		}
 	});
+
+	const statusErrorMessage = $derived(
+		statusQuery.error
+			? readableApiErrorMessage(
+					statusQuery.error,
+					'Belum bisa memeriksa status onboarding. Coba lagi, ya.'
+				)
+			: null
+	);
 
 	const isQuestionStep = $derived(flow.questionIndex >= 0);
 	const canPrimary = $derived(
@@ -87,10 +98,21 @@
 	}
 </script>
 
-{#if flow.step === 'welcome' && (!status || status.completed)}
+{#if flow.step === 'welcome' && statusQuery.isError}
+	<OnboardingLayout>
+		<OnboardingStatusError
+			message={statusErrorMessage ?? 'Belum bisa memeriksa status onboarding.'}
+			onretry={() => void statusQuery.refetch()}
+		/>
+	</OnboardingLayout>
+{:else if flow.step === 'welcome' && (statusQuery.isPending || status?.completed)}
 	<!-- Wait for status before showing welcome — avoids flashing the wizard to a user we're redirecting. -->
 	<OnboardingLayout>
-		<div class="flex justify-center text-muted-foreground">
+		<div
+			class="flex justify-center text-muted-foreground"
+			role="status"
+			aria-label="Memuat onboarding"
+		>
 			<FlickerSpinner class="size-5" />
 		</div>
 	</OnboardingLayout>
@@ -106,7 +128,7 @@
 			<div class="mb-8 h-5"></div>
 		{/if}
 
-		<form {onsubmit}>
+		<form {onsubmit} aria-busy={flow.isSubmitting}>
 			<div class="grid">
 				{#key flow.step}
 					<div
@@ -135,7 +157,9 @@
 			</div>
 
 			{#if flow.errorMessage}
-				<p class="mt-4 text-sm text-destructive">{flow.errorMessage}</p>
+				<p class="mt-4 text-sm text-destructive" role="alert" aria-live="assertive">
+					{flow.errorMessage}
+				</p>
 			{/if}
 
 			<div class="mt-8 flex items-center justify-between gap-3">
