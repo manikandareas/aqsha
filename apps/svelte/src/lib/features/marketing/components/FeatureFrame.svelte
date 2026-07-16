@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { mapRange, motionContext, scrollProgress } from '$lib/motion';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import FrameChrome from './FrameChrome.svelte';
 
 	// FeatureFrame — frame gambar editorial besar di bawah copy tiap fitur. Signature: "foto diluruskan
@@ -45,7 +45,7 @@
 
 <div
 	class={cn(
-		'group relative w-full overflow-hidden rounded-2xl border border-border',
+		'group relative w-full overflow-hidden rounded-2xl border-2 border-border',
 		aspectClassName,
 		className
 	)}

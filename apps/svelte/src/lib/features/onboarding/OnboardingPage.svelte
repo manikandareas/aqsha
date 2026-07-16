@@ -6,7 +6,7 @@
 	import { createQuery } from '@tanstack/svelte-query';
 	import { getApiClient } from '$lib/api';
 	import { queryKeys, unwrap } from '$lib/query';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { FlickerSpinner } from '$lib/components/ui/flicker-spinner';
 	import { Icon, ArrowLeftIcon, ArrowRight, Loader2Icon } from '$lib/icons';
 	import {

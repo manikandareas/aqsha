@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Icon, AlertCircleIcon, NotebookIcon, getArtifactTypeIcon } from '$lib/icons';
-	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import {
 		artifactTypeLabel,
 		formatArtifactYear,

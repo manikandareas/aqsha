@@ -14,7 +14,7 @@
 
 <script lang="ts">
 	import { Icon, ExternalLinkIcon, GlobeIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	let { link }: { link: SourceLinkItem } = $props();
 

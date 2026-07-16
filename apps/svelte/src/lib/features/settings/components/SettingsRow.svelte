@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	// Full-bleed label/value row. Stack several inside `divide-y divide-border/60`.
 	let {

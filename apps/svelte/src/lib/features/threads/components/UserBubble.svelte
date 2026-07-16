@@ -6,7 +6,7 @@
 		parseMentionSegments,
 		stripMentionMarkers
 	} from '@aqsha/chat-core';
-	import * as Tooltip from '$lib/components/ui/tooltip';
+	import * as Tooltip from '@aqsha/ui-svelte/components/tooltip';
 	import type { MessageAttachment } from '../lib/attachment-buckets';
 	import {
 		splitTokenLabel,

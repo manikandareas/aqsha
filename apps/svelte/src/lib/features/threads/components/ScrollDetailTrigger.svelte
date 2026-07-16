@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * A capped preview of expandable step content that opens the full thing in the side

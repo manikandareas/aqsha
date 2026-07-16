@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from '$lib/utils.js';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import type { SVGAttributes } from 'svelte/elements';
 	import { FlickerSpinner } from '$lib/components/ui/flicker-spinner/index.js';
 

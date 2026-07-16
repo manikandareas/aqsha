@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	const SHELL_WIDTH = {
 		prose: 'max-w-[44rem]',

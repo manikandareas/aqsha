@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { reveal, revealUp } from '$lib/motion';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { PUBLIC_PLAN_KEYS } from '$lib/plan/catalog';
 	import type { Billing } from '../pricing';
 	import PlanReceipt from './PlanReceipt.svelte';

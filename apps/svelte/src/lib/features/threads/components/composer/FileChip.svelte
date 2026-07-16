@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Icon, FileTextIcon, Loader2Icon, XIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Single file card — document icon in a blue tile + file name (bold). `onRemove` → round X button
@@ -27,7 +27,7 @@
 
 	const pending = $derived(indexingStatus === 'pending');
 	const base =
-		'inline-flex max-w-[13rem] items-center gap-2 rounded-xl border border-border bg-card p-1.5 pr-2.5';
+		'inline-flex max-w-[13rem] items-center gap-2 rounded-xl border-2 border-border bg-card p-1.5 pr-2.5';
 </script>
 
 {#snippet body()}

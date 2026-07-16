@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Streamdown } from 'svelte-streamdown';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useSmoothText } from '$lib/features/threads/lib/smooth-text.svelte';
 
 	// Reasoning summary. Plain markdown (NO citation/stats/viz custom tags — reasoning never carries

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Badge } from '$lib/components/ui/badge';
+	import { Badge } from '@aqsha/ui-svelte/components/badge';
 	import { Icon, CheckIcon, CopyIcon, TrendingUpIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import type { ExplorePaper, PaperYearCount } from '$lib/features/discovery/types';
 
 	// Easing fisik (spring-out) selaras dengan primitif reader lain.
@@ -113,7 +113,7 @@
 {#if hasImpact || hasDetails}
 	<aside class="mt-9 min-w-0 space-y-3 @5xl:sticky @5xl:top-6 @5xl:mt-0 @5xl:self-start">
 		{#if hasImpact && e}
-			<div class="overflow-hidden rounded-2xl border border-border/60 bg-card">
+			<div class="overflow-hidden rounded-2xl border-2 border-border bg-card">
 				<div class="bg-muted/25 px-5 py-4">
 					<div class="flex items-start justify-between gap-3">
 						<div class="min-w-0">
@@ -163,7 +163,7 @@
 
 		{#if hasDetails}
 			<div
-				class="overflow-hidden rounded-2xl border border-border/60 bg-card px-5 divide-y divide-border/50"
+				class="overflow-hidden rounded-2xl border-2 border-border bg-card px-5 divide-y divide-border/50"
 			>
 				{#if access || journal || typeLine || paper.doi || issn}
 					{@render asideGroup('Publikasi', publikasiBody)}

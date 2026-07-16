@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { mapRange, motionContext, reveal, revealUp, scrollProgress } from '$lib/motion';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import MagneticButton from './MagneticButton.svelte';
 
 	// BottomCtaSection — dark inversion finale. Kelas `dark` me-resolve ulang token ke palet charcoal

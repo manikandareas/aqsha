@@ -25,7 +25,7 @@
 		PaperclipIcon,
 		SquareIcon
 	} from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useBillingCurrent } from '$lib/features/settings/api';
 	import { isCreditsLow } from '$lib/features/settings/lib/billing-derived';
 	import { useWorkspacesList } from '$lib/features/workspaces/api';

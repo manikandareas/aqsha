@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { Icon } from '$lib/icons';
 	import { CATEGORY_META } from '../lib/categories';
 	import type { ChangelogCategory } from '../types';

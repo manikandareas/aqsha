@@ -1,6 +1,6 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { useIntegrations } from '$lib/features/settings/api';
 	import type { IntegrationProviderKey } from '$lib/features/settings/lib/integrations';
 	import ProviderSyncFlow from './ProviderSyncFlow.svelte';

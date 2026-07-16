@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import * as Popover from '$lib/components/ui/popover';
-	import { Button } from '$lib/components/ui/button';
-	import { cn } from '$lib/utils';
+	import * as Popover from '@aqsha/ui-svelte/components/popover';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { Icon, DownloadIcon, InfoIcon, MoreHorizontalIcon, Trash2Icon } from '$lib/icons';
 	import type { ArtifactRenderPayload } from '$lib/features/artifacts/types';
 	import {

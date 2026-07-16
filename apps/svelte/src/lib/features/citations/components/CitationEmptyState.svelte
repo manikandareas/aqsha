@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { FileTextIcon, Icon, LinkIcon, PenLineIcon, Quote, UploadIcon } from '$lib/icons';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 
 	/**
 	 * Empty state tab Sitasi — anatomi `WorkspaceLibraryEmpty` (badge pill → title +

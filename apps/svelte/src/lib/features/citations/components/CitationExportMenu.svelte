@@ -1,6 +1,6 @@
 <script lang="ts">
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { Button } from '$lib/components/ui/button';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { DownloadIcon, Icon } from '$lib/icons';
 	import { useExportCitations } from '../api';
 

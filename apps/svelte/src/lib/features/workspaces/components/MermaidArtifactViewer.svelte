@@ -14,7 +14,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import type { Attachment } from 'svelte/attachments';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { Icon, Loader2Icon } from '$lib/icons';
 
 	/**

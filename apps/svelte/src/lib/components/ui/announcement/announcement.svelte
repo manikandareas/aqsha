@@ -9,8 +9,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { HTMLAnchorAttributes } from 'svelte/elements';
-	import { Badge, type BadgeVariant } from '$lib/components/ui/badge/index.js';
-	import { cn } from '$lib/utils';
+	import { Badge, type BadgeVariant } from '@aqsha/ui-svelte/components/badge';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Announcement pill. A rounded Badge with a `themed` context read by `AnnouncementTag`. `h-auto`

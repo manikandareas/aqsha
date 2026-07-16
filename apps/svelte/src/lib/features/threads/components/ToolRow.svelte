@@ -3,11 +3,11 @@
 	import { messagePreview } from '@aqsha/chat-core';
 	import type { StatsGroup } from '@aqsha/chat-core/stats-viz';
 	import { Icon, ChevronDownIcon, TelescopeIcon, XCircleIcon } from '$lib/icons';
-	import { Badge } from '$lib/components/ui/badge';
-	import * as Collapsible from '$lib/components/ui/collapsible';
+	import { Badge } from '@aqsha/ui-svelte/components/badge';
+	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import Shimmer from '$lib/components/ai-elements/Shimmer.svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { STATS_SANDBOX_TOOLS } from '../lib/stats-run-detail';
 	import type { ToolRowModel } from '../lib/timeline-types';
 	import type { ResearchSource } from '../types';

@@ -13,3 +13,6 @@ bun.lockb
 /content/
 # Generated Content Collections module.
 /.content-collections/
+
+# Impeccable design-hook cache (rewritten unformatted on every scan)
+.impeccable/hook.cache.json

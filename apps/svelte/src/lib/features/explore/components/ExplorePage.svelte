@@ -5,9 +5,9 @@
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import ResponsiveSidePanel from '$lib/components/layout/ResponsiveSidePanel.svelte';
 	import PanelOpenButton from '$lib/components/layout/PanelOpenButton.svelte';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, ChevronRightIcon, MessageSquareIcon, PanelLeftIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { panelHeaderBarClass } from '$lib/components/layout/panel-surface';
 	import {
 		ComposerMentions,

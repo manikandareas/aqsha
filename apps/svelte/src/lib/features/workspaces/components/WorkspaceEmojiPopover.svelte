@@ -1,6 +1,6 @@
 <script lang="ts">
-	import * as Popover from '$lib/components/ui/popover';
-	import { Button } from '$lib/components/ui/button';
+	import * as Popover from '@aqsha/ui-svelte/components/popover';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { readableApiErrorMessage } from '$lib/errors';
 	import WorkspaceEmojiPickerContent from './WorkspaceEmojiPickerContent.svelte';
 

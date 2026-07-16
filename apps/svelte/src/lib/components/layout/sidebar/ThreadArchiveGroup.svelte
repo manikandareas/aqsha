@@ -2,7 +2,7 @@
 	import { onMount, type Snippet } from 'svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { Icon, ChevronRightIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import type { SidebarThread } from '$lib/features/workspaces/api/use-workspaces-data';
 	import { createPersistentCollapse } from './persistent-collapse.svelte';
 

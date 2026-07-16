@@ -13,7 +13,7 @@
 	import type { Snippet } from 'svelte';
 	import PanelTitleLabel from './PanelTitleLabel.svelte';
 	import { panelHeaderBarClass } from './panel-surface';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Flush header bar that makes the side panel a HOME for several panels — a roving-tabindex

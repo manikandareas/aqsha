@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { Icon, ChevronDownIcon, ExternalLinkIcon, type IconSvgElement } from '$lib/icons';
-	import * as Collapsible from '$lib/components/ui/collapsible';
+	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
 	import { faviconUrl, originMeta, sourceDomain, sourceHref } from '../lib/source-card';
 	import type { SourceCardData } from '../lib/timeline-types';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Source list inside a detail panel — shared by the message-sources, search-step, and step

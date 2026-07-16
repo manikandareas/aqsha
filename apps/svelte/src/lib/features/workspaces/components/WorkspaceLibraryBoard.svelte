@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import * as ContextMenu from '$lib/components/ui/context-menu/index.js';
+	import * as ContextMenu from '@aqsha/ui-svelte/components/context-menu';
 	import { Icon, FileTextIcon, FolderIcon, LinkIcon, UploadIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import {
 		panelBodyColumnClass,
 		panelBodyPaddingClass,

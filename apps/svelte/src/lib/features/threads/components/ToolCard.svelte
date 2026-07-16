@@ -1,12 +1,12 @@
 <script lang="ts" module>
 	/** Single shell class for every tool card above the composer (kept for `DeepRunNoticeCard`). */
-	export const toolCardShellClass = 'rounded-xl border border-border bg-card p-3.5';
+	export const toolCardShellClass = 'rounded-xl border-2 border-border bg-card p-3.5';
 </script>
 
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { Icon, ExpandIcon, type IconSvgElement } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Compact interactive tool card above the composer (Klarifikasi, Rencana riset, `/deep` notices, tool

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { Icon, FileIcon, Loader2Icon } from '$lib/icons';
-	import * as Tabs from '$lib/components/ui/tabs';
+	import * as Tabs from '@aqsha/ui-svelte/components/tabs';
 	import Response from '$lib/components/ai-elements/Response.svelte';
 	import type { ArtifactRenderPayload } from '$lib/features/artifacts/types';
 	import MermaidArtifactViewer from './MermaidArtifactViewer.svelte';

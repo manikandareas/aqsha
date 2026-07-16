@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import { Icon, Loader2Icon, LogOutIcon } from '$lib/icons';
 	import { useRevokeSession, useSessions } from '../api';
 	import {

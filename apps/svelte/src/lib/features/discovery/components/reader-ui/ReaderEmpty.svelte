@@ -5,7 +5,7 @@
 </script>
 
 <div
-	class="mx-auto mt-12 max-w-sm rounded-3xl border border-border/70 bg-muted/20 px-6 py-12 text-center"
+	class="mx-auto mt-12 max-w-sm rounded-3xl border-2 border-border bg-muted/20 px-6 py-12 text-center"
 >
 	<div
 		class="mx-auto mb-4 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground"

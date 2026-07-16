@@ -1,6 +1,6 @@
 <script lang="ts">
 	import GenerativeCover from '$lib/components/GenerativeCover.svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { kindLabel, type DiscoveryItem } from '../model';
 	import PdfThumb from './PdfThumb.svelte';
 

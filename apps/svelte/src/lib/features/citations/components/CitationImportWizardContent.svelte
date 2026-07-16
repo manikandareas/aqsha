@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, UploadIcon } from '$lib/icons';
 	import { readableApiErrorMessage } from '$lib/errors';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useImportCommit, useImportPreview } from '../api';
 	import type { ImportCommitResult, ImportDuplicatePolicy, ImportPreviewResult } from '../types';
 	import CitationImportPreviewStep from './CitationImportPreviewStep.svelte';

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import * as Popover from '$lib/components/ui/popover';
-	import { Button } from '$lib/components/ui/button';
+	import * as Popover from '@aqsha/ui-svelte/components/popover';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, InfoIcon } from '$lib/icons';
 	import type { ArtifactRenderPayload } from '$lib/features/artifacts/types';
 	import type { PaperExtractionStatus } from '$lib/features/workspaces/utils/paper-metadata-model';

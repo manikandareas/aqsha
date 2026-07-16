@@ -37,7 +37,9 @@
 	</p>
 
 	{#if post.cover}
-		<div class="relative mt-8 aspect-[16/9] w-full overflow-hidden rounded-xl border border-border">
+		<div
+			class="relative mt-8 aspect-[16/9] w-full overflow-hidden rounded-xl border-2 border-border"
+		>
 			<img
 				src={post.cover}
 				alt=""

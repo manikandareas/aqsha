@@ -4,7 +4,7 @@
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import NavUser from '$lib/components/layout/NavUser.svelte';
 	import { Icon, ArrowLeftIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { settingsItemForPath, settingsMenu, type SettingsMenuItem } from '../lib/settings-menu';
 
 	/**

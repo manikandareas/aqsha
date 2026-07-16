@@ -10,7 +10,7 @@
 
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import {
 		Icon,
 		AlertCircleIcon,
@@ -22,7 +22,7 @@
 		ThumbsDownIcon
 	} from '$lib/icons';
 	import { firstInitial } from '$lib/components/generative-cover';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { bestIngestUrl, feedDetailHref } from '../model';
 	import { domainFromUrl, formatCitationCount, relativeTime, sourceName } from '../format';
 	import CardMedia from './CardMedia.svelte';

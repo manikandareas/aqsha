@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { Icon, Loader2Icon } from '$lib/icons';
 	import { type ArtifactSidebarRecord } from './ArtifactDetailSidebar.svelte';
 

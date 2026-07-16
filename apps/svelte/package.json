@@ -64,6 +64,7 @@
 	"dependencies": {
 		"@aqsha/api": "workspace:*",
 		"@aqsha/chat-core": "workspace:*",
+		"@aqsha/ui-svelte": "workspace:*",
 		"@clerk/themes": "2.4.57",
 		"@hugeicons/core-free-icons": "^4.2.2",
 		"@hugeicons/svelte": "^1.1.4",

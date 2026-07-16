@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import * as Avatar from '$lib/components/ui/avatar/index.js';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as Avatar from '@aqsha/ui-svelte/components/avatar';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import ThemeMenuSub from './ThemeMenuSub.svelte';
 	import { Icon, LogOutIcon, MoreVerticalIcon, SettingsIcon } from '$lib/icons';

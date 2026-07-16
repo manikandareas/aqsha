@@ -12,7 +12,7 @@
      judul + ringkasan + badge di kanan. Seluruh kartu link ke detail — body MDX lengkap di sana. -->
 <a
 	href={resolve('/(marketing)/changelog/[slug]', { slug: entry.slug })}
-	class="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card transition-colors hover:border-border sm:min-h-[8.5rem] sm:flex-row"
+	class="group flex flex-col overflow-hidden rounded-2xl border-2 border-border bg-card transition-colors hover:border-border sm:min-h-[8.5rem] sm:flex-row"
 >
 	<ChangelogPreview
 		{entry}

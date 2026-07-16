@@ -18,7 +18,7 @@
 <script lang="ts">
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { slide } from 'svelte/transition';
-	import { Input } from '$lib/components/ui/input';
+	import { Input } from '@aqsha/ui-svelte/components/input';
 	import SelectableOption from './SelectableOption.svelte';
 	import StepHeading from './StepHeading.svelte';
 

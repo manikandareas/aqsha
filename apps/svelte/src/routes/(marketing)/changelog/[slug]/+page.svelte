@@ -50,7 +50,7 @@
 		<ChangelogPreview
 			{entry}
 			sizes="(min-width: 768px) 720px, 100vw"
-			class="mt-8 aspect-[16/9] rounded-xl border border-border/60 sm:mt-10"
+			class="mt-8 aspect-[16/9] rounded-xl border-2 border-border sm:mt-10"
 		/>
 
 		<article class="aqsha-prose changelog-prose mt-8 sm:mt-10">

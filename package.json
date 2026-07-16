@@ -11,7 +11,8 @@
     "packages/chat-core",
     "packages/db",
     "packages/services",
-    "packages/ui"
+    "packages/ui",
+    "packages/ui-svelte"
   ],
   "scripts": {
     "dev": "bun run build:dist && (bun run watch:dist & bun run dev:api & bun run dev:worker & bun run dev:agent & bun run dev:web & bun run dev:www & bun run dev:svelte & wait)",
@@ -23,6 +24,7 @@
     "start:svelte": "bun run --filter '@aqsha/svelte' start",
     "lint:svelte": "bun run --filter '@aqsha/svelte' lint",
     "typecheck:svelte": "bun run --filter '@aqsha/svelte' typecheck",
+    "typecheck:ui-svelte": "bun run --filter '@aqsha/ui-svelte' check",
     "test:svelte": "bun run --filter '@aqsha/svelte' test",
     "dev:worker": "bun run --filter '@aqsha/api' worker",
     "dev:agent": "bun run --filter '@aqsha/agent' dev",

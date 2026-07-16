@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import { Streamdown } from 'svelte-streamdown';
 	import type { StatsGroup } from '@aqsha/chat-core/stats-viz';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useSmoothText } from '$lib/features/threads/lib/smooth-text.svelte';
 	import type { SourceCardData } from '$lib/features/threads/lib/timeline-types';
 	import { aqshaMarkdownExtensions } from './markdown-extensions';

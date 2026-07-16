@@ -12,7 +12,7 @@
 	} from '@aqsha/chat-core';
 	import { Popover as PopoverPrimitive } from 'bits-ui';
 	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import {
 		createCommandChipElement,
 		createContextChipElement,
@@ -555,7 +555,7 @@
 		}}
 		onmousedown={(e: MouseEvent) => e.preventDefault()}
 		class={cn(
-			'z-50 overflow-hidden rounded-xl bg-popover p-0 shadow-md ring-1 ring-foreground/10',
+			'border-border lip-pop z-50 overflow-hidden rounded-md border-2 bg-popover p-0',
 			anchorToShell ? 'w-(--bits-floating-anchor-width)' : 'w-[min(22.5rem,calc(100vw-2rem))]'
 		)}
 	>

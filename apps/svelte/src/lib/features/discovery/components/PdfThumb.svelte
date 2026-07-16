@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { publicEnv } from '$lib/env/public';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Page-1 PDF thumbnail for an Explore card. Rendered directly via `pdfjs-dist` (no react-pdf) to a

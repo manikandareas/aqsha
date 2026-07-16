@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, untrack, type Snippet } from 'svelte';
 	import { Icon, ChevronRightIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { createPersistentCollapse } from './persistent-collapse.svelte';
 
 	/**

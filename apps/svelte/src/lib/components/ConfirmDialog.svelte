@@ -2,8 +2,8 @@
 	import type { Snippet } from 'svelte';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { slide } from 'svelte/transition';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { readableApiErrorMessage } from '$lib/errors';
 
 	/**

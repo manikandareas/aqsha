@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
-	import * as Command from '$lib/components/ui/command/index.js';
+	import * as Command from '@aqsha/ui-svelte/components/command';
 	import NavUser from './NavUser.svelte';
 	import SidebarSection from './sidebar/SidebarSection.svelte';
 	import ThreadArchiveGroup from './sidebar/ThreadArchiveGroup.svelte';
@@ -27,7 +27,7 @@
 		SettingsIcon,
 		TrendingUpIcon
 	} from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Left navigation rail. Fetches sidebar data via `useWorkspaceIndexData()` (reactive getters);

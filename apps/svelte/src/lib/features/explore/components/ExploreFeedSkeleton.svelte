@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { cn } from '$lib/utils';
+	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	// Skeleton feed Explore — meniru layout nyata ExploreFindings (hero spotlight
 	// image-right → grid 3-up standard card → feature card) supaya loading tidak

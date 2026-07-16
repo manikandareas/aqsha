@@ -35,9 +35,9 @@
 	import { slide } from 'svelte/transition';
 	import type { AskQuestionsResumeData } from '@aqsha/chat-core';
 	import { Icon, CheckIcon } from '$lib/icons';
-	import { Button } from '$lib/components/ui/button';
-	import { ScrollArea } from '$lib/components/ui/scroll-area';
-	import { cn } from '$lib/utils';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { ScrollArea } from '@aqsha/ui-svelte/components/scroll-area';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Interactive clarification form (`ask_questions`) — single-choice (radio-ish keycaps) + "Lainnya…"

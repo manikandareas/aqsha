@@ -1,0 +1,129 @@
+/* Aqsha UI component-layer classes — the tactile depth language shared by the
+   design-system components. Depth is always a hard "lip" (offset solid shadow),
+   never a gradient. Composed through Tailwind's --tw-shadow chain so ring/focus
+   utilities still layer on top. */
+
+@layer components {
+	/* Keycap button face. --btn-face drives everything; set it per variant
+	   (e.g. [--btn-face:var(--secondary)]). Rest = 4px lip; pressed and open
+	   (dropdown trigger) bottom out: cap sinks 4px onto the surface. */
+	.btn-keycap {
+		--btn-face: var(--primary);
+		--btn-lip: color-mix(in oklch, var(--btn-face) 62%, black 38%);
+		background-color: var(--btn-face);
+		--tw-shadow: 0 4px 0 0 var(--btn-lip);
+		box-shadow:
+			var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+			var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+		transition:
+			box-shadow 0.1s ease,
+			transform 0.1s ease,
+			background-color 0.15s ease,
+			filter 0.15s ease;
+	}
+
+	.btn-keycap:hover {
+		filter: brightness(1.08);
+	}
+
+	.btn-keycap:active,
+	.btn-keycap[aria-expanded='true'] {
+		transform: translateY(4px);
+		--tw-shadow: 0 0 0 0 var(--btn-lip);
+		filter: none;
+	}
+
+	.btn-keycap:disabled {
+		transform: none;
+		filter: none;
+		--tw-shadow: 0 0 #0000;
+	}
+
+	/* Flat-face lip for outline/soft controls: 3px lip in the border color
+	   (or --lip-color override), pressed sinks 3px. */
+	.btn-lip {
+		--lip-color: var(--border);
+		--tw-shadow: 0 3px 0 0 var(--lip-color);
+		box-shadow:
+			var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+			var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+		transition:
+			box-shadow 0.1s ease,
+			transform 0.1s ease,
+			background-color 0.15s ease;
+	}
+
+	.btn-lip:active {
+		transform: translateY(3px);
+		--tw-shadow: 0 0 0 0 var(--lip-color);
+	}
+
+	.btn-lip:disabled {
+		transform: none;
+		--tw-shadow: 0 0 #0000;
+	}
+
+	/* Floating surfaces (menu, popover, hover card, tooltip): hard 3px lip on the
+	   border color plus the soft ambient card shadow. */
+	.lip-pop {
+		box-shadow:
+			0 3px 0 0 var(--border),
+			var(--shadow-soft-card);
+	}
+
+	/* Modal-grade surfaces (dialog, command menu): heavier 4px lip + deep ambient. */
+	.lip-modal {
+		box-shadow:
+			0 4px 0 0 var(--border),
+			0 20px 50px rgb(0 0 0 / 0.18);
+	}
+
+	/* Small static lip for controls that show depth but don't press (checkbox box,
+	   kbd, calendar nav). */
+	.lip-static {
+		--lip-color: var(--border);
+		box-shadow: 0 2px 0 0 var(--lip-color);
+	}
+
+	/* Skeleton shimmer — a faint ink sweep across the muted placeholder. */
+	.skeleton-shimmer {
+		position: relative;
+		overflow: hidden;
+	}
+
+	.skeleton-shimmer::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			90deg,
+			transparent,
+			color-mix(in oklch, var(--foreground) 6%, transparent),
+			transparent
+		);
+		transform: translateX(-100%);
+		animation: aq-shimmer 1.4s infinite;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.skeleton-shimmer::after {
+			animation: none;
+		}
+	}
+
+	/* Single-line control inset: subtle top shadow inside inputs/selects/OTP cells.
+	   Uses the inset slot of the shadow chain so focus rings still compose. */
+	.ctl-inset {
+		--tw-inset-shadow: inset 0 2px 0 0 color-mix(in oklch, var(--border) 45%, transparent);
+		box-shadow:
+			var(--tw-inset-shadow), var(--tw-inset-ring-shadow, 0 0 #0000),
+			var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000),
+			var(--tw-shadow, 0 0 #0000);
+	}
+}
+
+@keyframes aq-shimmer {
+	100% {
+		transform: translateX(100%);
+	}
+}

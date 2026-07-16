@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { getStickToBottom } from './conversation-state.svelte';
 
 	// Inner sized flex column. Its growth (streaming tokens) is observed by the follow-bottom engine

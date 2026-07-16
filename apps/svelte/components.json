@@ -6,9 +6,9 @@
 		"baseColor": "neutral"
 	},
 	"aliases": {
-		"components": "$lib/components",
-		"utils": "$lib/utils",
-		"ui": "$lib/components/ui",
+		"components": "@aqsha/ui-svelte/components",
+		"utils": "@aqsha/ui-svelte/utils",
+		"ui": "@aqsha/ui-svelte/components",
 		"hooks": "$lib/hooks",
 		"lib": "$lib"
 	},

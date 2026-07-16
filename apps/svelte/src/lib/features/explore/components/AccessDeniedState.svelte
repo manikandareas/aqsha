@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 </script>
 
 <div

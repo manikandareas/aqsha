@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, RotateCcwIcon } from '$lib/icons';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import {

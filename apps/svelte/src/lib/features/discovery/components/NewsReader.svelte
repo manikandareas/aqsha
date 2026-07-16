@@ -98,7 +98,7 @@
 			</h1>
 
 			{#if item.imageUrl}
-				<figure class="mt-6 rounded-3xl border border-border/60 bg-muted/40 p-1.5">
+				<figure class="mt-6 rounded-3xl border-2 border-border bg-muted/40 p-1.5">
 					<div
 						class="relative aspect-[16/9] w-full overflow-hidden rounded-[calc(1.5rem-0.375rem)] bg-muted"
 					>

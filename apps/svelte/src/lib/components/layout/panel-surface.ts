@@ -1,4 +1,4 @@
-import { cn } from '$lib/utils';
+import { cn } from '@aqsha/ui-svelte/utils';
 
 /**
  * Shared panel/surface class contract. Pure class-name constants (framework-agnostic); the reactive
@@ -22,11 +22,11 @@ export const sidePanelColumnClass =
 	'@container flex min-h-0 w-auto min-w-0 flex-col overflow-hidden bg-background';
 
 /**
- * Side-panel body card — a gently-rounded, hairline-bordered card (no shadow) that floats
+ * Side-panel body card — a 2px-bordered surface card (no shadow) that floats
  * over the full-bleed main with a gutter on the sides and bottom.
  */
 export const sidePanelCardClass =
-	'mx-3 mb-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background';
+	'mx-3 mb-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border-2 border-border bg-background';
 
 /**
  * Min viewport width to dock the detail panel inline beside main. Below this the panel
@@ -66,7 +66,7 @@ export const threadTranscriptComposerPaddingClass = 'pb-4 pt-2.5';
 /** Shell tile bento (Explore) — bingkai tunggal halus, bukan kartu dekoratif tebal. */
 export function bentoTileClass(extra?: string) {
 	return cn(
-		'flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/60 bg-card/30 p-4 sm:p-5',
+		'flex min-h-0 min-w-0 flex-col rounded-lg border-2 border-border bg-card/30 p-4 sm:p-5',
 		extra
 	);
 }

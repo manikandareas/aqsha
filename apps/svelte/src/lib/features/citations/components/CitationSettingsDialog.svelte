@@ -1,8 +1,8 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { CheckIcon, Icon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useCitationSettings, useUpdateCitationSettings } from '../api';
 	import { BIBLIOGRAPHY_SORT_OPTIONS, CITATION_STYLE_OPTIONS } from '../types';
 

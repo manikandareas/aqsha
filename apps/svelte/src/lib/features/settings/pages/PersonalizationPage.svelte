@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import { Textarea } from '$lib/components/ui/textarea';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { Textarea } from '@aqsha/ui-svelte/components/textarea';
 	import { Icon, Loader2Icon } from '$lib/icons';
 	import { INTEREST_OPTIONS, MIN_INTERESTS } from '$lib/features/onboarding/lib/onboarding-options';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { usePreferences, useUpdateInterests, useUpdatePreferences } from '../api';
 	import PreferenceSelect from './PreferenceSelect.svelte';
 	import SettingsHeader from '../components/SettingsHeader.svelte';

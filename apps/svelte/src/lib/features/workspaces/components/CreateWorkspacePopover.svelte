@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as Popover from '$lib/components/ui/popover';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
+	import * as Popover from '@aqsha/ui-svelte/components/popover';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { Input } from '@aqsha/ui-svelte/components/input';
 	import { Icon, ArrowRightIcon, Loader2Icon, PlusIcon } from '$lib/icons';
 	import { readableApiErrorMessage } from '$lib/errors';
 

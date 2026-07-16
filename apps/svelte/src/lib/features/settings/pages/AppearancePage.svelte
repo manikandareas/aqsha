@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { Icon, MonitorIcon, MoonIcon, SunIcon } from '$lib/icons';
 	import { themeContext, type ThemeMode } from '$lib/theme';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import SettingsHeader from '../components/SettingsHeader.svelte';
 	import {
 		SettingsPanel,

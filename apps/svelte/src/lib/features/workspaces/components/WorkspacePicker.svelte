@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Icon, Loader2Icon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useWorkspacesList } from '../api';
 	import { workspaceEmoji } from '../utils/workspace-emoji';
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { mapRange, motionContext } from '$lib/motion';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 
 	// Absolute (/#...) supaya tetap jalan saat header dipakai di luar landing (mis. /blog).
 	const navItems = [

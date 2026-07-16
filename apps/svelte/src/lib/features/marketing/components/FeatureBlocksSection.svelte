@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { reveal, revealFade, revealUp } from '$lib/motion';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import FeatureFrame from './FeatureFrame.svelte';
 
 	// Editorial frame art per feature block — sketchbook landscapes, satu gambar per blok.

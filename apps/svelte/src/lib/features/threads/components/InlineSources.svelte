@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Icon, ChevronDownIcon, ChevronRightIcon, Link2Icon } from '$lib/icons';
-	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { cn } from '$lib/utils';
+	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import type { SourceCardData } from '../lib/timeline-types';
 	import SourcesPanel from './SourcesPanel.svelte';
 

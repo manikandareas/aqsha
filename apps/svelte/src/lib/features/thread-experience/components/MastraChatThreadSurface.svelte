@@ -17,13 +17,13 @@
 		WrenchIcon,
 		XIcon
 	} from '$lib/icons';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import {
 		Conversation,
 		ConversationContent,
 		ConversationScrollButton
 	} from '$lib/components/ai-elements';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { queryKeys } from '$lib/query';
 	import { threadTranscriptColumnClass } from '$lib/components/layout/panel-surface';
 	import {

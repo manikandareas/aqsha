@@ -4,7 +4,7 @@
 	import { PanelInline } from '$lib/hooks/panel-inline.svelte';
 	import { detailSplitMainSurfaceClass, PANEL_TRANSITION_MS } from './panel-surface';
 	import { panelExpandContext } from './panel-expand.svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Two-column main + side-panel split. Reuses `Sidebar.Provider` as the panel's open/close state

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, ArrowLeftIcon, FileIcon } from '$lib/icons';
 
 	/** Empty state when the requested artifact isn't available in the open workspace. */

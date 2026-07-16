@@ -4,7 +4,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import { Icon, CheckCircle2Icon, SparklesIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { readableApiErrorMessage } from '$lib/errors';
 	import { getComposerMentions } from '$lib/features/threads/state/composer-mentions.svelte';
 	import { discoveryItemToContextRef } from '$lib/features/discovery/ask-astra';
@@ -276,7 +276,7 @@
 {/snippet}
 
 {#snippet emptyState()}
-	<div class="max-w-[560px] rounded-2xl border border-border bg-card px-5 py-8 text-center">
+	<div class="max-w-[560px] rounded-2xl border-2 border-border bg-card px-5 py-8 text-center">
 		<div
 			class="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-mint-soft text-mint-foreground"
 		>

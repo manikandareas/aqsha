@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { reveal } from '$lib/motion';
-	import { Button } from '$lib/components/ui/button';
-	import { cn } from '$lib/utils';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { PLAN_CATALOG, type PublicPlanKey } from '$lib/plan/catalog';
 	import {
 		planFeatureRows,

@@ -19,7 +19,14 @@
 	theme={mode.current ?? 'light'}
 	toastOptions={{
 		classes: {
-			toast: 'border-border bg-card text-card-foreground shadow-aqsha'
+			// Alert-family surface: 2px border + hard 3px lip over the soft card shadow.
+			toast: 'border-2! border-border! bg-card! text-card-foreground! rounded-lg! lip-pop',
+			success:
+				'[--alert-hue:var(--mint)] border-[color-mix(in_oklch,var(--alert-hue)_55%,var(--card))]! bg-[color-mix(in_oklch,var(--alert-hue)_26%,var(--card))]! shadow-[0_3px_0_0_color-mix(in_oklch,var(--alert-hue)_55%,var(--card)),var(--shadow-soft-card)]!',
+			warning:
+				'[--alert-hue:var(--lemon)] border-[color-mix(in_oklch,var(--alert-hue)_55%,var(--card))]! bg-[color-mix(in_oklch,var(--alert-hue)_26%,var(--card))]! shadow-[0_3px_0_0_color-mix(in_oklch,var(--alert-hue)_55%,var(--card)),var(--shadow-soft-card)]!',
+			error:
+				'[--alert-hue:var(--destructive)] border-[color-mix(in_oklch,var(--alert-hue)_55%,var(--card))]! bg-[color-mix(in_oklch,var(--alert-hue)_26%,var(--card))]! shadow-[0_3px_0_0_color-mix(in_oklch,var(--alert-hue)_55%,var(--card)),var(--shadow-soft-card)]!'
 		}
 	}}
 	visibleToasts={4}

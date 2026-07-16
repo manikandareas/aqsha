@@ -32,7 +32,7 @@
 </script>
 
 <script lang="ts">
-	import * as ContextMenu from '$lib/components/ui/context-menu';
+	import * as ContextMenu from '@aqsha/ui-svelte/components/context-menu';
 	import {
 		Icon,
 		BookmarkIcon,

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { scale } from 'svelte/transition';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	const MAX_VISIBLE_PILLS = 3;
 

@@ -3,10 +3,10 @@
 	import PanelCardToolbar from '$lib/components/layout/PanelCardToolbar.svelte';
 	import PanelTitleLabel from '$lib/components/layout/PanelTitleLabel.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import * as Popover from '$lib/components/ui/popover';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
+	import * as Popover from '@aqsha/ui-svelte/components/popover';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { Input } from '@aqsha/ui-svelte/components/input';
 	import {
 		BookmarkIcon,
 		CheckIcon,
@@ -27,7 +27,7 @@
 		UploadIcon
 	} from '$lib/icons';
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import {
 		type CitationListFilters,
 		EMPTY_CITATION_FILTERS,

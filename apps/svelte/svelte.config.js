@@ -14,9 +14,10 @@ const config = {
 
 	// Runes mode only for app code. Legacy syntax in our own files (`export let`, `$:`, `on:*`)
 	// becomes a compile error — stronger than lint. node_modules libraries keep their own compile
-	// mode so legacy-authored dependencies still build.
+	// mode so legacy-authored dependencies still build. @aqsha/ui-svelte is first-party raw-source
+	// Svelte, so it gets the same runes guarantee even if resolved through a node_modules symlink.
 	dynamicCompileOptions({ filename }) {
-		if (!filename.includes('node_modules')) {
+		if (!filename.includes('node_modules') || filename.includes('@aqsha/ui-svelte')) {
 			return { runes: true };
 		}
 	},

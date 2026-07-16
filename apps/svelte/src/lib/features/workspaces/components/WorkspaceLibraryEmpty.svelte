@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Icon, FileTextIcon, FolderIcon, UploadIcon } from '$lib/icons';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { DOCUMENT_AUTHORING_ENABLED } from '$lib/features/workspaces/document-authoring';
 
 	/**

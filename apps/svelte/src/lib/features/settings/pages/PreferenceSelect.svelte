@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Select from '$lib/components/ui/select';
+	import * as Select from '@aqsha/ui-svelte/components/select';
 
 	/**
 	 * Single-select wrapper. bits-ui Select has no `<SelectValue />`, so the trigger renders the

@@ -6,7 +6,7 @@
 		AnnouncementTag,
 		AnnouncementTitle
 	} from '$lib/components/ui/announcement';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import FrameChrome from './FrameChrome.svelte';
 	import MagneticButton from './MagneticButton.svelte';
 	import type { LatestUpdate } from '../types';
@@ -93,7 +93,7 @@
 	>
 		<div class="hero-frame-in" style="transform-style: preserve-3d;">
 			<div
-				class="relative w-full overflow-hidden rounded-2xl border border-border"
+				class="relative w-full overflow-hidden rounded-2xl border-2 border-border"
 				style:transform={reduce ? undefined : `scale(${frameScale})`}
 				{@attach frameAttach}
 			>

@@ -98,7 +98,7 @@
 					<div class="relative grid min-h-[inherit] place-items-center p-4 text-center">
 						<div class="grid max-w-[15rem] justify-items-center gap-2">
 							<span
-								class="grid size-9 place-items-center rounded-xl border border-border/70 bg-background/80 text-muted-foreground backdrop-blur-sm"
+								class="grid size-9 place-items-center rounded-xl border-2 border-border bg-background/80 text-muted-foreground backdrop-blur-sm"
 							>
 								<Icon icon={MessageSquareIcon} class="size-4" />
 							</span>

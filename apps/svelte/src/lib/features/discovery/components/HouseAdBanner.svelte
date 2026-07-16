@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Icon, ArrowUpRightIcon, SparklesIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import type { HouseAd, HouseAdAccent } from '$lib/features/discovery/house-ads';
 
 	// Banner house-ad (slot promo produk) untuk feed Explore. Layout split editorial:
@@ -34,7 +34,7 @@
 {/snippet}
 
 <aside
-	class="group grid overflow-hidden rounded-2xl border border-border bg-card transition-shadow duration-200 hover:shadow-md @md/feed:grid-cols-[minmax(0,40%)_minmax(0,1fr)]"
+	class="group grid overflow-hidden rounded-2xl border-2 border-border bg-card transition-shadow duration-200 hover:shadow-md @md/feed:grid-cols-[minmax(0,40%)_minmax(0,1fr)]"
 >
 	<!-- Panel gambar — flush ke tepi card. Latar accent-soft solid (terlihat bila PNG transparan). -->
 	<div

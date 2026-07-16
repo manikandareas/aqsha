@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Icon, InfoIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
-	import * as Tooltip from '$lib/components/ui/tooltip';
+	import { cn } from '@aqsha/ui-svelte/utils';
+	import * as Tooltip from '@aqsha/ui-svelte/components/tooltip';
 
 	/**
 	 * Quiet footnote pinned to the bottom of the board. Teaches the gesture (1× context, 2× open); when

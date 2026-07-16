@@ -9,7 +9,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Button, type ButtonVariant } from '$lib/components/ui/button';
+	import { Button, type ButtonVariant } from '@aqsha/ui-svelte/components/button';
 
 	// Shared error layout (`.aqsha-error-state-*`); consumed by root `+error.svelte` (404 + generic).
 	let {

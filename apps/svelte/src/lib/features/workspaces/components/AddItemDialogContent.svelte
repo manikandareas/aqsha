@@ -1,9 +1,9 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { Input } from '@aqsha/ui-svelte/components/input';
 	import { Icon, UploadIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { readableApiErrorMessage } from '$lib/errors';
 	import { useFileDropzone } from '../hooks/use-file-dropzone.svelte';
 	import { WORKSPACE_UPLOAD_ACCEPT } from '../utils/workspace-file-upload';

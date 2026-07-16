@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	// Neutral token-based status chip (subscription status, "Saat ini").
 	let { class: className, children }: { class?: string; children: Snippet } = $props();

@@ -1,9 +1,9 @@
 <script lang="ts">
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import { Icon, SunIcon, MoonIcon, MonitorIcon, CheckIcon } from '$lib/icons';
 	import type { IconSvgElement } from '$lib/icons';
 	import { themeContext, type ThemeMode } from '$lib/theme';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Theme submenu inside the user dropdown. Light/Dark/System via the `$lib/theme` seam

@@ -11,7 +11,7 @@
 
 <script lang="ts">
 	import type { StatsGroupSummary } from '@aqsha/chat-core/stats-viz';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { STATS_VERDICT_META } from './verdict-meta';
 
 	/**

@@ -13,7 +13,7 @@
 		statsAnalysisMeta,
 		summarizeStatsGroup
 	} from '@aqsha/chat-core/stats-viz';
-	import { Badge } from '$lib/components/ui/badge';
+	import { Badge } from '@aqsha/ui-svelte/components/badge';
 	import { Icon, ChartColumnIcon, CheckCircle2Icon, XCircleIcon } from '$lib/icons';
 	import type { DeepStepDetail, ToolRowModel } from '../../lib/timeline-types';
 	import ElapsedLabel from '../ElapsedLabel.svelte';

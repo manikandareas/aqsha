@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, CheckIcon, ExternalLinkIcon, Loader2Icon } from '$lib/icons';
 	import { readableApiErrorMessage } from '$lib/errors';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import {
 		type ProductKey,
 		useBillingCurrent,
@@ -135,7 +135,7 @@
 		{#if plans.isPending}
 			<div class="grid gap-3 sm:grid-cols-2">
 				{#each [0, 1, 2, 3] as i (i)}
-					<div class="h-44 animate-pulse rounded-xl border border-border/60 bg-muted/40"></div>
+					<div class="h-44 animate-pulse rounded-xl border-2 border-border bg-muted/40"></div>
 				{/each}
 			</div>
 		{:else if !plans.data}

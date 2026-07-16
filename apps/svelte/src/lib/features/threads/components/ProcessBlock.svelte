@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import { stripStatsMarkers, type StatsGroup } from '@aqsha/chat-core/stats-viz';
 	import { Icon, ChevronDownIcon } from '$lib/icons';
-	import * as Collapsible from '$lib/components/ui/collapsible';
+	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import Reasoning from '$lib/components/ai-elements/Reasoning.svelte';
 	import type { TimelinePart } from '../lib/timeline-types';

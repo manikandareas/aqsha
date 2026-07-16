@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { StickToBottom, stickToBottomContext } from './conversation-state.svelte';
 
 	// The transcript viewport. Owns the follow-bottom engine and provides it via context; `children`

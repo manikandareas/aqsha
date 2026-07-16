@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, MoreHorizontalIcon, Trash2Icon } from '$lib/icons';
 
 	/**

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import type { PDFDocumentProxy } from 'pdfjs-dist';
-	import { Button } from '$lib/components/ui/button';
-	import { cn } from '$lib/utils';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import PdfPageCanvas from './PdfPageCanvas.svelte';
 	import {
 		Icon,

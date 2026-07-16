@@ -1,4 +1,4 @@
-import { cn } from '$lib/utils';
+import { cn } from '@aqsha/ui-svelte/utils';
 
 /**
  * Shared visual classes for the inline token pill (`/command` chip + `@mention`) — used by the composer

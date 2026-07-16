@@ -4,7 +4,7 @@
 	import { ClerkProvider } from 'svelte-clerk';
 	import { shadcn } from '@clerk/themes';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
-	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as Tooltip from '@aqsha/ui-svelte/components/tooltip';
 	import { publicEnv } from '$lib/env/public';
 	import { createQueryClient } from '$lib/query';
 	import AppProviders from '$lib/components/layout/AppProviders.svelte';

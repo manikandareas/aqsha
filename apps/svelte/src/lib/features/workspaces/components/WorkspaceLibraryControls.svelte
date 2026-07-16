@@ -3,10 +3,10 @@
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { slide } from 'svelte/transition';
 	import { Icon, ArrowDownAZIcon, FilterIcon, SearchIcon, XIcon } from '$lib/icons';
-	import { Button } from '$lib/components/ui/button';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import { InputGroup, InputGroupAddon, InputGroupInput } from '$lib/components/ui/input-group';
-	import { cn } from '$lib/utils';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
+	import { InputGroup, InputGroupAddon, InputGroupInput } from '@aqsha/ui-svelte/components/input-group';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import type {
 		WorkspaceArtifactSort,
 		WorkspaceArtifactType

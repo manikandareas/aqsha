@@ -3,7 +3,7 @@
 	import { HOUSE_ADS } from '$lib/features/discovery/house-ads';
 	import { useBillingCurrent } from '$lib/features/settings/api';
 	import { deepRunsQuota, isCreditsLow } from '$lib/features/settings/lib/billing-derived';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Small landing banner on /app (moved from the sidebar usage card) — a Manus-style autoslide carousel:

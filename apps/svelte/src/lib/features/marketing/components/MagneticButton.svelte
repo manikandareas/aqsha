@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { magnetic } from '$lib/motion';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	// MagneticButton — membungkus child (biasanya `<Button>`) dalam div yang bergeser ke arah kursor
 	// dalam `radius`, lalu balik. Reduced-motion di-hormati di attach `magnetic`.

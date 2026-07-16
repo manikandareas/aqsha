@@ -1,8 +1,8 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, LayersIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useDuplicateGroups, useMergeManyCitations } from '../api';
 	import { CITATION_STATUS_LABELS, type CitationDuplicateGroup, citationMetaLine } from '../types';
 

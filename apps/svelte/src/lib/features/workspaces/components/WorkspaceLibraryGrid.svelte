@@ -18,10 +18,10 @@
 <script lang="ts">
 	import type { Attachment } from 'svelte/attachments';
 	import { Icon, FolderIcon } from '$lib/icons';
-	import * as ContextMenu from '$lib/components/ui/context-menu';
+	import * as ContextMenu from '@aqsha/ui-svelte/components/context-menu';
 	import LibraryArtifactCard from '$lib/components/LibraryArtifactCard.svelte';
 	import { libraryArtifactGridClass } from '../utils/library-grid';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import ArtifactContextMenuContent from './ArtifactContextMenuContent.svelte';
 	import FolderContextMenuContent from './FolderContextMenuContent.svelte';
 	import type { ArtifactSource } from '$lib/components/artifact-presentation';

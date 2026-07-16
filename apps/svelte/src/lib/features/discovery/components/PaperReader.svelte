@@ -147,7 +147,7 @@
 </ReaderShell>
 
 {#snippet refList(refs: PaperEnrichmentRef[])}
-	<ul class="divide-y divide-border/50 overflow-hidden rounded-2xl border border-border/60">
+	<ul class="divide-y divide-border/50 overflow-hidden rounded-2xl border-2 border-border">
 		{#each refs as r (r.openalexId)}
 			<li>
 				<a

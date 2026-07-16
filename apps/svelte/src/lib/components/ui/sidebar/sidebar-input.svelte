@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { cn } from '$lib/utils.js';
+	import { Input } from '@aqsha/ui-svelte/components/input';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	let {
 		ref = $bindable(null),

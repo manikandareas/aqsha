@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Icon, ArrowUpRightIcon, type IconSvgElement } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { originMeta } from '../lib/source-card';
 	import type { SourceCardData } from '../lib/timeline-types';
 

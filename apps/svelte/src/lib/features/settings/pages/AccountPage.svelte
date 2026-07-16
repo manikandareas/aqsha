@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { Input } from '@aqsha/ui-svelte/components/input';
 	import { Icon, Loader2Icon, Trash2Icon } from '$lib/icons';
 	import { getSignOut } from '$lib/auth';
 	import { useDeleteAccount, useProfile, useUpdateDisplayName } from '../api';

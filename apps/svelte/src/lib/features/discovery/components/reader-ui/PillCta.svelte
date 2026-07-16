@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { Icon, ArrowUpRightIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	// Easing fisik (spring-out) dipakai konsisten untuk semua transisi interaktif.
 	const EASE = 'ease-[cubic-bezier(0.32,0.72,0,1)]';

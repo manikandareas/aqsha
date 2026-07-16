@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { cn } from '$lib/utils';
-	import { Button } from '$lib/components/ui/button';
+	import { cn } from '@aqsha/ui-svelte/utils';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, ArrowDownIcon } from '$lib/icons';
 	import { getStickToBottom } from './conversation-state.svelte';
 

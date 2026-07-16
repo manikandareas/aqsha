@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import { Icon, ChevronDownIcon, LockIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import type { ComposerAgentKind } from './agent-selection.svelte';
 
 	let {

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import { Icon, ArrowUpRightIcon } from '$lib/icons';
 	import { useBillingCurrent, useProfile, useUsageActivity } from '../api';
 	import CreditMeter from '../components/CreditMeter.svelte';

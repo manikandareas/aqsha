@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { Progress } from '$lib/components/ui/progress';
+	import { Progress } from '@aqsha/ui-svelte/components/progress';
 	import { Icon, ChevronDownIcon, ChevronUpIcon, RotateCcwIcon, XIcon } from '$lib/icons';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import {
 		getUploadSummary,
 		isRetryableUploadItem,
@@ -37,7 +37,7 @@
 </script>
 
 <section
-	class="w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-aqsha sm:w-[340px]"
+	class="w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border-2 border-border bg-card text-card-foreground shadow-aqsha sm:w-[340px]"
 >
 	<header class="flex items-center gap-2.5 px-3 py-2.5">
 		<WorkspaceUploadToastStatusIcon status={summary.tone} class="size-4" />

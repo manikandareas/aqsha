@@ -4,9 +4,9 @@
 	import PanelCardToolbar from '$lib/components/layout/PanelCardToolbar.svelte';
 	import PanelExpandButton from '$lib/components/layout/PanelExpandButton.svelte';
 	import PanelTitleLabel from '$lib/components/layout/PanelTitleLabel.svelte';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, MessageSquarePlusIcon, XIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import {
 		useDeleteThread,

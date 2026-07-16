@@ -1,10 +1,10 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import * as Drawer from '$lib/components/ui/drawer/index.js';
+	import * as Drawer from '@aqsha/ui-svelte/components/drawer';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { PanelInline } from '$lib/hooks/panel-inline.svelte';
 	import { PANEL_TRANSITION_MS, sidePanelColumnClass } from './panel-surface';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Responsive side panel. Wide viewport: docks inline as the grid's second column (0-width track

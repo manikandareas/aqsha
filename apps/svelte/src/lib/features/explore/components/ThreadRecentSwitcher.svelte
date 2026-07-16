@@ -3,9 +3,9 @@
 </script>
 
 <script lang="ts">
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import { Icon, ChevronDownIcon } from '$lib/icons';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Quick-switch dropdown for the compact chat panel — top 4 recent threads (by activity) + "new".

@@ -3,7 +3,7 @@
 	import { slide } from 'svelte/transition';
 	import { Icon, PlusIcon } from '$lib/icons';
 	import { viewerContext } from '$lib/auth';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { FEED_TOPIC_LABELS, type FeedTopic } from '$lib/features/discovery/types';
 	import { DISCOVERY_TOPICS } from '$lib/features/discovery/nav';
 	import ExploreAskBar from './ExploreAskBar.svelte';

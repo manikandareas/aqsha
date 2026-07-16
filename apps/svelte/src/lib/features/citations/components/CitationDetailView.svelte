@@ -1,8 +1,8 @@
 <script lang="ts">
 	import PanelCardToolbar from '$lib/components/layout/PanelCardToolbar.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { Button } from '$lib/components/ui/button';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import {
 		ArrowLeftIcon,
 		BookOpenIcon,
@@ -17,7 +17,7 @@
 		Trash2Icon
 	} from '$lib/icons';
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import {
 		useCitationDetail,
 		useCitationRender,

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/** Plain panel title label. The richer dropdown-trigger variant ships with its consumer. */
 	let { class: className, children }: { class?: string; children: Snippet } = $props();

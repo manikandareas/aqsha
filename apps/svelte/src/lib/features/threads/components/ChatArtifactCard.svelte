@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { Icon, CheckIcon, FileTextIcon, FolderIcon } from '$lib/icons';
-	import { Button } from '$lib/components/ui/button';
-	import * as Popover from '$lib/components/ui/popover';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import * as Popover from '@aqsha/ui-svelte/components/popover';
 	import { useLinkArtifactToWorkspace } from '$lib/features/artifacts/api';
 	import WorkspacePicker from '$lib/features/workspaces/components/WorkspacePicker.svelte';
 	import type { ArtifactCardModel } from '../lib/timeline-types';

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { Button, type ButtonSize, type ButtonVariant } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
+	import { Button, type ButtonSize, type ButtonVariant } from '@aqsha/ui-svelte/components/button';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
 	import { Icon, FolderIcon } from '$lib/icons';
 	import { useSaveUrl } from '$lib/features/artifacts/api';
 	import WorkspacePicker from '$lib/features/workspaces/components/WorkspacePicker.svelte';

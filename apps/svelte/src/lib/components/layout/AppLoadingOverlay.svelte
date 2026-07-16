@@ -2,7 +2,7 @@
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { fly } from 'svelte/transition';
 	import { FlickerSpinner } from '$lib/components/ui/flicker-spinner/index.js';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Full-app / region loading surface. FlickerSpinner + a label with rotating hints that cycle

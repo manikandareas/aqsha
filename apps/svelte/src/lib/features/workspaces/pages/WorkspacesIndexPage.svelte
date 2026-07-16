@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import { Badge } from '@aqsha/ui-svelte/components/badge';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import AppLoadingOverlay from '$lib/components/layout/AppLoadingOverlay.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import NameDialog from '../components/NameDialog.svelte';

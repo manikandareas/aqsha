@@ -46,7 +46,7 @@
 
 <div class="relative max-w-[600px]">
 	<div
-		class="flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3.5 transition-colors focus-within:border-ring/55"
+		class="flex items-center gap-3 rounded-xl border-2 border-border bg-background px-4 py-3.5 transition-colors focus-within:border-ring/55"
 	>
 		<Icon icon={SearchIcon} class="size-[18px] shrink-0 text-muted-foreground" />
 		<input
@@ -91,7 +91,7 @@
 
 	{#if open}
 		<div
-			class="animate-in fade-in-0 zoom-in-95 absolute z-20 mt-2 w-full origin-top rounded-2xl border border-border bg-card p-1.5 shadow-md duration-150 ease-out"
+			class="animate-in fade-in-0 zoom-in-95 absolute z-20 mt-2 w-full origin-top rounded-2xl border-2 border-border bg-card p-1.5 shadow-md duration-150 ease-out"
 		>
 			<p class="px-2 py-1 font-mono text-[10px] tracking-wide text-muted-foreground">
 				Saran pencarian

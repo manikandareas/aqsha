@@ -15,10 +15,10 @@
 		UploadIcon
 	} from '$lib/icons';
 	import PanelOpenButton from '$lib/components/layout/PanelOpenButton.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import { panelHeaderBarClass } from '$lib/components/layout/panel-surface';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import type { BreadcrumbSegment } from '$lib/features/workspaces/utils/workspace-library-model';
 	import { DOCUMENT_AUTHORING_ENABLED } from '$lib/features/workspaces/document-authoring';
 	import WorkspaceEmojiPopover from './WorkspaceEmojiPopover.svelte';

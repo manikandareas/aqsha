@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { Input } from '@aqsha/ui-svelte/components/input';
 	import { Icon, Loader2Icon } from '$lib/icons';
 	import { getClerkUser, getReverification } from '$lib/auth';
 	import { clerkErrorMessage } from './clerk-error';

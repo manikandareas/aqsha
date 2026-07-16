@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
 	import type { CitationDetail, ManualCitationFields } from '../types';
 	import CitationFormContent from './CitationFormContent.svelte';
 

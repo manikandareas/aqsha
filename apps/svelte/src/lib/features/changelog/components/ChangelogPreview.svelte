@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import GenerativeCover from '$lib/components/GenerativeCover.svelte';
 	import type { ChangelogEntry } from '../types';
 

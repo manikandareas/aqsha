@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
 	import NameDialogContent from './NameDialogContent.svelte';
 
 	/**

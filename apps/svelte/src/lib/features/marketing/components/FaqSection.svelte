@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
 	import { reveal, revealUp } from '$lib/motion';
-	import { cn } from '$lib/utils';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { faqItems } from '../faq-data';
 
 	// FAQ landing — konten SAMA dengan FAQPage JSON-LD (structured-data). Wajib visible + answer SELALU

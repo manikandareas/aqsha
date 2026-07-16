@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
 	import AddItemDialogContent from './AddItemDialogContent.svelte';
 
 	/** Content mounted only while open so the URL draft resets each open. */
