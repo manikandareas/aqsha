@@ -8,16 +8,12 @@
 	import { Icon, MessageSquarePlusIcon, XIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
-	import {
-		useDeleteThread,
-		usePinnedThreads,
-		useThread,
-		useThreadsList
-	} from '$lib/features/threads/api';
+	import { useDeleteThread, useThread } from '$lib/features/threads/api';
 	import { threadTitle } from '$lib/features/threads/types';
+	import { useRecentThreadSummaries } from '$lib/features/threads/use-recent-thread-summaries.svelte';
 	import AccessDeniedState from './AccessDeniedState.svelte';
 	import ExploreThreadChat from './ExploreThreadChat.svelte';
-	import ThreadRecentSwitcher, { type RecentThreadSummary } from './ThreadRecentSwitcher.svelte';
+	import ThreadRecentSwitcher from './ThreadRecentSwitcher.svelte';
 	import ThreadActionsMenu from './ThreadActionsMenu.svelte';
 
 	/**
@@ -38,27 +34,12 @@
 		deleteDescription?: string;
 	} = $props();
 
-	const threadsList = useThreadsList();
-	const pinnedThreads = usePinnedThreads();
+	const recentThreads = useRecentThreadSummaries();
 	const selectedThread = useThread(
 		() => activeThreadId ?? '',
 		() => Boolean(activeThreadId)
 	);
 	const deleteThread = useDeleteThread();
-
-	const threads = $derived.by<RecentThreadSummary[]>(() => {
-		const merged = [
-			...(pinnedThreads.data ?? []),
-			...(threadsList.data?.pages ?? []).flatMap((p) => p.items)
-		];
-		const out: RecentThreadSummary[] = [];
-		for (const t of merged) {
-			if (!out.some((r) => r.threadId === t.id)) {
-				out.push({ threadId: t.id, title: threadTitle(t), lastActivityAt: t.lastActivityAt });
-			}
-		}
-		return out;
-	});
 
 	const headerLabel = $derived(
 		activeThreadId && selectedThread.data ? threadTitle(selectedThread.data) : 'Chat baru'
@@ -101,7 +82,7 @@
 		{#snippet title()}
 			<ThreadRecentSwitcher
 				title={headerLabel}
-				{threads}
+				threads={recentThreads.data}
 				onSelectThread={onActiveThreadIdChange}
 				onNewThread={() => onActiveThreadIdChange(null)}
 				newLabel="Chat baru"

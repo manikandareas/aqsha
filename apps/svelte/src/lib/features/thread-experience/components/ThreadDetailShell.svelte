@@ -4,9 +4,11 @@
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
+	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import { clerkTokenGetter } from '$lib/auth/token';
 	import { useThread } from '$lib/features/threads/api';
+	import { threadPageTitle } from '$lib/features/threads/types';
 	import { ASTRA_AGENT_ID, createMastraClient } from '$lib/features/threads/lib/mastra-client';
 	import { mastraMessagesToTimeline } from '$lib/features/threads/lib/mastra-timeline';
 	import { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
@@ -18,6 +20,7 @@
 	import { isThreadPanelOpen } from '../utils/thread-panel-model';
 	import MastraChatThreadSurface from './MastraChatThreadSurface.svelte';
 	import DetailPanel from './DetailPanel.svelte';
+	import ThreadHeader from './ThreadHeader.svelte';
 
 	/**
 	 * Thread-detail shell — the one place that owns the durable agent + the side-panel slot. Creates the
@@ -33,6 +36,8 @@
 
 	const clerk = useClerkContext();
 	const qc = useQueryClient();
+	// Left-nav sidebar (AppShell provider) — read at init, before DetailSplitLayout opens its own provider.
+	const leftSidebar = Sidebar.useSidebar();
 	const userId = $derived(clerk.auth.userId);
 	const clerkLoaded = $derived(clerk.isLoaded);
 
@@ -62,8 +67,7 @@
 		threadDetail.data?.agentKind === 'pro' ? 'pro' : 'lite'
 	);
 
-	// Tab title: the loaded thread title, else "Threads" (also the /app new-thread landing + loading).
-	const pageTitle = $derived(threadDetail.data?.title ?? 'Threads');
+	const pageTitle = $derived(threadPageTitle(threadDetail.data));
 
 	// Seed the timeline from server memory (400 messages ≈ 200 turns — beyond a sane thread).
 	const history = createQuery(() => ({
@@ -115,6 +119,9 @@
 	});
 
 	const sideOpen = $derived(isThreadPanelOpen(panel.mode));
+	const isLeftSidebarOpen = $derived(
+		leftSidebar.isMobile ? leftSidebar.openMobile : leftSidebar.open
+	);
 </script>
 
 <PageTitle title={pageTitle} />
@@ -140,13 +147,22 @@
 			}}
 		>
 			{#snippet main()}
-				<MastraChatThreadSurface
-					agent={agent!}
-					{threadId}
-					{threadAgentKind}
-					{compact}
-					{initialContent}
+				<ThreadHeader
+					threadId={threadIdProp}
+					showLeftTrigger={!isLeftSidebarOpen}
+					onToggleLeftSidebar={() => leftSidebar.toggle()}
+					contextPanelOpen={sideOpen}
+					onOpenContextPanel={() => panel.openContextPanel()}
 				/>
+				<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+					<MastraChatThreadSurface
+						agent={agent!}
+						{threadId}
+						{threadAgentKind}
+						{compact}
+						{initialContent}
+					/>
+				</div>
 			{/snippet}
 			{#snippet side()}
 				<DetailPanel controller={panel} />

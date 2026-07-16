@@ -27,19 +27,17 @@
 	import { queryKeys } from '$lib/query';
 	import { threadTranscriptColumnClass } from '$lib/components/layout/panel-surface';
 	import {
-		usePinnedThreads,
 		useSendStatus,
 		useThreadArtifacts,
 		useThreadSources,
-		useThreadStatsBlocks,
-		useThreadsList
+		useThreadStatsBlocks
 	} from '$lib/features/threads/api';
 	import {
 		Composer,
 		type ComposerNotice,
-		type ComposerSendPayload,
-		type RecentThread
+		type ComposerSendPayload
 	} from '$lib/features/threads/components/composer';
+	import { useRecentThreadSummaries } from '$lib/features/threads/use-recent-thread-summaries.svelte';
 	import MessageList from '$lib/features/threads/components/MessageList.svelte';
 	import QuestionsCard from '$lib/features/threads/components/QuestionsCard.svelte';
 	import ToolCard, { toolCardShellClass } from '$lib/features/threads/components/ToolCard.svelte';
@@ -49,7 +47,6 @@
 	import { setMessageInteractions } from '$lib/features/threads/components/message-interactions';
 	import type { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
 	import type { ResearchSource } from '$lib/features/threads/types';
-	import { threadTitle } from '$lib/features/threads/types';
 	import { getThreadPanel } from './thread-panel-context.svelte';
 	import { LIVE_PLAN_KEY } from '../utils/thread-panel-model';
 	import { blockedNotice, deepBlockedMessage } from '../utils/send-status';
@@ -204,22 +201,7 @@
 		});
 	}
 
-	// Landing recent threads (pinned first, dedup by id).
-	const threadsList = useThreadsList(() => isEmpty && !compact);
-	const pinnedThreads = usePinnedThreads(() => isEmpty && !compact);
-	const recentThreads = $derived.by<RecentThread[]>(() => {
-		const merged = [
-			...(pinnedThreads.data ?? []),
-			...(threadsList.data?.pages ?? []).flatMap((p) => p.items)
-		];
-		const out: RecentThread[] = [];
-		for (const t of merged) {
-			if (!out.some((r) => r.threadId === t.id)) {
-				out.push({ threadId: t.id, title: threadTitle(t), lastActivityAt: t.lastActivityAt });
-			}
-		}
-		return out;
-	});
+	const recentThreads = useRecentThreadSummaries(() => isEmpty && !compact);
 
 	const errorDraft = $derived(agent.error ? lastUserText() : null);
 	function lastUserText(): string | null {
@@ -280,7 +262,7 @@
 		{threadAgentKind}
 		{errorDraft}
 		{showSuggestions}
-		recentThreads={showSuggestions ? recentThreads : []}
+		recentThreads={showSuggestions ? recentThreads.data : []}
 		initialContent={showSuggestions ? initialContent : undefined}
 	/>
 {/snippet}
@@ -298,13 +280,13 @@
 			)}
 		>
 			<div class="flex w-full flex-1 items-center justify-center">
-				<div class={cn('w-full', compact ? 'max-w-none' : 'max-w-2xl')}>
+				<div class={cn('w-full', compact ? 'max-w-none' : 'max-w-3xl')}>
 					<ComposerHeroState
 						headerClass="mb-5 gap-2"
 						logoClass={compact ? 'size-12 @2xl:size-18' : 'size-12 @2xl:size-22'}
 						titleClass={cn(
 							'font-sans leading-none font-bold tracking-tight text-foreground',
-							compact ? 'text-xl' : 'text-2xl @2xl:text-3xl'
+							compact ? 'text-xl' : 'text-3xl @2xl:text-4xl'
 						)}
 					>
 						{@render composerDock(!compact)}
@@ -312,7 +294,7 @@
 				</div>
 			</div>
 			{#if !compact}
-				<div class="mx-auto w-full max-w-2xl">
+				<div class="mx-auto w-full max-w-xl">
 					<HomeBannerCarousel />
 				</div>
 				<!-- Cue positioned absolute vs the landing column — top-right, diagonal between the open-panel

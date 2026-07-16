@@ -1,3 +1,4 @@
+import type { RecentThreadSummary } from '../../types';
 import type { ComposerAgentKind } from './agent-selection.svelte';
 
 /** Send-block notice (Slice 6.2) — billing return-union / cooldown rate-limit. */
@@ -25,11 +26,7 @@ export type ComposerSendPayload = {
 };
 
 /** Compact thread for the "Recent threads" start panel (landing). */
-export type RecentThread = {
-	threadId: string;
-	title: string;
-	lastActivityAt: number;
-};
+export type RecentThread = RecentThreadSummary;
 
 /** Finalized composer attachment on the thread (Slice 6.7). `indexingStatus` tracks async index (D5). */
 export type ComposerAttachment = {

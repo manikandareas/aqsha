@@ -13,9 +13,8 @@
 	import { useThread } from '$lib/features/threads/api';
 	import { threadTitle } from '$lib/features/threads/types';
 	import ExploreThreadChat from '$lib/features/explore/components/ExploreThreadChat.svelte';
-	import ThreadRecentSwitcher, {
-		type RecentThreadSummary
-	} from '$lib/features/explore/components/ThreadRecentSwitcher.svelte';
+	import ThreadRecentSwitcher from '$lib/features/explore/components/ThreadRecentSwitcher.svelte';
+	import type { RecentThreadSummary } from '$lib/features/threads/types';
 	import ThreadActionsMenu from '$lib/features/explore/components/ThreadActionsMenu.svelte';
 	import AccessDeniedState from '$lib/features/explore/components/AccessDeniedState.svelte';
 	import CitationsPanel from '$lib/features/citations/components/CitationsPanel.svelte';

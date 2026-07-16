@@ -1,11 +1,8 @@
-<script module lang="ts">
-	export type RecentThreadSummary = { threadId: string; title: string; lastActivityAt: number };
-</script>
-
 <script lang="ts">
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import { Icon, ChevronDownIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
+	import type { RecentThreadSummary } from '$lib/features/threads/types';
 
 	/**
 	 * Quick-switch dropdown for the compact chat panel — top 4 recent threads (by activity) + "new".

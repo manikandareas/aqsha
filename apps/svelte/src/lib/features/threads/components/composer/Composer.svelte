@@ -80,6 +80,7 @@
 		threadAgentKind?: 'lite' | 'pro';
 		ambientWorkspaceId?: string | null;
 		errorDraft?: string | null;
+		/** Landing hero: roomier collapsed row + start-panel suggestions below. */
 		showSuggestions?: boolean;
 		recentThreads?: RecentThread[];
 		initialContent?: string;
@@ -474,8 +475,11 @@
 					// Restructure atomically (no partial padding/gap easing while flex-direction snaps).
 					'flex min-h-0 w-full',
 					isExpanded
-						? 'flex-col gap-3 p-3.5 pt-2 pb-2.5'
-						: 'min-h-[46px] flex-row items-center gap-2 py-1 pr-1.5 pl-2'
+						? cn('flex-col gap-3 p-3.5 pt-2 pb-2.5', showSuggestions && 'p-4 pt-3 pb-3')
+						: cn(
+								'flex-row items-center gap-2 py-1 pr-1.5 pl-2',
+								showSuggestions ? 'min-h-[64px] pr-2.5 pl-3' : 'min-h-[46px]'
+							)
 				)}
 			>
 				<div
@@ -615,7 +619,9 @@
 			aria-label="Kirim"
 			class={cn(
 				'aqsha-composer-toolbar-btn flex size-8 shrink-0 items-center justify-center rounded-full shadow-none transition-all duration-200 active:scale-95',
-				!canSend && 'cursor-not-allowed bg-muted/30 text-muted-foreground/30'
+				canSend
+					? 'bg-primary text-primary-foreground hover:bg-primary/90'
+					: 'cursor-not-allowed bg-muted/30 text-muted-foreground/30'
 			)}
 		>
 			{#if isSending}

@@ -44,9 +44,20 @@ export type ResearchSource = {
 	createdAt: number;
 };
 
+/** Compact row for switchers / landing "recent" lists (pinned + activity-sorted). */
+export type RecentThreadSummary = {
+	threadId: string;
+	title: string;
+	lastActivityAt: number;
+};
+
 /** Displayed thread title (fallback when none yet / auto-title has not run). */
 export const threadTitle = (t: Pick<ChatThread, 'title'>): string =>
 	t.title?.trim() ? t.title : 'Percakapan baru';
+
+/** Browser-tab / chrome title for a loaded thread detail (or the threads section while loading). */
+export const threadPageTitle = (t: Pick<ChatThread, 'title'> | null | undefined): string =>
+	t ? threadTitle(t) : 'Threads';
 
 /** Read-only file attachment mapped onto a user message (rendered as a FileChip). */
 export type FileChipData = {
