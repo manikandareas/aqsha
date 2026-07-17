@@ -13,7 +13,7 @@ describe('onboarding journey steps', () => {
 			.element(
 				page.getByRole('heading', {
 					level: 1,
-					name: 'Kamu nggak harus tahu semuanya untuk mulai.'
+					name: 'Kamu lagi nulis apa?'
 				})
 			)
 			.toBeInTheDocument();

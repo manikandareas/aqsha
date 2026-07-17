@@ -18,7 +18,7 @@ describe('FinishStep', () => {
 			.element(
 				page.getByRole('heading', {
 					level: 1,
-					name: 'Rasa penasaranmu sekarang punya arah.'
+					name: 'Rasa penasaranmu sekarang punya rumah.'
 				})
 			)
 			.toBeInTheDocument();

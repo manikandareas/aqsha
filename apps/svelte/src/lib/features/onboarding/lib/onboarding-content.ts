@@ -36,9 +36,9 @@ export const EINSTEIN_QUOTE = {
 // not universally available full text.
 export const ONBOARDING_COPY = {
 	welcome: {
-		title: 'Kamu nggak harus tahu semuanya untuk mulai.',
+		title: 'Kamu lagi nulis apa?',
 		description:
-			'Bawa satu ide yang masih mentah. Kita akan mencari pertanyaan, sumber, dan arah berikutnya bersama.'
+			'Skripsi, artikel jurnal, atau ide yang masih mentah — semuanya dimulai dari satu proyek. Kita siapkan arahmu di sini.'
 	},
 	background: {
 		title: 'Kamu saat ini...',
@@ -53,14 +53,15 @@ export const ONBOARDING_COPY = {
 		description: 'Sebelum kita mulai, bantu kami memahami bagaimana perjalananmu sampai ke sini.'
 	},
 	finish: {
-		title: 'Rasa penasaranmu sekarang punya arah.',
-		description: 'Aqsha siap membantu mencari dan memeriksa; keputusan akhirnya tetap milikmu.'
+		title: 'Rasa penasaranmu sekarang punya rumah.',
+		description:
+			'Buat proyek pertamamu — Aqsha membantu mencari dan memeriksa; keputusan akhirnya tetap milikmu.'
 	}
 } satisfies Record<OnboardingStep, JourneyStepCopy>;
 
 /** Decorative hand-written margin note per step (JourneyOrnaments). */
 export const STEP_HAND_NOTE: Record<OnboardingStep, string> = {
-	welcome: 'mulai dari ide mentah',
+	welcome: 'mulai dari proyek pertamamu',
 	background: 'tandai titik berangkatmu',
 	interests: 'nyalakan bintangmu',
 	source: 'salam kenal!',
