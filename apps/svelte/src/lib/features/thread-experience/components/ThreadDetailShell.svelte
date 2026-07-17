@@ -56,10 +56,12 @@
 	const panel = new ThreadPanelController();
 	setThreadPanel(panel);
 
-	// Chip konteks proyek selalu terlihat di composer (channel ambient).
+	// Chip konteks proyek selalu terlihat di composer (channel ambient). Signature-guarded sync:
+	// an unguarded epoch-bumping set inside this effect feeds the composer's ambient-merge effect
+	// back into it and trips `effect_update_depth_exceeded`.
 	$effect(() => {
 		if (!workspace) return;
-		mentions.setAmbientContextRefs([
+		mentions.syncAmbientFromPage([
 			{
 				kind: 'workspace',
 				workspaceId: workspace.id,

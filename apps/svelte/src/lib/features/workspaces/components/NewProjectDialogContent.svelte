@@ -46,6 +46,10 @@
 			}
 			onOpenChange(false);
 			await goto(resolve('/app/(product)/projects/[projectId]', { projectId: result.id }));
+		} catch {
+			// Network / unexpected throws are already toasted by the mutation's onError. Swallow so
+			// the rejection isn't an unhandled promise (Sentry noise); keep the dialog open so the
+			// draft isn't lost. Rate-limit is a return union above, not thrown.
 		} finally {
 			submitting = false;
 		}

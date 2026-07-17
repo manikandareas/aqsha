@@ -37,10 +37,13 @@
 	);
 	const isFreeform = $derived(workspace.data?.kind === 'freeform');
 
+	// Signature-guarded sync: the effect re-runs on every reactive flush, so an unguarded
+	// epoch-bumping set here would feed the composer's ambient-merge effect back into this one
+	// and trip `effect_update_depth_exceeded`.
 	$effect(() => {
 		const w = workspace.data;
 		if (!w) return;
-		mentions.setAmbientContextRefs([
+		mentions.syncAmbientFromPage([
 			{ kind: 'workspace', workspaceId: w.id, label: projectDisplayTitle(w) }
 		]);
 	});

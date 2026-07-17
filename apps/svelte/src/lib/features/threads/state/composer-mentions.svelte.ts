@@ -36,7 +36,15 @@ export class ComposerMentions {
 		return this.#ambientEpoch;
 	}
 
-	/** Imperative override (feed card "Tanya Astra" → swap the ambient token). */
+	/**
+	 * Imperative override (feed card "Tanya Astra" → swap the ambient token). Bumps the epoch on every
+	 * call — even for identical refs — so re-clicking re-injects a removed pill.
+	 *
+	 * Only call this from an event handler. Calling it inside an `$effect` loops forever: the effect
+	 * re-runs on every flush, the unconditional epoch bump wakes the composer's ambient-merge effect,
+	 * and that feeds back until `effect_update_depth_exceeded`. For reactive page-sync use
+	 * {@link syncAmbientFromPage} (signature-guarded, idempotent).
+	 */
 	setAmbientContextRefs(refs: ContextRef[]): void {
 		this.#ambientRefs = refs;
 		this.#ambientEpoch += 1;
