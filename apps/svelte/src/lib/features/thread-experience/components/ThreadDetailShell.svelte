@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { useClerkContext } from 'svelte-clerk';
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { buildWorkspaceMentionLabel } from '@aqsha/chat-core';
@@ -194,6 +195,13 @@
 						{compact}
 						{initialContent}
 						ambientWorkspaceId={workspace?.id ?? null}
+						threadUrlFor={workspace
+							? (tid) =>
+									resolve('/app/(product)/projects/[projectId]/threads/[threadId]', {
+										projectId: workspace.id,
+										threadId: tid
+									})
+							: undefined}
 					/>
 				</div>
 			{/snippet}
