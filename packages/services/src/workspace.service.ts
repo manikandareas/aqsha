@@ -1,10 +1,20 @@
-import { throwAppError, type Workspace, WorkspaceRepo } from "@aqsha/db";
+import {
+  throwAppError,
+  WORKSPACE_KINDS,
+  WORKSPACE_STAGES,
+  type Workspace,
+  type WorkspaceKind,
+  WorkspaceRepo,
+  WorkspaceSectionRepo,
+  type WorkspaceStage,
+} from "@aqsha/db";
 import type { Db, DbOrTx } from "@aqsha/db";
 import { decodeKeysetCursor } from "@aqsha/db";
 import { PLAN_CATALOG, UNLIMITED } from "./plan";
 import { resolveEffectivePlanKey } from "./billing/snapshot";
 import { normalizeName } from "./workspaces/normalize";
 import { normalizeWorkspaceEmoji, workspaceEmojiForNewWorkspace } from "./workspaces/emoji";
+import { SECTION_TEMPLATES } from "./workspaces/section-templates";
 
 export const DEFAULT_WORKSPACE_NAME = "Workspace Saya";
 
@@ -31,6 +41,10 @@ export const WorkspaceService = {
       name: DEFAULT_WORKSPACE_NAME,
       emoji: workspaceEmojiForNewWorkspace({ ownerUserId, name: DEFAULT_WORKSPACE_NAME, now }),
       description: null,
+      kind: "freeform",
+      stage: "exploration",
+      deadline: null,
+      topicNote: null,
       status: "active",
       archivedAt: null,
       createdAt: now,
@@ -93,15 +107,33 @@ export const WorkspaceService = {
   },
 
   /**
-   * Buat workspace: capacity per plan + normalizeName + emoji deterministik, status
-   * active. Atomik (count + insert satu transaksi → cegah race lewat cap). Port
-   * `createWorkspaceForOwner` V1.
+   * Buat proyek: capacity per plan + emoji deterministik + seed kerangka bab dari
+   * template kind — satu transaksi (count + insert + seed → cegah race lewat cap).
+   * `name` opsional selama exploration; UI memakai `topicNote` sebagai placeholder.
    */
   async create(
     db: Db,
-    input: { ownerUserId: string; ownerEmail?: string | null; name: string },
+    input: {
+      ownerUserId: string;
+      ownerEmail?: string | null;
+      name?: string;
+      kind: WorkspaceKind;
+      topicNote?: string | null;
+      deadline?: number | null;
+    },
   ): Promise<{ id: string }> {
-    const name = normalizeName(input.name, WORKSPACE_NAME_LABEL);
+    const name =
+      input.name !== undefined && input.name.trim() !== ""
+        ? normalizeName(input.name, WORKSPACE_NAME_LABEL)
+        : "";
+    if (!WORKSPACE_KINDS.includes(input.kind)) {
+      throwAppError({
+        message: "Jenis karya tulis tidak dikenal",
+        code: "workspace_kind_invalid",
+        severity: "warning",
+        status: 422,
+      });
+    }
     const plan = await resolveEffectivePlanKey(db, { ownerUserId: input.ownerUserId, email: input.ownerEmail });
     const limit = PLAN_CATALOG[plan].workspaceLimit;
     const now = Date.now();
@@ -125,36 +157,82 @@ export const WorkspaceService = {
         name,
         emoji: workspaceEmojiForNewWorkspace({ ownerUserId: input.ownerUserId, name, now }),
         description: null,
+        kind: input.kind,
+        stage: "exploration",
+        deadline: input.deadline ?? null,
+        topicNote: input.topicNote?.trim() || null,
         status: "active",
         archivedAt: null,
         createdAt: now,
         updatedAt: now,
       });
+      await WorkspaceSectionRepo.insertMany(
+        tx,
+        SECTION_TEMPLATES[input.kind].map((tpl, i) => ({
+          id: crypto.randomUUID(),
+          workspaceId: id,
+          title: tpl.title,
+          sortOrder: i,
+          status: "empty",
+          role: tpl.role,
+          documentArtifactId: null,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
     });
 
     return { id };
   },
 
   /**
-   * Satu PATCH yang menyatukan rename + updateEmoji V1 (kontrak 05). Minimal satu
-   * field. Assert owner (tanpa requireActive — sama V1). normalizeName +
-   * normalizeWorkspaceEmoji bila ada.
+   * Satu PATCH untuk identitas + atribut proyek (nama/emoji/deskripsi/tahap/
+   * deadline/topik). Minimal satu field; `kind` sengaja TIDAK bisa diubah —
+   * ganti jenis = proyek baru. Assert owner (tanpa requireActive — sama V1).
    */
   async update(
     db: DbOrTx,
-    input: { ownerUserId: string; workspaceId: string; name?: string; emoji?: string },
+    input: {
+      ownerUserId: string;
+      workspaceId: string;
+      name?: string;
+      emoji?: string;
+      description?: string | null;
+      stage?: WorkspaceStage;
+      deadline?: number | null;
+      topicNote?: string | null;
+    },
   ): Promise<{ ok: true }> {
-    if (input.name === undefined && input.emoji === undefined) {
+    const hasField =
+      input.name !== undefined ||
+      input.emoji !== undefined ||
+      input.description !== undefined ||
+      input.stage !== undefined ||
+      input.deadline !== undefined ||
+      input.topicNote !== undefined;
+    if (!hasField) {
       throwAppError({
-        message: "Minimal satu field (name atau emoji) wajib.",
+        message: "Minimal satu field wajib.",
         code: "bad_request",
         severity: "warning",
+      });
+    }
+    if (input.stage !== undefined && !WORKSPACE_STAGES.includes(input.stage)) {
+      throwAppError({
+        message: "Tahap proyek tidak dikenal",
+        code: "workspace_stage_invalid",
+        severity: "warning",
+        status: 422,
       });
     }
     await this.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
     await WorkspaceRepo.update(db, input.workspaceId, {
       ...(input.name !== undefined ? { name: normalizeName(input.name, WORKSPACE_NAME_LABEL) } : {}),
       ...(input.emoji !== undefined ? { emoji: normalizeWorkspaceEmoji(input.emoji) } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.stage !== undefined ? { stage: input.stage } : {}),
+      ...(input.deadline !== undefined ? { deadline: input.deadline } : {}),
+      ...(input.topicNote !== undefined ? { topicNote: input.topicNote?.trim() || null } : {}),
       updatedAt: Date.now(),
     });
     return { ok: true };

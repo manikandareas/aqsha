@@ -102,7 +102,7 @@ async function appErrorCode(p: Promise<unknown>): Promise<string> {
 describe("WorkspaceService.create — capacity per plan", () => {
   test("free plan, under cap → inserts and returns id", async () => {
     s.wsCount.mockResolvedValue(0);
-    const res = await WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: "Baru" });
+    const res = await WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: "Baru", kind: "freeform" });
     expect(res.id).toBeString();
     expect(s.wsInsert).toHaveBeenCalledTimes(1);
   });
@@ -110,7 +110,7 @@ describe("WorkspaceService.create — capacity per plan", () => {
   test("free plan at cap (1 active) → workspace_limit_reached, no insert", async () => {
     s.wsCount.mockResolvedValue(1);
     const code = await appErrorCode(
-      WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: "Kedua" }),
+      WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: "Kedua", kind: "freeform" }),
     );
     expect(code).toBe("workspace_limit_reached");
     expect(s.wsInsert).not.toHaveBeenCalled();
@@ -119,22 +119,26 @@ describe("WorkspaceService.create — capacity per plan", () => {
   test("admin (env allowlist) → unlimited, skips count, inserts", async () => {
     process.env.AQSHA_ADMIN_OWNER_USER_IDS = OWNER;
     s.wsCount.mockResolvedValue(999);
-    const res = await WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: "Admin ws" });
+    const res = await WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: "Admin ws", kind: "freeform" });
     expect(res.id).toBeString();
     expect(s.wsCount).not.toHaveBeenCalled();
     expect(s.wsInsert).toHaveBeenCalledTimes(1);
   });
 
-  test("empty name → name_required", async () => {
-    expect(await appErrorCode(WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: "   " }))).toBe(
-      "name_required",
+  test("empty name diperbolehkan (judul menyusul saat exploration) → tersimpan string kosong", async () => {
+    s.wsCount.mockResolvedValue(0);
+    const res = await WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: "   ", kind: "freeform" });
+    expect(res.id).toBeString();
+    expect(s.wsInsert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ name: "" }),
     );
   });
 
   test("name > 120 chars → name_too_long", async () => {
     const long = "a".repeat(121);
     expect(
-      await appErrorCode(WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: long })),
+      await appErrorCode(WorkspaceService.create(fakeDb, { ownerUserId: OWNER, name: long, kind: "freeform" })),
     ).toBe("name_too_long");
   });
 });
