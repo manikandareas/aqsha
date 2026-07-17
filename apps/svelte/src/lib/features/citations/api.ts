@@ -7,6 +7,7 @@ import {
 import { toast } from 'svelte-sonner';
 import { getApiClient } from '$lib/api';
 import { readableApiErrorMessage } from '$lib/errors';
+import { paperToCitationInput, type SourceSaveInput } from '$lib/features/discovery/source-save';
 import { queryKeys, unwrap } from '$lib/query';
 import {
 	type CitationExportFormat,
@@ -549,5 +550,49 @@ export function useAssignCitationSection() {
 			input: { linkId: string; workspaceId: string; sectionId: string | null }
 		) => qc.invalidateQueries({ queryKey: queryKeys.citations.links(input.workspaceId) }),
 		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menandai bab untuk sumber.'))
+	}));
+}
+
+// ── Simpan citation-first dari pencarian/feed ────────────────────────────────
+
+/**
+ * Simpan sumber hasil pencarian: buat citation di perpustakaan akun (duplikat →
+ * pakai yang lama, tanpa entri dobel) lalu opsional auto-link ke proyek/bab.
+ */
+export function useSaveSource() {
+	const api = getApiClient();
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (input: {
+			source: SourceSaveInput;
+			workspaceId?: string | null;
+			sectionId?: string | null;
+		}) => {
+			const citation = unwrap(
+				await api.citations.post({
+					...paperToCitationInput(input.source),
+					onDuplicate: 'return-existing'
+				})
+			) as CitationDetail & { created: boolean };
+			if (input.workspaceId) {
+				unwrap(
+					await api
+						.workspaces({ id: input.workspaceId })
+						.citations({ citationId: citation.id })
+						.link.post({ sectionId: input.sectionId ?? null })
+				);
+			}
+			return citation;
+		},
+		onSuccess: (
+			_d: unknown,
+			input: { source: SourceSaveInput; workspaceId?: string | null; sectionId?: string | null }
+		) => {
+			qc.invalidateQueries({ queryKey: queryKeys.citations.all });
+			if (input.workspaceId) {
+				qc.invalidateQueries({ queryKey: queryKeys.citations.links(input.workspaceId) });
+			}
+		},
+		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menyimpan sumber.'))
 	}));
 }
