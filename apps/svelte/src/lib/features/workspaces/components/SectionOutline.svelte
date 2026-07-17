@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import * as Select from '@aqsha/ui-svelte/components/select';
@@ -14,6 +15,7 @@
 		MoreHorizontalIcon,
 		PenLineIcon,
 		PlusIcon,
+		SearchIcon,
 		SparklesIcon
 	} from '$lib/icons';
 	import { useCreateSection, useDeleteSection, useReorderSections, useUpdateSection } from '../api';
@@ -133,6 +135,16 @@
 					<DropdownMenu.Content align="end">
 						<DropdownMenu.Item onSelect={() => (renameTarget = section)}>
 							<Icon icon={PenLineIcon} class="size-4" /> Ubah judul
+						</DropdownMenu.Item>
+						<DropdownMenu.Item
+							onSelect={() =>
+								goto(
+									resolve('/app/(product)/projects/[projectId]/search', {
+										projectId: workspaceId
+									}) + `?section=${section.id}`
+								)}
+						>
+							<Icon icon={SearchIcon} class="size-4" /> Cari sumber untuk bab ini
 						</DropdownMenu.Item>
 						<DropdownMenu.Item disabled={i === 0} onSelect={() => move(section, -1)}>
 							<Icon icon={ArrowUpIcon} class="size-4" /> Naik

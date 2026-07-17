@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import * as Select from '@aqsha/ui-svelte/components/select';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Spinner } from '$lib/components/ui/spinner';
-	import { Icon, MoreHorizontalIcon } from '$lib/icons';
+	import { Icon, MoreHorizontalIcon, SearchIcon } from '$lib/icons';
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import {
@@ -44,6 +45,16 @@
 </script>
 
 <div class={cn('flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto', panelBodyPaddingClass)}>
+	<div class="flex items-center gap-2">
+		<Button
+			href={resolve('/app/(product)/projects/[projectId]/search', { projectId: workspaceId })}
+			variant="outline"
+			size="sm"
+			class="flex-1 gap-1.5"
+		>
+			<Icon icon={SearchIcon} class="size-3.5" /> Cari sumber
+		</Button>
+	</div>
 	{#if linked.isPending}
 		<div class="flex flex-1 items-center justify-center gap-2 py-10 text-muted-foreground">
 			<Spinner class="size-4" />
@@ -51,9 +62,17 @@
 		</div>
 	{:else if items.length === 0}
 		<div
-			class="rounded-md border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground"
+			class="grid gap-3 rounded-md border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground"
 		>
-			Belum ada sumber di proyek ini. Simpan dari Jelajah atau perpustakaanmu.
+			<p>Belum ada sumber di proyek ini.</p>
+			<Button
+				href={resolve('/app/(product)/projects/[projectId]/search', { projectId: workspaceId })}
+				variant="outline"
+				size="sm"
+				class="mx-auto"
+			>
+				Cari sumber untuk proyek ini
+			</Button>
 		</div>
 	{:else}
 		<ul class="grid gap-2">
