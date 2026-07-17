@@ -14,6 +14,7 @@ const suffix = Math.floor(Math.random() * 1e9);
 const OWNER = `user_itest_thr_${suffix}`;
 const OTHER = `user_itest_thr_other_${suffix}`;
 const SID = `astra:itest-${suffix}`;
+const WS = `ws_itest_thr_${suffix}`;
 
 const { app } = await import("../src/index");
 
@@ -41,6 +42,7 @@ async function cleanup() {
   if (!DATABASE_URL) return;
   const { client } = createDb(DATABASE_URL);
   await client`delete from chat_threads where owner_user_id like 'user_itest_thr_%'`;
+  await client`delete from workspaces where owner_user_id like 'user_itest_thr_%'`;
   await client`delete from users where owner_user_id like 'user_itest_thr_%'`;
   await client.end();
 }
@@ -53,11 +55,14 @@ async function seed() {
     await client`insert into users (owner_user_id, clerk_user_id, created_at, updated_at)
       values (${owner}, ${owner}, ${now}, ${now}) on conflict do nothing`;
   }
+  // chat_threads.workspace_id NOT NULL (FK cascade) → proyek milik OWNER wajib ada dulu.
+  await client`insert into workspaces (id, owner_user_id, name, created_at, updated_at)
+    values (${WS}, ${OWNER}, 'Proyek uji', ${now}, ${now}) on conflict do nothing`;
   // Seed langsung (mirror proyeksi tipis `threadProjectionProcessor` Mastra): baris metadata
   // `chat_threads` milik OWNER. Isi pesan = Mastra Memory (`mastra_*`), tak di-seed di sini.
   await client`insert into chat_threads
-      (id, owner_user_id, status, agent_kind, last_message_preview, last_activity_at, created_at, updated_at)
-    values (${SID}, ${OWNER}, 'idle', 'lite', 'Halo! Ada yang bisa kubantu?', ${now}, ${now}, ${now})`;
+      (id, owner_user_id, workspace_id, status, agent_kind, last_message_preview, last_activity_at, created_at, updated_at)
+    values (${SID}, ${OWNER}, ${WS}, 'idle', 'lite', 'Halo! Ada yang bisa kubantu?', ${now}, ${now}, ${now})`;
   await client.end();
 }
 
@@ -121,8 +126,8 @@ describe("api threads — pin/sematkan", () => {
     const { client } = createDb(DATABASE_URL);
     const now = Date.now();
     await client`insert into chat_threads
-        (id, owner_user_id, status, agent_kind, last_activity_at, created_at, updated_at)
-      values (${PID}, ${OWNER}, 'idle', 'lite', ${now}, ${now}, ${now})
+        (id, owner_user_id, workspace_id, status, agent_kind, last_activity_at, created_at, updated_at)
+      values (${PID}, ${OWNER}, ${WS}, 'idle', 'lite', ${now}, ${now}, ${now})
       on conflict (id) do nothing`;
     await client.end();
   });
@@ -163,14 +168,14 @@ describe("api threads — pin/sematkan", () => {
     for (let i = 0; i < 10; i++) {
       const id = `astra:itest-cap-${suffix}-${i}`;
       await client`insert into chat_threads
-          (id, owner_user_id, status, agent_kind, last_activity_at, pinned_at, created_at, updated_at)
-        values (${id}, ${OWNER}, 'idle', 'lite', ${now}, ${now + i}, ${now}, ${now})
+          (id, owner_user_id, workspace_id, status, agent_kind, last_activity_at, pinned_at, created_at, updated_at)
+        values (${id}, ${OWNER}, ${WS}, 'idle', 'lite', ${now}, ${now + i}, ${now}, ${now})
         on conflict (id) do nothing`;
     }
     const capId = `astra:itest-cap-${suffix}-extra`;
     await client`insert into chat_threads
-        (id, owner_user_id, status, agent_kind, last_activity_at, created_at, updated_at)
-      values (${capId}, ${OWNER}, 'idle', 'lite', ${now}, ${now}, ${now})
+        (id, owner_user_id, workspace_id, status, agent_kind, last_activity_at, created_at, updated_at)
+      values (${capId}, ${OWNER}, ${WS}, 'idle', 'lite', ${now}, ${now}, ${now})
       on conflict (id) do nothing`;
     await client.end();
 

@@ -281,6 +281,13 @@
       "when": 1784274184541,
       "tag": "0039_melted_serpent_society",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1784294258704,
+      "tag": "0040_dizzy_chamber",
+      "breakpoints": true
     }
   ]
 }

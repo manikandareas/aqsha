@@ -15,6 +15,9 @@ const TITLE_MAX = 120;
 const ARCHIVE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // >1 hari sejak aktivitas terakhir → "older"
 const PIN_CAP = 10; // soft-cap thread yang bisa disematkan sekaligus (grup "Disematkan" sidebar)
 
+// Guard log satu-kali: proyeksi yang datang tanpa scope proyek (klien tak kirim RequestContext).
+let warnedMissingWorkspaceScope = false;
+
 /** Bucket aktivitas thread untuk pengelompokan sidebar — dihitung server-side (BE). */
 export type ThreadBucket = "recent" | "older";
 export type ThreadListItem = ChatThread & { bucket: ThreadBucket };
@@ -50,17 +53,29 @@ export const ThreadService = {
     },
   ): Promise<void> {
     const now = Date.now();
-    const inserted = await ChatThreadRepo.insertIfAbsent(db, {
-      id: input.threadId,
-      ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId ?? null,
-      status: "idle",
-      agentKind: input.agentKind ?? "lite",
-      lastMessagePreview: input.preview ?? null,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
+    // `workspace_id` NOT NULL → tak bisa membuat baris baru tanpa scope proyek. Bila klien
+    // tak mengirim RequestContext, lewati INSERT (best-effort — jangan throw / racuni turn)
+    // dan cukup UPDATE bila baris sudah ada dari turn ber-scope sebelumnya.
+    let inserted = false;
+    if (input.workspaceId) {
+      inserted = await ChatThreadRepo.insertIfAbsent(db, {
+        id: input.threadId,
+        ownerUserId: input.ownerUserId,
+        workspaceId: input.workspaceId,
+        status: "idle",
+        agentKind: input.agentKind ?? "lite",
+        lastMessagePreview: input.preview ?? null,
+        lastActivityAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } else if (!warnedMissingWorkspaceScope) {
+      // Klien tanpa scope memanggil ini tiap turn — log SEKALI per proses agar tak membanjiri.
+      warnedMissingWorkspaceScope = true;
+      console.error(
+        "[ThreadService.ensureProjected] lewati INSERT: scope proyek kosong (RequestContext aqsha-workspace-id tak dikirim)",
+      );
+    }
     if (!inserted) {
       await ChatThreadRepo.update(db, input.threadId, {
         status: "idle",

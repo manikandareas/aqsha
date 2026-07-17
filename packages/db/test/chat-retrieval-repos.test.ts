@@ -21,11 +21,13 @@ import { artifacts } from "../src/schema/artifacts";
 import { chatThreads } from "../src/schema/chatThreads";
 import type { NewResearchSource } from "../src/schema/researchSources";
 import { users } from "../src/schema/users";
+import { workspaces } from "../src/schema/workspaces";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const itest = DATABASE_URL ? test : test.skip;
 const SUFFIX = Math.floor(Math.random() * 1e9);
 const OWNER = `itchat_${SUFFIX}`;
+const WS = `itchat_${SUFFIX}:ws`;
 const T1 = `itchat_${SUFFIX}:thread1`;
 const T2 = `itchat_${SUFFIX}:thread2`;
 
@@ -95,6 +97,7 @@ async function cleanup() {
   await client`delete from artifact_embeddings where owner_user_id = ${OWNER}`;
   await client`delete from artifacts where owner_user_id = ${OWNER}`;
   await client`delete from chat_threads where owner_user_id = ${OWNER}`;
+  await client`delete from workspaces where owner_user_id = ${OWNER}`;
   await client`delete from users where owner_user_id = ${OWNER}`;
 }
 
@@ -103,16 +106,21 @@ beforeAll(async () => {
   await cleanup();
   await db.insert(users).values({ ownerUserId: OWNER, clerkUserId: OWNER, createdAt: 1, updatedAt: 1 });
   const now = 1_700_000_000_000;
+  // chat_threads.workspace_id NOT NULL (FK cascade) → butuh proyek nyata sebelum thread.
+  await db
+    .insert(workspaces)
+    .values({ id: WS, ownerUserId: OWNER, name: "Proyek uji", createdAt: now, updatedAt: now });
   for (const id of [T1, T2]) {
     await db
       .insert(chatThreads)
-      .values({ id, ownerUserId: OWNER, lastActivityAt: now, createdAt: now, updatedAt: now });
+      .values({ id, ownerUserId: OWNER, workspaceId: WS, lastActivityAt: now, createdAt: now, updatedAt: now });
   }
-});
+  // Seed multi-statement ke DB integration remote → beri ruang di atas hook cap default 5s Bun.
+}, 30000);
 afterAll(async () => {
   await cleanup();
   await client.end();
-});
+}, 30000);
 
 describe("ResearchSourceRepo.insertMany — idempoten (resume tak gandakan)", () => {
   itest("re-insert (thread+turn+locator) sama → 1 baris; locator beda → tambah", async () => {

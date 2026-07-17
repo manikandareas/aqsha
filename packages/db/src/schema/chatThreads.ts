@@ -17,9 +17,10 @@ import { workspaces } from "./workspaces";
  * - `pinnedAt` epoch-ms nullable — thread yang disematkan user (grup "Disematkan" sidebar).
  *   `null` = tak disematkan; nilai ⇒ disematkan sekaligus kunci urut (pin terbaru di atas).
  *   Proyeksi `threadProjectionProcessor` per turn TIDAK menyentuh kolom ini (pin persist).
- * - `workspaceId` nullable — scope proyek thread; klien svelte mengirimnya via
- *   RequestContext dan proyeksi menulisnya. Di-NOT-NULL-kan setelah frontend
- *   selalu mengirim (thread lama/dev = null). `set null` saat proyek dihapus.
+ * - `workspaceId` NOT NULL — scope proyek thread. Chat hanya ada di dalam sebuah
+ *   proyek, jadi tiap thread lahir ber-scope; klien svelte mengirimnya via
+ *   RequestContext dan proyeksi menulisnya. FK `cascade`: hapus proyek ⇒ thread
+ *   ikut terhapus (mengikuti proyek induknya).
  * - timestamp epoch-ms (`bigint`) seragam dengan tabel V2 lain.
  */
 export const chatThreads = pgTable(
@@ -29,7 +30,9 @@ export const chatThreads = pgTable(
     ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => users.ownerUserId, { onDelete: "cascade" }),
-    workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     title: text("title"),
     titleStatus: text("title_status"),
     status: text("status").notNull().default("idle"),
