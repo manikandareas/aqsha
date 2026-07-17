@@ -1,13 +1,10 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { useFeedItem, useHideDiscovery, useRecordInteraction, useRelated } from '../api';
-	import { getComposerMentions } from '$lib/features/threads/state/composer-mentions.svelte';
-	import { discoveryItemToContextRef } from '../ask-astra';
-	import { discoveryItemKey, feedItemToDiscoveryItem, type DiscoveryItem } from '../model';
+	import { discoveryItemKey, feedItemToDiscoveryItem } from '../model';
 	import { domainFromUrl, relativeTime } from '../format';
 	import DiscoveryItemCard, { type DiscoveryCardHandlers } from './DiscoveryItemCard.svelte';
 	import {
-		AstraAgentAvatars,
 		Eyebrow,
 		ExpandableText,
 		PillCta,
@@ -18,32 +15,19 @@
 	} from './reader-ui';
 
 	/**
-	 * News reader: getFeedItem(id) + related. Header + media reveal + lead + article body. `onAskAstra`
-	 * (provided by the shell) opens the chat panel.
+	 * News reader: getFeedItem(id) + related. Header + media reveal + lead + article body.
 	 */
-	let { id, onAskAstra }: { id: string; onAskAstra: () => void } = $props();
+	let { id }: { id: string } = $props();
 
 	const query = useFeedItem(() => id);
 	const related = useRelated(() => id);
 	const hide = useHideDiscovery();
 	const record = useRecordInteraction();
-	const mentions = getComposerMentions();
 
 	const item = $derived(query.data);
 	const ok = $derived(Boolean(item && item.kind === 'news'));
 
-	// "Tanya Astra" (main/related card): pin the item as a context token + open the chat panel.
-	function openAstraFor(di: DiscoveryItem): void {
-		const ref = discoveryItemToContextRef(di);
-		if (ref) mentions.setAmbientContextRefs([ref]);
-		onAskAstra();
-	}
-
 	const handlers: DiscoveryCardHandlers = {
-		onAskAstra: (r) => {
-			record.mutate({ itemRef: r.itemRef, kind: 'research' });
-			openAstraFor(r);
-		},
 		onSaved: (r) => record.mutate({ itemRef: r.itemRef, kind: 'save' }),
 		onHide: (r) => hide.mutate(r.itemRef, { onError: () => toast.error('Gagal menyembunyikan.') })
 	};
@@ -56,13 +40,6 @@
 	const sourceUrl = $derived(ok && item ? (item.resolvedUrl ?? item.url) : undefined);
 	const domain = $derived(sourceUrl ? domainFromUrl(sourceUrl) : null);
 	const time = $derived(ok && item ? relativeTime(item.publishedAt) : null);
-
-	function askAstra(): void {
-		if (!ok || !item) return;
-		const di = feedItemToDiscoveryItem(item);
-		record.mutate({ itemRef: di.itemRef, kind: 'research' });
-		openAstraFor(di);
-	}
 </script>
 
 <ReaderShell width="news">
@@ -113,10 +90,6 @@
 
 			<div class="mt-6 flex flex-wrap items-center gap-2.5">
 				<PillCta href={sourceUrl}>Baca di sumber asli</PillCta>
-				<PillCta variant="outline" onClick={askAstra} bareIcon>
-					{#snippet icon()}<AstraAgentAvatars />{/snippet}
-					Tanya Astra
-				</PillCta>
 			</div>
 
 			{#if lead}
@@ -147,7 +120,6 @@
 						<DiscoveryItemCard
 							variant="standard"
 							item={feedItemToDiscoveryItem(r)}
-							busy={false}
 							{handlers}
 						/>
 					{/each}

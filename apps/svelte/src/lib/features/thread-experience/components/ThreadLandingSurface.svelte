@@ -1,8 +1,5 @@
 <script lang="ts">
 	import { cn } from '@aqsha/ui-svelte/utils';
-	import HomeBannerCarousel from '$lib/components/HomeBannerCarousel.svelte';
-	import HomeExploreBento from '$lib/features/discovery/components/HomeExploreBento.svelte';
-	import ExploreHandwrittenCue from '$lib/features/discovery/components/ExploreHandwrittenCue.svelte';
 	import ComposerHeroState from './ComposerHeroState.svelte';
 	import type { Snippet } from 'svelte';
 
@@ -38,16 +35,5 @@
 				</ComposerHeroState>
 			</div>
 		</div>
-		{#if !compact}
-			<div class="mx-auto w-full max-w-xl">
-				<HomeBannerCarousel />
-			</div>
-			<!-- Cue positioned absolute vs the landing column — top-right, diagonal between the open-panel
-			     action and the hero title. -->
-			<ExploreHandwrittenCue />
-		{/if}
 	</div>
-	{#if !compact}
-		<HomeExploreBento />
-	{/if}
 </main>

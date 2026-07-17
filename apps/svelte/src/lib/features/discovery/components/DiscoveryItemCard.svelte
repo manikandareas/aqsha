@@ -2,7 +2,6 @@
 	import type { DiscoveryItem } from '../model';
 
 	export type DiscoveryCardHandlers = {
-		onAskAstra: (item: DiscoveryItem) => void;
 		onSaved: (item: DiscoveryItem) => void;
 		onHide: (item: DiscoveryItem) => void;
 	};
@@ -16,8 +15,6 @@
 		AlertCircleIcon,
 		ExternalLinkIcon,
 		FileDownIcon,
-		Loader2Icon,
-		MessageSquareIcon,
 		MoreHorizontalIcon,
 		ThumbsDownIcon
 	} from '$lib/icons';
@@ -30,17 +27,15 @@
 
 	/**
 	 * Editorial discovery card — hero, feature (+ imageSide), and standard variants. `handlers` =
-	 * ask-astra / saved (interest) / hide (record & remove).
+	 * saved (interest) / hide (record & remove).
 	 */
 	let {
 		item,
-		busy,
 		handlers,
 		variant,
 		imageSide = 'right'
 	}: {
 		item: DiscoveryItem;
-		busy: boolean;
 		handlers: DiscoveryCardHandlers;
 		variant: 'hero' | 'feature' | 'standard';
 		imageSide?: 'left' | 'right';
@@ -159,15 +154,6 @@
 			{/snippet}
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content align="end" class="w-52">
-			<DropdownMenu.Item onSelect={() => handlers.onAskAstra(item)} disabled={busy}>
-				{#if busy}<Icon icon={Loader2Icon} class="animate-spin" />{:else}<Icon
-						icon={MessageSquareIcon}
-					/>{/if}
-				Tanya Astra
-			</DropdownMenu.Item>
-
-			<DropdownMenu.Separator />
-
 			<DropdownMenu.Item>
 				{#snippet child({ props })}
 					<a {...props} href={item.url} target="_blank" rel="noreferrer">

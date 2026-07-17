@@ -3,11 +3,10 @@
 	import GenerativeCover from '$lib/components/GenerativeCover.svelte';
 	import { usePaper, useRecordInteraction } from '../api';
 	import { formatCitationCount } from '../format';
-	import type { ExplorePaper, PaperEnrichmentRef } from '../types';
+	import type { PaperEnrichmentRef } from '../types';
 	import PaperAside from './PaperAside.svelte';
 	import SaveToWorkspaceButton from './SaveToWorkspaceButton.svelte';
 	import {
-		AstraAgentAvatars,
 		Eyebrow,
 		ExpandableText,
 		PillCta,
@@ -19,18 +18,12 @@
 
 	/**
 	 * Paper reader: getPaperDetail(key) → header + actions + metrics + abstract + references + fact-sheet.
-	 * `onAskAstra` (provided by the shell) opens the chat panel.
 	 */
-	let { paperKey, onAskAstra }: { paperKey: string; onAskAstra: () => void } = $props();
+	let { paperKey }: { paperKey: string } = $props();
 
 	const query = usePaper(() => paperKey);
 	const record = useRecordInteraction();
 	const paper = $derived(query.data);
-
-	function askAstra(p: ExplorePaper): void {
-		record.mutate({ itemRef: { kind: 'paper', paperKey: p.key }, kind: 'research' });
-		onAskAstra();
-	}
 
 	// Internal reader href for a related paper (DOI → in-app reader `doi:…`), byte-identical to web
 	// (`encodeURIComponent`); the discovery glob turns the resolve() rule off (external refs alongside).
@@ -92,10 +85,6 @@
 				{/if}
 				<PillCta href={paper.url} variant={downloadHref ? 'outline' : 'solid'}>
 					Lihat di penerbit
-				</PillCta>
-				<PillCta variant="outline" onClick={() => askAstra(paper)} bareIcon>
-					{#snippet icon()}<AstraAgentAvatars />{/snippet}
-					Tanya Astra
 				</PillCta>
 				<SaveToWorkspaceButton
 					url={paper.url}

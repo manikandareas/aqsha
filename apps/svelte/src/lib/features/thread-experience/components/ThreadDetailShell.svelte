@@ -77,6 +77,18 @@
 	const threadId = $derived(threadIdProp ?? newThreadId);
 	const isExistingThread = $derived(Boolean(threadIdProp));
 
+	// A thread's route lives under its project; the recent-thread switcher + first-send URL binder both
+	// need this builder to navigate. `undefined` when there is no project → binding/switching is a no-op.
+	const threadUrlFor = $derived.by(() => {
+		const ws = workspace;
+		if (!ws) return undefined;
+		return (tid: string) =>
+			resolve('/app/(product)/projects/[projectId]/threads/[threadId]', {
+				projectId: ws.id,
+				threadId: tid
+			});
+	});
+
 	const client = createMastraClient(clerkTokenGetter(clerk));
 
 	// Stored thread tier (read once, gated to an existing thread → no 404 for a new client id).
@@ -186,6 +198,7 @@
 					onToggleLeftSidebar={() => leftSidebar.toggle()}
 					contextPanelOpen={sideOpen}
 					onOpenContextPanel={() => panel.openContextPanel()}
+					{threadUrlFor}
 				/>
 				<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 					<MastraChatThreadSurface
@@ -195,13 +208,7 @@
 						{compact}
 						{initialContent}
 						ambientWorkspaceId={workspace?.id ?? null}
-						threadUrlFor={workspace
-							? (tid) =>
-									resolve('/app/(product)/projects/[projectId]/threads/[threadId]', {
-										projectId: workspace.id,
-										threadId: tid
-									})
-							: undefined}
+						{threadUrlFor}
 					/>
 				</div>
 			{/snippet}

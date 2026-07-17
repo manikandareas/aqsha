@@ -2,12 +2,10 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
-	import { Icon, MessageSquareIcon } from '$lib/icons';
 	import AppLoadingOverlay from '$lib/components/layout/AppLoadingOverlay.svelte';
 	import Response from '$lib/components/ai-elements/Response.svelte';
 	import PanelCardToolbar from '$lib/components/layout/PanelCardToolbar.svelte';
 	import PanelTitleLabel from '$lib/components/layout/PanelTitleLabel.svelte';
-	import PanelOpenButton from '$lib/components/layout/PanelOpenButton.svelte';
 	import type { ArtifactRenderPayload } from '$lib/features/artifacts/types';
 	import type { PaperExtractionStatus } from '$lib/features/workspaces/utils/paper-metadata-model';
 	import { useCreateCitationFromArtifact } from '$lib/features/citations/api';
@@ -44,9 +42,7 @@
 		workspaceId,
 		variant,
 		embedded = false,
-		onClose,
-		chatOpen,
-		onToggleChat
+		onClose
 	}: {
 		data: ArtifactDetailData;
 		artifactId: string;
@@ -60,9 +56,6 @@
 		embedded?: boolean;
 		/** Panel only: close the side panel. */
 		onClose?: () => void;
-		/** Page only: toggle the artifact-page chat panel (rendered as a header affordance). */
-		chatOpen?: boolean;
-		onToggleChat?: () => void;
 	} = $props();
 
 	// Content-first reading measure (markdown docs, pdf pages, url/plain-text readers).
@@ -170,21 +163,6 @@
 	{/if}
 {/snippet}
 
-{#snippet chatToggle()}
-	{#if variant === 'page' && onToggleChat}
-		<PanelOpenButton
-			open={chatOpen ?? false}
-			onOpen={onToggleChat}
-			ariaLabel="Buka chat"
-			label="Chat"
-		>
-			{#snippet icon()}
-				<Icon icon={MessageSquareIcon} class="size-3.5" />
-			{/snippet}
-		</PanelOpenButton>
-	{/if}
-{/snippet}
-
 {#snippet infoContent()}
 	{#if ready && detail && activeRenderPayload}
 		{#if activeRenderPayload.artifactType === 'markdown'}
@@ -229,7 +207,6 @@
 		>
 			{#snippet trailing()}
 				{@render trailingContent()}
-				{@render chatToggle()}
 			{/snippet}
 		</ArtifactDetailHeader>
 	{:else if variant === 'panel'}

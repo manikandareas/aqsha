@@ -6,8 +6,6 @@
 	import { Icon, CheckCircle2Icon, SparklesIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { readableApiErrorMessage } from '$lib/errors';
-	import { getComposerMentions } from '$lib/features/threads/state/composer-mentions.svelte';
-	import { discoveryItemToContextRef } from '$lib/features/discovery/ask-astra';
 	import {
 		useFeedInfinite,
 		useHideDiscovery,
@@ -35,16 +33,11 @@
 	 * infinite scroll. Scoped by the active interest pill (topic). Empty `q` → personal/topic feed
 	 * (Jelajah); non-empty `q` → live paper search (Selidiki).
 	 */
-	let {
-		topic,
-		query,
-		onOpenChat
-	}: { topic: FeedTopic | null; query: string; onOpenChat: () => void } = $props();
+	let { topic, query }: { topic: FeedTopic | null; query: string } = $props();
 
 	// Bound auto-loads between scrolls so a run of locally-hidden items can't spin.
 	const MAX_AUTO_LOADS = 4;
 
-	const mentions = getComposerMentions();
 	const hidden = new SvelteSet<string>();
 
 	const q = $derived(query.trim());
@@ -142,13 +135,6 @@
 	}
 
 	const handlers: DiscoveryCardHandlers = {
-		onAskAstra: (item) => {
-			record.mutate({ itemRef: item.itemRef, kind: 'research' });
-			// Open the chat panel + pin the item as a context token (not a seed navigation).
-			const ref = discoveryItemToContextRef(item);
-			if (ref) mentions.setAmbientContextRefs([ref]);
-			onOpenChat();
-		},
 		onSaved: (item) => record.mutate({ itemRef: item.itemRef, kind: 'save' }),
 		onHide: (item) => {
 			hidden.add(discoveryItemKey(item));
@@ -200,7 +186,7 @@
 		{:else}
 			<div class="space-y-10">
 				{#if hero}
-					<DiscoveryItemCard variant="hero" item={hero} busy={false} {handlers} />
+					<DiscoveryItemCard variant="hero" item={hero} {handlers} />
 				{/if}
 				{#each blocks as block (block.key)}
 					{#if block.kind === 'grid'}
@@ -212,7 +198,7 @@
 									class="animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ease-out"
 									style="animation-delay: {Math.min(idx, 8) * 40}ms"
 								>
-									<DiscoveryItemCard variant="standard" {item} busy={false} {handlers} />
+									<DiscoveryItemCard variant="standard" {item} {handlers} />
 								</div>
 							{/each}
 						</div>
@@ -222,7 +208,6 @@
 								variant="feature"
 								item={block.item}
 								imageSide={block.side}
-								busy={false}
 								{handlers}
 							/>
 						</div>

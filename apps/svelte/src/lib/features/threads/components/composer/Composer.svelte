@@ -525,7 +525,16 @@
 				commands = [];
 				content = prompt;
 			}}
-			onSelectThread={(id) => goto(resolve('/app/(product)/threads/[threadId]', { threadId: id }))}
+			onSelectThread={(id) => {
+				// Threads live under their project; only navigable with the current project's id.
+				if (ambientWorkspaceId)
+					void goto(
+						resolve('/app/(product)/projects/[projectId]/threads/[threadId]', {
+							projectId: ambientWorkspaceId,
+							threadId: id
+						})
+					);
+			}}
 		/>
 	{/if}
 </div>

@@ -105,21 +105,6 @@ export function usePaperSearch(
 	});
 }
 
-/** Bento home (getFeed) for HomeExploreBento on /app. */
-export function useFeedHome(enabled: () => boolean = always) {
-	const api = getApiClient();
-	return createQuery(() => ({
-		queryKey: queryKeys.feed.list({ mode: 'home', topic: null }),
-		enabled: enabled(),
-		queryFn: async () =>
-			(
-				unwrap(await api.feed.home.get({ query: { kinds: [...VISIBLE_KINDS] } })) as {
-					items: FeedItem[];
-				}
-			).items
-	}));
-}
-
 /** Hide a discovery item (+ interest −1). Optimistic removal is handled by the caller. */
 export function useHideDiscovery() {
 	const api = getApiClient();

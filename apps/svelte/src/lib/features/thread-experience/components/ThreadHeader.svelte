@@ -23,7 +23,8 @@
 		showLeftTrigger,
 		onToggleLeftSidebar,
 		contextPanelOpen,
-		onOpenContextPanel
+		onOpenContextPanel,
+		threadUrlFor
 	}: {
 		threadId?: string;
 		title: string;
@@ -33,6 +34,8 @@
 		onToggleLeftSidebar: () => void;
 		contextPanelOpen: boolean;
 		onOpenContextPanel: () => void;
+		/** Builds a thread's route (lives under its project); switching threads is a no-op without it. */
+		threadUrlFor?: (threadId: string) => string;
 	} = $props();
 
 	const deleteThread = useDeleteThread();
@@ -44,7 +47,7 @@
 	}
 
 	function selectThread(id: string): void {
-		void goto(resolve('/app/(product)/threads/[threadId]', { threadId: id }));
+		if (threadUrlFor) void goto(threadUrlFor(id));
 	}
 
 	function createThread(): void {
