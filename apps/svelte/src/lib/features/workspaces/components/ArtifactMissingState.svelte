@@ -9,7 +9,7 @@
 
 <section>
 	<Button
-		href={resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId })}
+		href={resolve('/app/(product)/projects/[projectId]', { projectId: workspaceId })}
 		variant="ghost"
 		size="sm"
 		class="-ml-2 mb-5 text-muted-foreground"

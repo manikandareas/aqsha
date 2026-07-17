@@ -64,7 +64,7 @@
 >
 	<nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5 text-[13px]">
 		<a
-			href={resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId })}
+			href={resolve('/app/(product)/projects/[projectId]', { projectId: workspaceId })}
 			class="hidden max-w-[12rem] shrink-0 truncate font-medium text-muted-foreground transition-colors hover:text-foreground sm:block"
 		>
 			{workspaceName ?? 'Workspace'}

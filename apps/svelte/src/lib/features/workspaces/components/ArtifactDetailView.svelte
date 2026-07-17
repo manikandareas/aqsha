@@ -128,7 +128,7 @@
 			onClose?.();
 		} else {
 			await goto(
-				resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: resolvedWorkspaceId })
+				resolve('/app/(product)/projects/[projectId]', { projectId: resolvedWorkspaceId })
 			);
 		}
 	}
