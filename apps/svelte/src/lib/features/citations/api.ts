@@ -579,12 +579,23 @@ export function useSaveSource() {
 				})
 			) as CitationDetail & { created: boolean };
 			if (input.workspaceId) {
-				unwrap(
-					await api
-						.workspaces({ id: input.workspaceId })
-						.citations({ citationId: citation.id })
-						.link.post({ sectionId: input.sectionId ?? null })
-				);
+				try {
+					unwrap(
+						await api
+							.workspaces({ id: input.workspaceId })
+							.citations({ citationId: citation.id })
+							.link.post({ sectionId: input.sectionId ?? null })
+					);
+				} catch (e) {
+					// Citation already exists in the library at this point — a link failure isn't
+					// a total save failure, so warn instead of rejecting the mutation.
+					toast.warning(
+						readableApiErrorMessage(
+							e,
+							'Tersimpan ke perpustakaan, tapi gagal ditautkan ke proyek ini.'
+						)
+					);
+				}
 			}
 			return citation;
 		},

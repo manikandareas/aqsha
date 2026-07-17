@@ -148,7 +148,7 @@
 					</a>
 				{/snippet}
 			</DropdownMenu.Item>
-			{#if item.kind === 'paper' && item.pdfUrl}
+			{#if item.pdfUrl}
 				<DropdownMenu.Item>
 					{#snippet child({ props })}
 						<a {...props} href={item.pdfUrl} target="_blank" rel="noreferrer">

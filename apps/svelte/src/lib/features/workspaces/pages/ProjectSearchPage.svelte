@@ -11,7 +11,11 @@
 	import { Icon, ArrowLeftIcon } from '$lib/icons';
 	import ExploreAskBar from '$lib/features/explore/components/ExploreAskBar.svelte';
 	import SourceResultCard from '$lib/features/discovery/components/SourceResultCard.svelte';
-	import { usePaperSearch, useRecordInteraction, type SearchPaper } from '$lib/features/discovery/api';
+	import {
+		usePaperSearch,
+		useRecordInteraction,
+		type SearchPaper
+	} from '$lib/features/discovery/api';
 	import { useSaveSource } from '$lib/features/citations/api';
 	import { useSections, useWorkspace } from '../api';
 	import { projectDisplayTitle } from '../types';
@@ -126,7 +130,12 @@
 				<p class="text-sm text-muted-foreground">Mulai dari topikmu:</p>
 				<div class="flex flex-wrap gap-2">
 					{#each suggestions as suggestion (suggestion)}
-						<Button type="button" variant="outline" size="sm" onclick={() => submitQuery(suggestion)}>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onclick={() => submitQuery(suggestion)}
+						>
 							{suggestion}
 						</Button>
 					{/each}

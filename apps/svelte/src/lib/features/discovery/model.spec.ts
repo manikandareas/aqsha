@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	bestIngestUrl,
 	discoveryItemKey,
 	feedDetailHref,
 	feedItemToDiscoveryItem,
@@ -25,7 +24,7 @@ const paperFeed: FeedItem = {
 	topics: ['agents']
 };
 
-// No doi/pdfUrl → exercises the resolvedUrl/url tail of the bestIngestUrl fallback chain.
+// No paperKey → exercises the feedDetailHref external (non-internal-reader) case below.
 const bareFeed: FeedItem = {
 	_id: 'f2',
 	kind: 'paper',
@@ -114,14 +113,5 @@ describe('feedDetailHref', () => {
 			paperKey: undefined
 		};
 		expect(feedDetailHref(externalOnly)).toBeNull();
-	});
-});
-
-describe('bestIngestUrl', () => {
-	it('prefers DOI > pdf > resolved > url', () => {
-		expect(bestIngestUrl(feedItemToDiscoveryItem(paperFeed))).toBe('https://doi.org/10.1/abc');
-		expect(bestIngestUrl(feedItemToDiscoveryItem(bareFeed))).toBe('https://arxiv.org/abs/2401.002');
-		const bare: DiscoveryItem = { ...feedItemToDiscoveryItem(bareFeed), resolvedUrl: undefined };
-		expect(bestIngestUrl(bare)).toBe('https://arxiv.org/abs/2401.002?utm=1');
 	});
 });

@@ -8,18 +8,10 @@ export function sourceName(item: {
 	authors?: string[];
 	sourceLabel: string;
 }): string {
-	if (item.kind === 'paper' && item.authors && item.authors.length > 0) {
+	if (item.authors && item.authors.length > 0) {
 		return item.authors.length > 1 ? `${item.authors[0]} dkk.` : item.authors[0];
 	}
 	return item.sourceLabel;
-}
-
-export function domainFromUrl(url: string): string | null {
-	try {
-		return new URL(url).hostname.replace(/^www\./, '');
-	} catch {
-		return null;
-	}
 }
 
 export function relativeTime(ms: number | undefined): string | null {
@@ -50,13 +42,13 @@ function absoluteDate(ms: number): string | null {
 
 export function buildSourceLine(item: DiscoveryItem): string {
 	const parts: string[] = [];
-	if (item.kind === 'paper' && item.authors && item.authors.length > 0) {
+	if (item.authors && item.authors.length > 0) {
 		parts.push(item.authors.slice(0, 4).join(', '));
 	} else {
 		parts.push(item.sourceLabel);
 	}
 	const date =
-		item.kind === 'paper' && item.year && !item.publishedAt
+		item.year && !item.publishedAt
 			? String(item.year)
 			: (relativeTime(item.publishedAt) ?? (item.year ? String(item.year) : ''));
 	if (date) parts.push(date);

@@ -326,7 +326,7 @@
 	open={confirmDelete}
 	onOpenChange={(open) => (confirmDelete = open)}
 	title="Hapus referensi?"
-	description="Referensi dihapus dari library workspace ini. Dokumen yang memakainya akan menandainya sebagai hilang."
+	description="Referensi dihapus dari perpustakaan. Dokumen yang memakainya akan menandainya sebagai hilang."
 	confirmLabel="Hapus"
 	onConfirm={async () => {
 		if (!citation) return;

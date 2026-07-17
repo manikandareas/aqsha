@@ -52,13 +52,6 @@ export function feedDetailHref(item: DiscoveryItem): string | null {
 	return null;
 }
 
-// Most identifier-rich URL for ingestion: canonical DOI > hosted PDF > decoded
-// publisher URL > the (possibly opaque) source url.
-export function bestIngestUrl(item: DiscoveryItem): string {
-	if (item.doi) return `https://doi.org/${item.doi}`;
-	return item.pdfUrl ?? item.resolvedUrl ?? item.url;
-}
-
 export function kindLabel(): string {
 	return 'Paper';
 }

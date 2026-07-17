@@ -137,25 +137,3 @@ export function usePaper(key: () => string, enabled: () => boolean = always) {
 				null) as ExplorePaper | null
 	}));
 }
-
-/** Reader feed item, by feed row id. */
-export function useFeedItem(id: () => string, enabled: () => boolean = always) {
-	const api = getApiClient();
-	return createQuery(() => ({
-		queryKey: queryKeys.feed.item(id()),
-		enabled: enabled() && Boolean(id()),
-		queryFn: async () => unwrap(await api.feed({ id: id() }).get()) as FeedItem
-	}));
-}
-
-/** Related same-kind ("Discover more"). */
-export function useRelated(id: () => string, enabled: () => boolean = always) {
-	const api = getApiClient();
-	return createQuery(() => ({
-		queryKey: [...queryKeys.feed.item(id()), 'related'],
-		enabled: enabled() && Boolean(id()),
-		queryFn: async () =>
-			(unwrap(await api.feed({ id: id() }).related.get({ query: {} })) as { items: FeedItem[] })
-				.items
-	}));
-}
