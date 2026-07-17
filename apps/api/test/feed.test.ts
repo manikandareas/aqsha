@@ -39,6 +39,7 @@ const ITEM_A = DEDUPE("a");
 const ITEM_B = DEDUPE("b");
 const ITEM_C = DEDUPE("c");
 const ITEM_NEWS = DEDUPE("legacy-news");
+const ITEM_NEWS2 = DEDUPE("legacy-news-2");
 // Slash + colon di key (mirip `doi:10.x/y`) → regression guard transport: key WAJIB lewat
 // query param, bukan path segment (lihat papers route).
 const PAPER_KEY = `doi:10.${suffix}/feedtest`;
@@ -46,6 +47,7 @@ let idA = "";
 let idB = "";
 let idC = "";
 let idNews = "";
+let idNews2 = "";
 
 function input(dedupeKey: string, over: Partial<FeedItemInput>): FeedItemInput {
   return {
@@ -101,6 +103,16 @@ beforeAll(async () => {
     ),
   );
   idNews = newsItem.id;
+  // Kedua row news ini agar getRelatedFeedItems(anchor=idNews) punya kandidat same-kind
+  // buat dibuktikan tetap tersaring (anchor legacy news → related HARUS kosong).
+  const newsItem2 = await FeedRepo.upsertByDedupeKey(
+    db,
+    buildFeedItemRow(
+      input(ITEM_NEWS2, { kind: "news", title: "Epsilon (legacy news 2)", publishedAt: now + 9_000 }),
+      now,
+    ),
+  );
+  idNews2 = newsItem2.id;
   await PaperCacheRepo.upsert(db, {
     key: PAPER_KEY,
     title: "Cached Paper",
@@ -148,6 +160,19 @@ describe("api feed routes", () => {
     expect(missing.status).toBe(404);
   });
 
+  itest("GET /feed/:id untuk row legacy kind=news → 404 (sama seperti id tak ada)", async () => {
+    const r = await req("GET", `/feed/${idNews}`, tok(OWNER));
+    expect(r.status).toBe(404);
+  });
+
+  itest("GET /feed/:id/related anchor legacy news → kosong (tak surface row news lain)", async () => {
+    const r = await req("GET", `/feed/${idNews}/related`, tok(OWNER));
+    expect(r.status).toBe(200);
+    const ids = (await readJson(r)).items.map((i: { _id: string }) => i._id);
+    expect(ids).toEqual([]);
+    expect(ids).not.toContain(idNews2);
+  });
+
   itest("POST /feed/discovery/hide → item hilang dari /feed", async () => {
     const h = await req("POST", "/feed/discovery/hide", tok(OWNER), {
       itemRef: { kind: "feed", feedItemId: idA },
@@ -181,7 +206,7 @@ describe("api feed routes", () => {
     expect(await readJson(s)).toEqual({ saved: false });
   });
 
-  itest("GET /feed/:id/related → same-kind, exclude self + hidden", async () => {
+  itest("GET /feed/:id/related → same-kind, exclude self + hidden + news", async () => {
     // idA di-hide di test sebelumnya → related(idB) hanya berisi idC (paper, tak hidden).
     const r = await req("GET", `/feed/${idB}/related`, tok(OWNER));
     expect(r.status).toBe(200);
@@ -189,6 +214,7 @@ describe("api feed routes", () => {
     expect(ids).toContain(idC);
     expect(ids).not.toContain(idB); // exclude self
     expect(ids).not.toContain(idA); // hidden
+    expect(ids).not.toContain(idNews); // related off a paper never surfaces legacy news rows
   });
 
   itest("GET /papers/detail cache-only (fetchOnMiss=false) → paper ter-cache", async () => {

@@ -164,7 +164,9 @@ export const FeedService = {
     id: string,
   ): Promise<FeedItemResponse | null> {
     const item = await FeedRepo.findById(db, id);
-    if (!item) return null;
+    // Berita tidak lagi disajikan; row legacy kind=news tetap di tabel tapi harus tampak
+    // "tidak ada" lewat fetch-by-id juga, bukan cuma di list — anggap sama seperti id tak ada.
+    if (!item || item.kind === "news") return null;
     const saved = await FeedInteractionRepo.findSaved(db, ownerUserId, id);
     return shapeFeedItem(item, { saved: Boolean(saved) });
   },
@@ -180,7 +182,10 @@ export const FeedService = {
     limit?: number,
   ): Promise<FeedItemResponse[]> {
     const self = await FeedRepo.findById(db, id);
-    if (!self) return [];
+    // Anchor tak ada, atau anchor itu sendiri row legacy news: kalau dilanjut, pool same-kind
+    // (kind === "news") akan menyorongkan row news lain — jadi berhenti di sini, bukan cuma
+    // filter hasil di bawah.
+    if (!self || self.kind === "news") return [];
     const n = Math.min(Math.max(limit ?? 6, 1), 8);
     const pool = await FeedRepo.listByKindRecent(db, {
       kind: self.kind,
@@ -192,6 +197,9 @@ export const FeedService = {
     const selfTopics = new Set(self.topics.map((t) => t.trim().toLowerCase()));
     return pool
       .filter((row) => !hidden.has(row.id))
+      // Defensive: pool sudah di-scope same-kind di query, tapi jaga eksplisit agar berita
+      // tak pernah lolos lewat jalur ini walau kind-scoping di atas berubah nanti.
+      .filter((row) => row.kind !== "news")
       .map((row) => ({
         row,
         overlap: row.topics.reduce(
