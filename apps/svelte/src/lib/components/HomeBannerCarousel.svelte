@@ -110,7 +110,7 @@
 {#if slides.length > 0}
 	<section aria-label="Info paket dan fitur" class="grid w-full gap-2.5">
 		<div
-			class="overflow-hidden rounded-[14px] border border-border bg-card transition-shadow duration-200 hover:shadow-sm"
+			class="overflow-hidden rounded-lg border-2 border-border bg-card"
 			onpointerenter={() => (paused = true)}
 			onpointerleave={() => (paused = false)}
 			onfocuscapture={() => (paused = true)}
@@ -138,7 +138,7 @@
 						class={cn(
 							'size-1.5 rounded-full transition-[background-color,transform] duration-200 ease-out',
 							slideIndex === active
-								? 'scale-110 bg-foreground/70'
+								? 'scale-110 bg-coral'
 								: 'bg-muted-foreground/30 hover:bg-muted-foreground/55'
 						)}
 					></button>
@@ -150,7 +150,7 @@
 
 {#snippet slideBody(slide: BannerSlide)}
 	<div class="grid min-w-0 flex-1 gap-1">
-		<p class="truncate text-[13.5px] font-semibold leading-snug text-card-foreground">
+		<p class="truncate text-control font-semibold leading-snug text-card-foreground">
 			{slide.title}
 		</p>
 		{#if slide.meter}
@@ -158,13 +158,13 @@
 				<div
 					class={cn(
 						'h-full rounded-full transition-[width] duration-500 ease-out',
-						slide.meter.low ? 'bg-amber-500' : 'bg-primary'
+						slide.meter.low ? 'bg-lemon' : 'bg-coral'
 					)}
 					style="width: {slide.meter.pct}%"
 				></div>
 			</div>
 		{/if}
-		<p class="line-clamp-2 text-[12px] leading-snug text-muted-foreground">{slide.subtitle}</p>
+		<p class="line-clamp-2 text-label leading-snug text-muted-foreground">{slide.subtitle}</p>
 	</div>
 	<div class="relative h-14 w-24 shrink-0 sm:h-16 sm:w-28">
 		{#if slide.image}

@@ -25,6 +25,7 @@
 		PaperclipIcon,
 		SquareIcon
 	} from '$lib/icons';
+	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useBillingCurrent } from '$lib/features/settings/api';
 	import { isCreditsLow } from '$lib/features/settings/lib/billing-derived';
@@ -42,12 +43,9 @@
 	import ComposerStartPanel from './ComposerStartPanel.svelte';
 	import FileChip from './FileChip.svelte';
 	import TokenizedPromptInput from './TokenizedPromptInput.svelte';
-	import type {
-		ComposerAttachment,
-		ComposerNotice,
-		ComposerSendPayload,
-		RecentThread
-	} from './composer-types';
+	import type { ComposerAttachment, ComposerNotice, ComposerSendPayload } from './composer-types';
+	import { useComposerContextRefEpochMerges } from './composer-context-refs.svelte';
+	import type { RecentThreadSummary } from '../../types';
 	import type {
 		ComposerPlaceholder,
 		ContextItemOption,
@@ -82,7 +80,7 @@
 		errorDraft?: string | null;
 		/** Landing hero: roomier collapsed row + start-panel suggestions below. */
 		showSuggestions?: boolean;
-		recentThreads?: RecentThread[];
+		recentThreads?: RecentThreadSummary[];
 		initialContent?: string;
 		placeholder?: ComposerPlaceholder;
 	} = $props();
@@ -98,9 +96,8 @@
 	let commands = $state<PromptCommand[]>([]);
 	let contextRefs = $state<ContextRef[]>([]);
 	let attachments = $state<ComposerAttachment[]>([]);
-	// @mention workspace picker: the workspace list feeds the top-level palette; drilling into a
-	// workspace fetches its context-picker artifacts on demand (query dormant until `drillWorkspaceId`
-	// is set by the tokenized editor's `onRequestWorkspaceItems`).
+	// @mention workspace picker: workspace list feeds the top-level palette; drilling fetches artifacts
+	// on demand (query dormant until `drillWorkspaceId` is set by the tokenized editor).
 	let drillWorkspaceId = $state<string | null>(null);
 	const workspacesQuery = useWorkspacesList(() => false);
 	const contextItemsQuery = useContextPickerArtifacts(() => drillWorkspaceId);
@@ -154,21 +151,13 @@
 		}
 	});
 
-	/**
-	 * Merge-pin reconciler shared by the two epoch merges (ambient + library selection): drop `removeKeys`
-	 * from the current set, then prepend `addRefs` not already present (dedup by key). One place so a fix
-	 * (e.g. key/order comparison) never misses a path. Pure reconciler.
-	 */
-	function reconcilePinnedRefs(
-		current: ContextRef[],
-		removeKeys: Set<string>,
-		addRefs: ContextRef[]
-	): ContextRef[] {
-		const kept = current.filter((ref) => !removeKeys.has(contextRefKey(ref)));
-		const keptKeys = new Set(kept.map(contextRefKey));
-		const toAdd = addRefs.filter((ref) => !keptKeys.has(contextRefKey(ref)));
-		return [...toAdd, ...kept];
-	}
+	useComposerContextRefEpochMerges(
+		mentions,
+		() => contextRefs,
+		(refs) => {
+			contextRefs = refs;
+		}
+	);
 
 	// Re-seed pre-seeded text (e.g. an Explore item) only while the user hasn't diverged (guarded effect
 	// = external-source sync; `untrack` avoids depending on `content`).
@@ -179,40 +168,6 @@
 		const current = untrack(() => content);
 		if (current === lastSeed) content = nextSeed;
 		lastSeed = nextSeed;
-	});
-
-	// Ambient auto-mention (page context / "Tanya Astra"): epoch-driven merge (documented $effect, not a
-	// derived reflex). Drop ALL ambient tokens (old + new), keep MANUAL tokens, prepend current ambient.
-	let ambientMerge = { epoch: -1, refs: [] as ContextRef[] };
-	$effect(() => {
-		const epoch = mentions.ambientEpoch;
-		if (epoch === ambientMerge.epoch) return;
-		const ambientRefs = mentions.ambientContextRefs;
-		const ambientKeys = new Set([...ambientMerge.refs, ...ambientRefs].map(contextRefKey));
-		ambientMerge = { epoch, refs: ambientRefs };
-		contextRefs = reconcilePinnedRefs(
-			untrack(() => contextRefs),
-			ambientKeys,
-			ambientRefs
-		);
-	});
-
-	// Library selection ("click-once = context") → `@paper` pills. Same epoch-merge: drop selection pills
-	// no longer selected, insert new, KEEP other pills (manual/ambient).
-	let selectionMerge = { epoch: -1, keys: [] as string[] };
-	$effect(() => {
-		const epoch = mentions.selectionEpoch;
-		if (epoch === selectionMerge.epoch) return;
-		const selectionRefs = mentions.selectionRefs;
-		const nextKeys = selectionRefs.map(contextRefKey);
-		const nextKeySet = new Set(nextKeys);
-		const removedKeys = new Set(selectionMerge.keys.filter((k) => !nextKeySet.has(k)));
-		selectionMerge = { epoch, keys: nextKeys };
-		contextRefs = reconcilePinnedRefs(
-			untrack(() => contextRefs),
-			removedKeys,
-			selectionRefs
-		);
 	});
 
 	// Two-way sync: a selection pill removed by the user in the editor → deselect the library card. Only
@@ -401,7 +356,7 @@
 <div class="flex w-full flex-col gap-8">
 	<div
 		bind:this={composerShellEl}
-		class="@container/composer w-full overflow-hidden rounded-[24px] border border-border/85 bg-card/95 text-foreground"
+		class="aqsha-composer-shell @container/composer w-full text-foreground"
 	>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
@@ -422,18 +377,18 @@
 			{#if notice}
 				{@const isCooldown = Boolean(notice.retryAt)}
 				<div
-					class="grid gap-2 border-b border-border/60 px-4 py-2.5"
+					class="grid gap-2 border-b border-border px-4 py-2.5"
 					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
 				>
 					{#if isCooldown}
 						<div
-							class="rounded-lg border border-lemon-soft-border bg-lemon-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-lemon-foreground"
+							class="rounded-lg border-2 border-lemon-soft-border bg-lemon-soft px-2.5 py-2 text-label font-medium leading-5 text-lemon-foreground"
 						>
 							{notice.message}{secondsLeft > 0 ? ` (${secondsLeft} detik)` : ''}
 						</div>
 					{:else}
 						<div
-							class="rounded-lg border border-coral-soft-border bg-coral-soft px-2.5 py-2 text-[11px] font-medium leading-5 text-coral-foreground"
+							class="rounded-lg border-2 border-coral-soft-border bg-coral-soft px-2.5 py-2 text-label font-medium leading-5 text-coral-foreground"
 						>
 							{notice.message}
 							<a
@@ -461,7 +416,7 @@
 					{/each}
 					{#if uploadError}
 						<div
-							class="inline-flex max-w-full min-h-7 items-start gap-1.5 rounded-full border border-coral-soft-border bg-coral-soft px-2.5 py-1 text-[11px] font-medium leading-5 text-coral-foreground"
+							class="inline-flex max-w-full min-h-7 items-start gap-1.5 rounded-full border-2 border-coral-soft-border bg-coral-soft px-2.5 py-1 text-label font-medium leading-5 text-coral-foreground"
 						>
 							<Icon icon={AlertCircleIcon} class="mt-0.5 size-3.5 shrink-0" />
 							<span>{uploadError}</span>
@@ -510,7 +465,7 @@
 							{ambientWorkspaceId}
 							{workspaceItems}
 							workspaceItemsLoading={contextItemsQuery.isLoading}
-							onRequestWorkspaceItems={(id) => (drillWorkspaceId = id)}
+							bind:drillWorkspaceId
 							mobilePaletteAnchor={composerShellEl}
 						/>
 					</div>
@@ -542,19 +497,19 @@
 		{#if !disabled}
 			<!-- Affordance hint -->
 			<div
-				class="flex items-center gap-2 border-t border-border/50 bg-foreground/[0.02] px-3.5 py-2 text-muted-foreground"
+				class="flex items-center gap-2 border-t border-border bg-muted/30 px-3.5 py-2 text-muted-foreground"
 			>
 				<p
-					class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] font-medium leading-4"
+					class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-label font-medium leading-4"
 				>
 					{@render hintKey('@')}
 					<span>tautkan konteks</span>
-					<span class="text-muted-foreground/40" aria-hidden="true">·</span>
+					<span aria-hidden="true">·</span>
 					{@render hintKey('/')}
 					<span>jalankan perintah</span>
 					{#if showCredits && billing.data}
-						<span class="text-muted-foreground/40" aria-hidden="true">·</span>
-						<span class={cn(creditsLow && 'text-amber-600 dark:text-amber-500')}>
+						<span aria-hidden="true">·</span>
+						<span class={cn(creditsLow && 'text-lemon-foreground')}>
 							sisa {billing.data.creditsRemaining.toLocaleString('id-ID')} kredit
 						</span>
 					{/if}
@@ -577,18 +532,19 @@
 
 {#snippet hintKey(label: string)}
 	<kbd
-		class="inline-flex h-4 min-w-4 items-center justify-center rounded-[5px] border border-border/70 bg-background px-1 font-mono text-[10px] font-semibold leading-none text-foreground"
+		class="lip-static inline-flex h-5 min-w-5 items-center justify-center rounded-sm border-2 border-border bg-background px-1 font-mono text-micro font-semibold leading-none text-foreground"
 	>
 		{label}
 	</kbd>
 {/snippet}
 
 {#snippet uploadButton()}
-	<button
-		type="button"
+	<Button
+		variant="ghost"
+		size="icon-sm"
 		disabled={!canAttach}
 		onclick={() => fileInputEl?.click()}
-		class="aqsha-composer-toolbar-btn flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-all duration-150 hover:bg-muted/30 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+		class="shrink-0 rounded-full"
 		title={threadId ? 'Lampirkan berkas' : 'Kirim pesan dulu untuk melampirkan berkas'}
 		aria-label="Lampirkan berkas"
 	>
@@ -597,38 +553,28 @@
 		{:else}
 			<Icon icon={PaperclipIcon} class="size-3.5" />
 		{/if}
-	</button>
+	</Button>
 {/snippet}
 
 {#snippet submitButton()}
 	{#if busy && onStop && !canSend}
-		<button
-			type="button"
-			onclick={onStop}
-			class="aqsha-composer-toolbar-btn inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-coral-soft-border bg-coral-soft px-2.5 text-[11px] font-semibold text-coral-foreground hover:bg-coral-soft"
-			aria-label="Hentikan"
-		>
+		<Button variant="destructive" size="sm" onclick={onStop} class="shrink-0" aria-label="Hentikan">
 			<Icon icon={SquareIcon} class="size-3" />
 			Stop
-		</button>
+		</Button>
 	{:else}
-		<button
-			type="button"
+		<Button
+			size="icon-sm"
 			onclick={() => void submit()}
 			disabled={!canSend}
 			aria-label="Kirim"
-			class={cn(
-				'aqsha-composer-toolbar-btn flex size-8 shrink-0 items-center justify-center rounded-full shadow-none transition-all duration-200 active:scale-95',
-				canSend
-					? 'bg-primary text-primary-foreground hover:bg-primary/90'
-					: 'cursor-not-allowed bg-muted/30 text-muted-foreground/30'
-			)}
+			class="shrink-0"
 		>
 			{#if isSending}
 				<Icon icon={Loader2Icon} class="size-3.5 animate-spin" />
 			{:else}
 				<Icon icon={ArrowUpIcon} class="size-3.5" />
 			{/if}
-		</button>
+		</Button>
 	{/if}
 {/snippet}

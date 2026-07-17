@@ -50,7 +50,7 @@
 			case 'completed':
 				return 'text-foreground';
 			case 'failed':
-				return 'text-red-500';
+				return 'text-destructive';
 			default:
 				return 'text-muted-foreground';
 		}
@@ -89,7 +89,7 @@
 		{#if model.status === 'running'}
 			<Spinner class="mt-0.5 size-3.5 shrink-0 text-primary" />
 		{:else if model.status === 'failed'}
-			<Icon icon={XCircleIcon} class="mt-0.5 size-3.5 shrink-0 text-red-500" />
+			<Icon icon={XCircleIcon} class="mt-0.5 size-3.5 shrink-0 text-destructive" />
 		{:else if model.status === 'denied'}
 			<Icon icon={XCircleIcon} class="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
 		{:else if model.kind === 'subagent-call'}
@@ -114,7 +114,7 @@
 	{#if model.description}
 		<Badge
 			variant="secondary"
-			class="mt-px shrink-0 rounded-full bg-muted/60 px-2 py-0 text-[11px] font-medium text-muted-foreground"
+			class="mt-px shrink-0 rounded-full bg-muted/60 px-2 py-0 text-label font-medium text-muted-foreground"
 		>
 			{model.description}
 		</Badge>
@@ -124,7 +124,7 @@
 {#snippet scalarRows()}
 	{#if inputRows.length > 0}
 		<dl class="grid gap-1">
-			<dt class="text-[11px] font-medium text-muted-foreground/70">Masukan</dt>
+			<dt class="text-label font-medium text-muted-foreground">Masukan</dt>
 			{#each inputRows as row (row.key)}
 				<div class="flex min-w-0 gap-1.5">
 					<dt class="shrink-0 text-muted-foreground">{row.label}:</dt>
@@ -135,14 +135,14 @@
 	{/if}
 	{#if outputRows.length > 0}
 		<dl class="grid gap-1">
-			<dt class="text-[11px] font-medium text-muted-foreground/70">Hasil</dt>
+			<dt class="text-label font-medium text-muted-foreground">Hasil</dt>
 			{#each outputRows as row (row.key)}
 				<div class="flex min-w-0 gap-1.5">
 					<dt class="shrink-0 text-muted-foreground">{row.label}:</dt>
 					<dd
 						class={cn(
 							'min-w-0 break-words',
-							model.status === 'failed' ? 'text-red-500' : 'text-foreground'
+							model.status === 'failed' ? 'text-destructive' : 'text-foreground'
 						)}
 					>
 						{row.value}
@@ -206,7 +206,7 @@
 		</Collapsible.Trigger>
 		<Collapsible.Content>
 			{#if detail && detail.kind === 'search'}
-				<div class="mt-1.5 text-[12px]">
+				<div class="mt-1.5 text-label">
 					<DeepSearchCards subSearches={detail.subSearches} {sourcesBySubQ} {turnId} />
 				</div>
 			{:else if detail && detail.kind === 'search-flat'}
@@ -216,7 +216,7 @@
 						? () => interactions.openStep?.(model.toolCallId)
 						: undefined}
 				>
-					<div class="text-[12px]"><SourceCardList sources={detail.sources} /></div>
+					<div class="text-label"><SourceCardList sources={detail.sources} /></div>
 				</ScrollDetailTrigger>
 			{:else if detail && detail.kind === 'plan'}
 				<ScrollDetailTrigger
@@ -225,7 +225,7 @@
 						? () => interactions.openPlan?.(turnId)
 						: undefined}
 				>
-					<div class="p-2 text-[12px]">{@render deepDetailBody(detail)}</div>
+					<div class="p-2 text-label">{@render deepDetailBody(detail)}</div>
 				</ScrollDetailTrigger>
 			{:else if detail && detail.kind === 'text'}
 				<ScrollDetailTrigger
@@ -234,7 +234,7 @@
 						? () => interactions.openStep?.(model.toolCallId)
 						: undefined}
 				>
-					<div class="p-2 text-[12px]">{@render deepDetailBody(detail)}</div>
+					<div class="p-2 text-label">{@render deepDetailBody(detail)}</div>
 				</ScrollDetailTrigger>
 			{:else if hasLongScalar}
 				<ScrollDetailTrigger
@@ -243,13 +243,13 @@
 						? () => interactions.openStep?.(model.toolCallId)
 						: undefined}
 				>
-					<div class="grid gap-2 p-2 text-[12px]">
+					<div class="grid gap-2 p-2 text-label">
 						{@render scalarRows()}
 						{#if detail}{@render deepDetailBody(detail)}{/if}
 					</div>
 				</ScrollDetailTrigger>
 			{:else}
-				<div class="mt-1.5 grid gap-2 text-[12px]">
+				<div class="mt-1.5 grid gap-2 text-label">
 					{@render scalarRows()}
 					{#if detail}{@render deepDetailBody(detail)}{/if}
 				</div>

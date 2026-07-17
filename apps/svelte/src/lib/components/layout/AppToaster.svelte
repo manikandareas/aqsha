@@ -4,10 +4,9 @@
 
 	/**
 	 * Global toast host (`svelte-sonner`). Surface + kind hues live in
-	 * `@aqsha/ui-svelte` `.alert-surface` / `[data-sonner-toast]` CSS — this
-	 * host only wires layout, typography, and action chrome. Theme follows
-	 * the resolved mode-watcher mode; `undefined` during SSR falls back to
-	 * `light`.
+	 * `src/styles/toast.css` (alert-surface formula); this host only wires
+	 * layout, typography, and action chrome. Theme follows the resolved
+	 * mode-watcher mode; `undefined` during SSR falls back to `light`.
 	 */
 </script>
 
@@ -24,9 +23,9 @@
 			title: 'text-control! font-semibold!',
 			description: 'text-label! text-muted-foreground!',
 			actionButton:
-				'border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold! shadow-[0_2px_0_0_var(--border)]! hover:bg-muted!',
+				'btn-lip! border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold! hover:bg-muted!',
 			cancelButton:
-				'border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold! shadow-[0_2px_0_0_var(--border)]! hover:bg-muted!',
+				'btn-lip! border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold! hover:bg-muted!',
 			closeButton: 'border-2! border-border! bg-card! text-foreground! hover:bg-muted!'
 		}
 	}}

@@ -11,8 +11,8 @@
 	>
 		<Icon icon={SearchIcon} class="size-4" />
 	</span>
-	<p class="text-[12.5px] font-medium text-foreground">{title}</p>
+	<p class="text-control font-medium text-foreground">{title}</p>
 	{#if hint}
-		<p class="text-[11px] text-muted-foreground">{@render hint()}</p>
+		<p class="text-micro text-muted-foreground">{@render hint()}</p>
 	{/if}
 </div>

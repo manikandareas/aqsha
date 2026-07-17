@@ -3,67 +3,48 @@
 	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
-	 * Text shimmer — a moving highlight sweeping across the text (Astra "working" labels). Pure CSS
-	 * keyframe (`--spread` scales with text length) so it needs no motion runtime and honours
-	 * `prefers-reduced-motion` (the animation is disabled under reduced motion via the utility class).
+	 * Text shimmer — opacity pulse on muted foreground (Astra "working" labels).
+	 * Solid color only (no gradients); honours `prefers-reduced-motion`.
 	 */
 	let {
 		children,
 		as = 'p',
 		class: className,
-		text,
-		spread = 2
+		text
 	}: {
 		children?: Snippet;
 		as?: 'p' | 'span' | 'div';
 		class?: string;
-		/** Text content (used to size the shimmer spread); pass when not using the children snippet. */
+		/** Text content when not using the children snippet. */
 		text?: string;
-		spread?: number;
 	} = $props();
-
-	const dynamicSpread = $derived((text?.length ?? 8) * spread);
 </script>
 
-<svelte:element
-	this={as}
-	class={cn('aqsha-shimmer relative inline-block', className)}
-	style="--spread: {dynamicSpread}px"
->
+<svelte:element this={as} class={cn('aqsha-text-shimmer relative inline-block', className)}>
 	{#if children}{@render children()}{:else}{text}{/if}
 </svelte:element>
 
 <style>
-	:global(.aqsha-shimmer) {
-		background-image:
-			linear-gradient(
-				90deg,
-				transparent calc(50% - var(--spread)),
-				var(--color-background),
-				transparent calc(50% + var(--spread))
-			),
-			linear-gradient(var(--color-muted-foreground), var(--color-muted-foreground));
-		background-repeat: no-repeat, padding-box;
-		background-size:
-			250% 100%,
-			auto;
-		background-clip: text;
-		color: transparent;
-		animation: aqsha-shimmer-move 2s linear infinite;
+	/* Dedicated class so text-shimmer never collides with block skeleton loaders. */
+	:global(.aqsha-text-shimmer) {
+		color: var(--color-muted-foreground);
+		animation: aqsha-text-shimmer-pulse 1.4s ease-in-out infinite;
 	}
 
-	@keyframes aqsha-shimmer-move {
-		from {
-			background-position: 100% center;
+	@keyframes aqsha-text-shimmer-pulse {
+		0%,
+		100% {
+			opacity: 0.45;
 		}
-		to {
-			background-position: 0% center;
+		50% {
+			opacity: 1;
 		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		:global(.aqsha-shimmer) {
+		:global(.aqsha-text-shimmer) {
 			animation: none;
+			opacity: 1;
 		}
 	}
 </style>

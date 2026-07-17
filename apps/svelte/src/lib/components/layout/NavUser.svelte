@@ -4,6 +4,7 @@
 	import * as Avatar from '@aqsha/ui-svelte/components/avatar';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { compactMenuItemClass } from '@aqsha/ui-svelte/recipes';
 	import ThemeMenuSub from './ThemeMenuSub.svelte';
 	import { Icon, LogOutIcon, MoreVerticalIcon, SettingsIcon } from '$lib/icons';
 	import { getSignOut, viewerContext } from '$lib/auth';
@@ -24,9 +25,6 @@
 		await clerkSignOut();
 		await goto(resolve('/(auth)/sign-in'), { invalidateAll: true });
 	}
-
-	const menuItemClass =
-		'h-9 gap-2 rounded-sm px-2 text-[13px] font-medium text-popover-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground';
 </script>
 
 <Sidebar.Menu>
@@ -85,7 +83,7 @@
 					</div>
 				</DropdownMenu.Label>
 				<DropdownMenu.Separator />
-				<DropdownMenu.Item class={menuItemClass}>
+				<DropdownMenu.Item class={compactMenuItemClass}>
 					{#snippet child({ props })}
 						<a href={resolve('/app/settings/overview')} {...props}>
 							<Icon icon={SettingsIcon} />
@@ -95,7 +93,7 @@
 				</DropdownMenu.Item>
 				<ThemeMenuSub />
 				<DropdownMenu.Separator />
-				<DropdownMenu.Item class={menuItemClass} onSelect={signOut}>
+				<DropdownMenu.Item class={compactMenuItemClass} onSelect={signOut}>
 					<Icon icon={LogOutIcon} />
 					<span class="truncate">Sign out</span>
 				</DropdownMenu.Item>

@@ -2,13 +2,29 @@
 // Production (API flow) and design-lab (local session) both drive OnboardingJourney through this.
 
 import {
-	BACK_TARGET,
+	backStep,
 	canPrimary,
 	primaryIntent,
 	type OnboardingAnswers,
 	type OnboardingStep
 } from './onboarding-machine';
-import type { JourneyActions, JourneyViewModel } from './journey-view';
+
+export type JourneyViewModel = {
+	step: OnboardingStep;
+	answers: OnboardingAnswers;
+	isSubmitting: boolean;
+	errorMessage: string | null;
+	canPrimary: boolean;
+};
+
+export type JourneyActions = {
+	back: () => void;
+	primary: () => void;
+	setBackground: (id: string) => void;
+	toggleInterest: (id: string) => void;
+	setSource: (id: string) => void;
+	setSourceOther: (value: string) => void;
+};
 
 /** Minimal session surface both drivers expose (getters so Svelte runes stay reactive). */
 export type JourneySession = {
@@ -39,7 +55,7 @@ export function journeyActionsOf(
 ): JourneyActions {
 	return {
 		back() {
-			const target = BACK_TARGET[session.step];
+			const target = backStep(session.step);
 			if (target) session.setStep(target);
 		},
 		primary() {
@@ -56,6 +72,8 @@ async function runPrimary(
 	session: JourneySession,
 	onSubmit: () => void | Promise<void>
 ): Promise<void> {
+	// Domain gate — do not rely on the UI disabled state alone.
+	if (!canPrimary(session.step, session.answers, session.isSubmitting)) return;
 	const intent = primaryIntent(session.step);
 	if (intent.type === 'advance') {
 		session.setStep(intent.step);

@@ -18,7 +18,7 @@ Raw-source package: exports uncompiled `.svelte`/`.ts`; the consuming app's Vite
 
 2. **tw-animate-css** — animation classes used by overlay components (dialog, popover, dropdown) come from `tw-animate-css`; the consumer must import it (this package does not ship it).
 
-3. **Fonts** — tokens reference Inter, Fredoka, JetBrains Mono, and Caveat; the consumer self-hosts or loads them.
+3. **Fonts** — tokens reference Inter, Nunito Sans, JetBrains Mono, and Caveat; the consumer self-hosts or loads them.
 
 4. **Dark mode** — tokens use `@custom-variant dark (&:is(.dark *))`; toggle the `.dark` class (e.g. mode-watcher).
 

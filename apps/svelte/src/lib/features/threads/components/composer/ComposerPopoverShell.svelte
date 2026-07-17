@@ -6,6 +6,6 @@
 	let { children }: { children: Snippet } = $props();
 </script>
 
-<div class="rounded-xl bg-popover p-0">
+<div class="rounded-md bg-popover p-0">
 	{@render children()}
 </div>

@@ -64,7 +64,7 @@
 		ambientWorkspaceId = null,
 		workspaceItems,
 		workspaceItemsLoading = false,
-		onRequestWorkspaceItems,
+		drillWorkspaceId = $bindable<string | null>(null),
 		mobilePaletteAnchor = null
 	}: {
 		value: string;
@@ -84,7 +84,7 @@
 		ambientWorkspaceId?: string | null;
 		workspaceItems?: ContextItemOption[];
 		workspaceItemsLoading?: boolean;
-		onRequestWorkspaceItems?: (workspaceId: string | null) => void;
+		drillWorkspaceId?: string | null;
 		/** Palette anchor on mobile: the composer shell element so the popover is shell-width + centred. */
 		mobilePaletteAnchor?: HTMLElement | null;
 	} = $props();
@@ -105,7 +105,6 @@
 
 	let slashFilterQuery = $state<string | null>(null);
 	let mentionFilterQuery = $state<string | null>(null);
-	let drillWorkspaceId = $state<string | null>(null);
 	let hoveredChip = $state<HTMLElement | null>(null);
 
 	const slashOpen = $derived(slashFilterQuery !== null);
@@ -254,7 +253,6 @@
 		// Reset the drill once the mention palette is closed.
 		if (mentionFilterQuery === null && drillWorkspaceId !== null) {
 			drillWorkspaceId = null;
-			onRequestWorkspaceItems?.(null);
 		}
 	}
 
@@ -307,7 +305,6 @@
 			})
 		);
 		drillWorkspaceId = null;
-		onRequestWorkspaceItems?.(null);
 		setPaletteDismissed(false);
 		syncEditorState();
 		focusEditor();
@@ -319,7 +316,6 @@
 		removeMentionTokenBeforeCursor(editor);
 		insertPlainTextAtSelection('@');
 		drillWorkspaceId = option.workspaceId;
-		onRequestWorkspaceItems?.(option.workspaceId);
 		setPaletteDismissed(false);
 		syncEditorState();
 		focusEditor();
@@ -338,7 +334,6 @@
 			})
 		);
 		drillWorkspaceId = null;
-		onRequestWorkspaceItems?.(null);
 		setPaletteDismissed(false);
 		syncEditorState();
 		focusEditor();
@@ -346,7 +341,6 @@
 
 	function handleBackToWorkspaces(): void {
 		drillWorkspaceId = null;
-		onRequestWorkspaceItems?.(null);
 		focusEditor();
 	}
 
@@ -488,7 +482,7 @@
 	<div
 		bind:this={editorWrapperEl}
 		class={cn(
-			'relative w-full min-w-0 text-[12.5px] leading-[18px] text-foreground',
+			'relative w-full min-w-0 text-field leading-5 text-foreground',
 			isCollapsed && 'flex min-h-8 items-center',
 			className
 		)}
@@ -496,7 +490,7 @@
 		{#if isEditorEmpty}
 			<span
 				class={cn(
-					'pointer-events-none absolute left-0 text-[12.5px] font-normal text-muted-foreground',
+					'pointer-events-none absolute left-0 text-field font-normal text-muted-foreground',
 					isCollapsed ? 'inset-y-0 flex items-center' : 'top-[3px]'
 				)}
 			>
@@ -523,7 +517,7 @@
 					: undefined}
 			class={cn(
 				'max-h-36 w-full overflow-y-auto break-words whitespace-pre-wrap text-foreground caret-primary outline-none',
-				isCollapsed ? 'min-h-8 py-[7px] leading-[18px]' : 'min-h-6 py-1'
+				isCollapsed ? 'min-h-8 py-1.5 leading-5' : 'min-h-6 py-1'
 			)}
 			oninput={updateEditorFromInput}
 			onblur={syncEditorState}

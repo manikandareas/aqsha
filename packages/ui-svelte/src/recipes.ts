@@ -7,6 +7,10 @@
 export const menuItemClass =
 	"relative flex cursor-default items-center gap-1.5 rounded-sm px-[11px] py-2 text-control font-medium text-foreground outline-hidden select-none focus:bg-mint-soft data-highlighted:bg-mint-soft data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5";
 
+/** Sidebar / account-menu rows: shorter hit target, popover ink, 16px icons. */
+export const compactMenuItemClass =
+	'h-9 gap-2 rounded-sm px-2 text-[13px] font-medium text-popover-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground';
+
 export const menuItemDestructiveClass =
 	'data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:*:[svg]:text-destructive';
 

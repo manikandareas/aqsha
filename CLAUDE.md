@@ -102,4 +102,4 @@ Example — `// Runes-only mode (plan §3.4) turns legacy syntax into a build er
 `apps/svelte` carries its own design context for the Impeccable design skill:
 
 - `apps/svelte/PRODUCT.md` — register `product`, platform `web`. Primary users are student researchers; positioning is a blend of a serious research engine (Astra, `/deep`, citations) with an approachable student-writing workspace ("Ideas, neatly linked"). Personality: calm, clear, playful. Anti-references: fear-driven AI-safety tone, generic AI SaaS, strict academic/institutional severity. Target WCAG 2.2 AA.
-- `apps/svelte/DESIGN.md` — the visual system captured from `src/styles/globals.css` (warm-cream OKLCH palette, Inter + Fredoka + JetBrains Mono + Caveat, mint/lavender/coral/lemon accents, keycap buttons, full dark mode). Consult before changing tokens or building new svelte screens.
+- `apps/svelte/DESIGN.md` — the visual system captured from `src/styles/globals.css` (warm-cream OKLCH palette, Inter + Nunito Sans + JetBrains Mono + Caveat, mint/lavender/coral/lemon accents, keycap buttons, full dark mode). Consult before changing tokens or building new svelte screens.

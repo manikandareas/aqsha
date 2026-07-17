@@ -4,7 +4,6 @@ export { useComposerAgentSelection, type ComposerAgentKind } from './agent-selec
 export type {
 	ComposerAttachment,
 	ComposerNotice,
-	ComposerSendPayload,
-	RecentThread
+	ComposerSendPayload
 } from './composer-types';
 export type { ComposerPlaceholder } from './palette-types';

@@ -8,7 +8,8 @@
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import { clerkTokenGetter } from '$lib/auth/token';
 	import { useThread } from '$lib/features/threads/api';
-	import { threadPageTitle } from '$lib/features/threads/types';
+	import { threadPageTitle, threadTitle } from '$lib/features/threads/types';
+	import { useRecentThreadSummaries } from '$lib/features/threads/use-recent-thread-summaries.svelte';
 	import { ASTRA_AGENT_ID, createMastraClient } from '$lib/features/threads/lib/mastra-client';
 	import { mastraMessagesToTimeline } from '$lib/features/threads/lib/mastra-timeline';
 	import { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
@@ -65,6 +66,13 @@
 	);
 	const threadAgentKind = $derived<'lite' | 'pro'>(
 		threadDetail.data?.agentKind === 'pro' ? 'pro' : 'lite'
+	);
+
+	const recentThreads = useRecentThreadSummaries(
+		() => isExistingThread && clerkLoaded && Boolean(userId)
+	);
+	const headerTitle = $derived(
+		isExistingThread ? threadTitle(threadDetail.data ?? { title: null }) : 'Thread baru'
 	);
 
 	const pageTitle = $derived(threadPageTitle(threadDetail.data));
@@ -149,6 +157,9 @@
 			{#snippet main()}
 				<ThreadHeader
 					threadId={threadIdProp}
+					title={headerTitle}
+					isExisting={isExistingThread}
+					recentThreads={recentThreads.data}
 					showLeftTrigger={!isLeftSidebarOpen}
 					onToggleLeftSidebar={() => leftSidebar.toggle()}
 					contextPanelOpen={sideOpen}

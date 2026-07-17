@@ -4,6 +4,7 @@
 export { cn } from './utils.js';
 export {
 	menuItemClass,
+	compactMenuItemClass,
 	menuItemDestructiveClass,
 	menuIndicatorItemClass,
 	menuSubTriggerClass,

@@ -1,0 +1,32 @@
+/* Sonner toast chrome — app-owned because svelte-sonner is only consumed here.
+   Edge/fill formulas live on --alert-edge/--alert-fill in @aqsha/ui-svelte tokens;
+   this file only binds Sonner to that contract and adds the floating ambient shadow. */
+
+@layer components {
+	[data-sonner-toast] {
+		--alert-hue: var(--border);
+		border: 2px solid var(--alert-edge) !important;
+		background-color: var(--alert-fill) !important;
+		color: var(--foreground) !important;
+		border-radius: var(--radius-lg) !important;
+		box-shadow:
+			0 3px 0 0 var(--alert-edge),
+			0 8px 24px rgb(0 0 0 / 0.2) !important;
+	}
+
+	[data-sonner-toast][data-type='info'] {
+		--alert-hue: var(--lavender);
+	}
+
+	[data-sonner-toast][data-type='success'] {
+		--alert-hue: var(--mint);
+	}
+
+	[data-sonner-toast][data-type='warning'] {
+		--alert-hue: var(--lemon);
+	}
+
+	[data-sonner-toast][data-type='error'] {
+		--alert-hue: var(--destructive);
+	}
+}

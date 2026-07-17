@@ -18,7 +18,7 @@
 </script>
 
 <div class="flex items-center justify-between gap-2 border-b border-border/60 px-3 pt-2.5 pb-2">
-	<div class="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-foreground">
+	<div class="flex min-w-0 items-center gap-1.5 text-label font-semibold text-foreground">
 		{#if onBack}
 			<button
 				type="button"
@@ -38,7 +38,7 @@
 		<span class="truncate">{title}</span>
 		{#if count != null && count > 0}
 			<span
-				class="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-semibold text-muted-foreground"
+				class="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-micro font-semibold text-muted-foreground"
 			>
 				{count}
 			</span>

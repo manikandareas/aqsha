@@ -37,7 +37,7 @@
 </script>
 
 <section
-	class="w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border-2 border-border bg-card text-card-foreground shadow-aqsha sm:w-[340px]"
+	class="lip-pop w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border-2 border-border bg-card text-card-foreground sm:w-[340px]"
 >
 	<header class="flex items-center gap-2.5 px-3 py-2.5">
 		<WorkspaceUploadToastStatusIcon status={summary.tone} class="size-4" />

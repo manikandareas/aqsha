@@ -33,6 +33,6 @@
 	</header>
 	<div class="w-full">{@render children()}</div>
 	{#if hint}
-		<p class="max-w-sm text-[11px] leading-5 text-muted-foreground">{@render hint()}</p>
+		<p class="max-w-sm text-label leading-5 text-muted-foreground">{@render hint()}</p>
 	{/if}
 </div>

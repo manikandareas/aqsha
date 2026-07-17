@@ -3,10 +3,10 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, ArrowLeftIcon, ArrowRight, Loader2Icon, MoonIcon, SunIcon } from '$lib/icons';
 	import { themeContext } from '$lib/theme';
-	import { BACK_TARGET, ONBOARDING_STEPS, PRIMARY_LABEL } from '../lib/onboarding-machine';
+	import { backStep, ONBOARDING_STEPS, PRIMARY_LABEL } from '../lib/onboarding-machine';
 	import { STEP_ACCENT } from '../lib/onboarding-content';
 	import { pageEnter, pageExit } from '../lib/journey-transitions';
-	import type { JourneyActions, JourneyViewModel } from '../lib/journey-view';
+	import type { JourneyActions, JourneyViewModel } from '../lib/journey-driver';
 	import JourneyOrnaments from './JourneyOrnaments.svelte';
 	import OnboardingStepIndicator from './OnboardingStepIndicator.svelte';
 	import WelcomeStep from './WelcomeStep.svelte';
@@ -35,7 +35,7 @@
 
 	const reduce = $derived(prefersReducedMotion.current);
 	const stepNumber = $derived(ONBOARDING_STEPS.indexOf(model.step) + 1);
-	const backTarget = $derived(BACK_TARGET[model.step]);
+	const backTarget = $derived(backStep(model.step));
 	const accent = $derived(STEP_ACCENT[model.step]);
 
 	// Resolved mode is undefined during SSR; default to light so the pre-hydration icon is stable.

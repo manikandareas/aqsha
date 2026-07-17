@@ -53,7 +53,10 @@ describe('journey driver', () => {
 	});
 
 	it('advances on primary and only calls onSubmit at finish', async () => {
-		const session = sessionStub({ step: 'source' });
+		const session = sessionStub({
+			step: 'source',
+			answers: { ...EMPTY_ANSWERS, background: 'dosen', interests: ['a', 'b', 'c'], source: 'teman' }
+		});
 		const onSubmit = vi.fn();
 		const actions = journeyActionsOf(session, onSubmit);
 
@@ -66,7 +69,33 @@ describe('journey driver', () => {
 		expect(onSubmit).toHaveBeenCalledOnce();
 	});
 
-	it('backs via BACK_TARGET', () => {
+	it('ignores primary when the current step is invalid', async () => {
+		const session = sessionStub({ step: 'source' });
+		const onSubmit = vi.fn();
+		journeyActionsOf(session, onSubmit).primary();
+		await Promise.resolve();
+		expect(session.steps).toEqual([]);
+		expect(onSubmit).not.toHaveBeenCalled();
+	});
+
+	it('ignores primary while submitting', async () => {
+		const session = sessionStub({
+			step: 'finish',
+			answers: {
+				...EMPTY_ANSWERS,
+				background: 'dosen',
+				interests: ['a', 'b', 'c'],
+				source: 'teman'
+			},
+			isSubmitting: true
+		});
+		const onSubmit = vi.fn();
+		journeyActionsOf(session, onSubmit).primary();
+		await Promise.resolve();
+		expect(onSubmit).not.toHaveBeenCalled();
+	});
+
+	it('backs via backStep', () => {
 		const session = sessionStub({ step: 'interests' });
 		journeyActionsOf(session, vi.fn()).back();
 		expect(session.steps).toEqual(['background']);

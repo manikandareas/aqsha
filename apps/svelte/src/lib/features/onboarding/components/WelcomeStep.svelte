@@ -13,7 +13,7 @@
 		<div style="--i: 2">
 			<!-- The Feynman quote as an index card pinned onto the desk. -->
 			<div
-				class="relative mx-auto mt-10 max-w-xl -rotate-1 rounded-lg border-2 border-border bg-card p-5 text-left shadow-soft-card"
+				class="relative mx-auto mt-10 max-w-xl -rotate-1 rounded-lg border-2 border-border bg-card p-5 text-left"
 			>
 				<span
 					aria-hidden="true"
@@ -38,7 +38,9 @@
 						· pidato Caltech, 1974
 					</figcaption>
 				</figure>
-				<p class="mt-3.5 border-t-2 border-dashed border-border pt-3 text-sm leading-relaxed text-muted-foreground">
+				<p
+					class="mt-3.5 border-t-2 border-dashed border-border pt-3 text-sm leading-relaxed text-muted-foreground"
+				>
 					{FEYNMAN_QUOTE.interpretation}
 				</p>
 			</div>

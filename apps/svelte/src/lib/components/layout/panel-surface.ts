@@ -41,9 +41,9 @@ export const PANEL_INLINE_MEDIA_QUERY = '(min-width: 1100px)';
  */
 export const PANEL_TRANSITION_MS = 300;
 
-/** Compact glass header bar — sticky, translucent + backdrop-blur, no border. */
+/** Compact solid header bar — sticky, opaque surface over a 1px hairline (internal divider). */
 export const panelHeaderBarClass =
-	'sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-3 bg-background/70 px-5 backdrop-blur-xl @2xl:px-6';
+	'sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-5 @2xl:px-6';
 
 /** Full-height, full-bleed flex body column — the scrollable panel/board body with no card. */
 export const panelBodyColumnClass = 'flex min-h-0 flex-1 flex-col overflow-hidden bg-background';

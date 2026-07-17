@@ -5,6 +5,7 @@
 @import 'tw-animate-css';
 @import '@aqsha/ui-svelte/styles/tokens.css';
 @import '@aqsha/ui-svelte/styles/components.css';
+@import './styles/toast.css';
 @import './styles/globals.css';
 
 /* Tailwind v4 skips node_modules/gitignored paths, so the raw-source workspace

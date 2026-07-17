@@ -142,7 +142,7 @@
 										</ComposerPopoverBadge>
 									{/if}
 								{/if}
-								<span class="font-mono text-[10.5px] text-muted-foreground/70">{item.slug}</span>
+								<span class="font-mono text-micro text-muted-foreground/70">{item.slug}</span>
 							{/snippet}
 						</ComposerPopoverItem>
 					{/each}

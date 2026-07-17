@@ -47,9 +47,9 @@
 		if (!disabled) onSelect();
 	}}
 	class={cn(
-		'group/cmd relative flex cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 text-[13px]',
+		'group/cmd relative flex cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 text-control',
 		showDescription ? 'items-start' : 'items-center',
-		active ? 'bg-sky-soft/60' : 'hover:bg-muted/60',
+		active ? 'bg-mint-soft' : 'hover:bg-mint-soft/60',
 		disabled && 'cursor-not-allowed opacity-50',
 		trailing && pinTrailing && 'pr-8'
 	)}
@@ -58,7 +58,7 @@
 		class={cn(
 			'inline-flex size-7 shrink-0 items-center justify-center rounded-md',
 			showDescription && 'mt-0.5',
-			active ? 'bg-sky-soft text-sky-foreground' : 'bg-muted text-muted-foreground'
+			active ? 'bg-mint-soft text-mint-foreground' : 'bg-muted text-muted-foreground'
 		)}
 	>
 		{#if emoji}
@@ -70,7 +70,7 @@
 	<span class="flex min-w-0 flex-1 flex-col">
 		<span class={cn('truncate font-medium leading-5 text-foreground', titleClass)}>{title}</span>
 		{#if showDescription}
-			<span class="mt-0.5 text-[11.5px] leading-4 whitespace-normal text-muted-foreground">
+			<span class="mt-0.5 text-label leading-4 whitespace-normal text-muted-foreground">
 				{description}
 			</span>
 		{/if}

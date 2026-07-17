@@ -26,13 +26,23 @@ export const EMPTY_ANSWERS: OnboardingAnswers = {
 
 export const HOME_AFTER_ONBOARDING = '/app';
 
-/** Where the "Kembali" button goes per step. Absent → no back button. */
-export const BACK_TARGET: Partial<Record<OnboardingStep, OnboardingStep>> = {
-	background: 'welcome',
-	interests: 'background',
-	source: 'interests',
-	finish: 'source'
-};
+function stepIndex(step: OnboardingStep): number {
+	return ONBOARDING_STEPS.indexOf(step);
+}
+
+/** Next step in the journey, or undefined on the terminal step. */
+export function advanceStep(step: OnboardingStep): OnboardingStep | undefined {
+	const index = stepIndex(step);
+	if (index < 0 || index >= ONBOARDING_STEPS.length - 1) return undefined;
+	return ONBOARDING_STEPS[index + 1];
+}
+
+/** Previous step in the journey, or undefined when there is no back target. */
+export function backStep(step: OnboardingStep): OnboardingStep | undefined {
+	const index = stepIndex(step);
+	if (index <= 0) return undefined;
+	return ONBOARDING_STEPS[index - 1];
+}
 
 export const PRIMARY_LABEL: Record<OnboardingStep, string> = {
 	welcome: 'Mulai dari satu ide',
@@ -42,23 +52,15 @@ export const PRIMARY_LABEL: Record<OnboardingStep, string> = {
 	finish: 'Mulai research'
 };
 
-/** The non-submit forward transition (welcome→background→interests→source→finish). */
-export const ADVANCE_TARGET: Partial<Record<OnboardingStep, OnboardingStep>> = {
-	welcome: 'background',
-	background: 'interests',
-	interests: 'source',
-	source: 'finish'
-};
-
 /**
- * What the primary button means on this step. `advance` is a pure step change via ADVANCE_TARGET;
+ * What the primary button means on this step. `advance` is a pure step change via advanceStep;
  * the terminal step (finish, "Mulai research") is `submit` — drivers post the answers and, on
  * success, navigate to the app.
  */
 export type PrimaryIntent = { type: 'advance'; step: OnboardingStep } | { type: 'submit' };
 
 export function primaryIntent(step: OnboardingStep): PrimaryIntent {
-	const next = ADVANCE_TARGET[step];
+	const next = advanceStep(step);
 	if (next) return { type: 'advance', step: next };
 	return { type: 'submit' };
 }
@@ -67,13 +69,24 @@ export function isQuestionStep(step: OnboardingStep): boolean {
 	return QUESTION_STEPS.has(step);
 }
 
-/** Primary enabled when not submitting and the current question (if any) is valid. */
+/** Every question step must be valid before finish can submit. */
+export function isAnswersComplete(answers: OnboardingAnswers): boolean {
+	for (const step of QUESTION_STEPS) {
+		if (!isStepValid(step, answers)) return false;
+	}
+	return true;
+}
+
+/** Primary enabled when not submitting and the current step's gate passes. */
 export function canPrimary(
 	step: OnboardingStep,
 	answers: OnboardingAnswers,
 	isSubmitting: boolean
 ): boolean {
-	return !isSubmitting && (!isQuestionStep(step) || isStepValid(step, answers));
+	if (isSubmitting) return false;
+	if (step === 'finish') return isAnswersComplete(answers);
+	if (isQuestionStep(step)) return isStepValid(step, answers);
+	return true;
 }
 
 /** Can the primary button advance from this step given the current answers? */
@@ -99,7 +112,7 @@ export function toggleInterest(interests: string[], id: string): string[] {
 
 /**
  * Build the `onboarding.complete` request body. `heardAboutOther` is sent only when source is
- * "lainnya". Returns null when required single-selects are missing (submit is a no-op).
+ * "lainnya". Returns null when any question step is still invalid.
  */
 export function buildCompletePayload(answers: OnboardingAnswers): {
 	background: string;
@@ -107,7 +120,7 @@ export function buildCompletePayload(answers: OnboardingAnswers): {
 	heardAboutSource: string;
 	heardAboutOther: string | undefined;
 } | null {
-	if (!answers.background || !answers.source) return null;
+	if (!isAnswersComplete(answers) || !answers.background || !answers.source) return null;
 	return {
 		background: answers.background,
 		interests: answers.interests,

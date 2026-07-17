@@ -75,7 +75,7 @@
 				{#snippet right()}
 					<a
 						href="/app/explore"
-						class="inline-flex shrink-0 items-center gap-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+						class="inline-flex shrink-0 items-center gap-1 text-control font-medium text-muted-foreground transition-colors hover:text-foreground"
 					>
 						Lihat semua <Icon icon={ArrowUpRightIcon} class="size-3.5" />
 					</a>
@@ -86,7 +86,7 @@
 				{#each PILLS as pill (pill.href)}
 					<a
 						href={pill.href}
-						class="rounded-full border border-border bg-card px-4 py-2 text-[13px] font-medium text-muted-foreground transition-all hover:-translate-y-0.5 hover:border-muted-foreground/40 hover:text-foreground"
+						class="rounded-full border-2 border-border bg-card px-4 py-2 text-control font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 					>
 						{pill.label}
 					</a>

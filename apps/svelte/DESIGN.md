@@ -2,8 +2,8 @@
 name: Aqsha
 description: A calm, warm-paper research-and-writing workspace with tactile, keycap-deep controls.
 colors:
-  paper-bg: 'oklch(0.9195 0.0169 88.003)'
-  paper-raised: 'oklch(0.953 0.0156 86.4257)'
+  paper-bg: 'oklch(0.953 0.0156 86.4257)'
+  paper-rail: 'oklch(0.9195 0.0169 88.003)'
   ink: 'oklch(0.235 0 0)'
   ink-soft: 'oklch(0.4688 0.0136 84.5932)'
   primary: 'oklch(0.55 0.14 160)'
@@ -12,7 +12,7 @@ colors:
   secondary-foreground: 'oklch(0.94 0.03 160)'
   muted: 'oklch(0.834 0.0232 87.163)'
   line: 'oklch(0.8434 0.0231 87.1621)'
-  ring-mint: 'oklch(0.6863 0.1743 154)'
+  ring-mint: 'oklch(0.52 0.15 154)'
   destructive: 'oklch(0.5771 0.2152 27.325)'
   mint: 'oklch(0.6863 0.1743 154)'
   lavender: 'oklch(0.57 0.12 305)'
@@ -22,13 +22,13 @@ colors:
   band-ink: 'oklch(0.95 0.014 88)'
 typography:
   display:
-    fontFamily: 'Fredoka, ui-rounded, ui-sans-serif, system-ui, sans-serif'
+    fontFamily: 'Nunito Sans, ui-rounded, ui-sans-serif, system-ui, sans-serif'
     fontSize: 'clamp(2rem, 5vw, 4rem)'
     fontWeight: 500
     lineHeight: 1.1
     letterSpacing: '0'
   headline:
-    fontFamily: 'Fredoka, ui-rounded, ui-sans-serif, system-ui, sans-serif'
+    fontFamily: 'Nunito Sans, ui-rounded, ui-sans-serif, system-ui, sans-serif'
     fontSize: '1.55rem'
     fontWeight: 700
     lineHeight: 1.2
@@ -112,12 +112,12 @@ components:
     padding: '0 24px'
     height: '46px'
   card:
-    backgroundColor: '{colors.paper-raised}'
+    backgroundColor: '{colors.paper-bg}'
     textColor: '{colors.ink}'
     rounded: '{rounded.lg}'
     padding: '16px'
   input:
-    backgroundColor: '{colors.paper-raised}'
+    backgroundColor: '{colors.paper-bg}'
     textColor: '{colors.ink}'
     rounded: '{rounded.md}'
     padding: '0 13px'
@@ -129,7 +129,7 @@ components:
     padding: '0 11px'
     height: '24px'
   badge-quiet:
-    backgroundColor: '{colors.paper-raised}'
+    backgroundColor: '{colors.paper-bg}'
     textColor: '{colors.ink-soft}'
     rounded: '{rounded.full}'
     padding: '2px 8px'
@@ -142,7 +142,7 @@ components:
 
 **Creative North Star: "The Calm Study Desk"**
 
-Aqsha looks like a tidy, warm desk where a student researcher can see everything in reach and nothing is shouting. The base is warm paper — a cream body (`oklch(0.92 0.017 88)`) with slightly raised paper cards — carrying charcoal ink text and a small family of soft-candy accents. What changed in v2 is the physicality: every surface and control now wears a confident **2px border**, and depth is a hard, playful "lip" — buttons are keycaps you can press, and even floating surfaces (menus, popovers, dialogs) rest on a solid lip instead of hovering on blur. It reads as a place to think and write, built from sturdy paper pieces. Fredoka sets the headings; Inter does the honest work of UI and body; Caveat shows up like a pencil annotation. The personality is **calm, clear, playful** — playful in the tactility, quiet on the pages.
+Aqsha looks like a tidy, warm desk where a student researcher can see everything in reach and nothing is shouting. The base is warm paper — a cream body (`oklch(0.953 0.0156 86.4257)`) with flat paper cards distinguished only by a 2px border — carrying charcoal ink text and a small family of soft-candy accents. What changed in v2 is the physicality: every surface and control now wears a confident **2px border**, and depth is a hard, playful "lip" — buttons are keycaps you can press, and even floating surfaces (menus, popovers, dialogs) rest on a solid lip instead of hovering on blur. It reads as a place to think and write, built from sturdy paper pieces. Nunito Sans sets the headings; Inter does the honest work of UI and body; Caveat shows up like a pencil annotation. The personality is **calm, clear, playful** — playful in the tactility, quiet on the pages.
 
 This system explicitly rejects three things, drawn from the product's anti-references. It is **not** a fear-driven AI-safety interface — no red-warning-everywhere, no "zero hallucination" theater; guidance points to the next action, never scolds. It is **not** generic AI SaaS — no sparkle icons, no hero-metric templates, no gradient-purple "AI product" chrome, no endless identical feature-card grids. And it is **not** strict-academic or institutional — no seals, shields, crests, or journal-portal severity. Serious research capability, delivered without severity.
 
@@ -152,7 +152,7 @@ This system explicitly rejects three things, drawn from the product's anti-refer
 - 2px borders on every surface and control; 1px only for internal hairlines (table rows, menu separators).
 - Tactile depth everywhere it means something: keycap buttons, lipped menus and dialogs, pressable controls.
 - Focus is **mint** — the state color — never the ink.
-- **No gradients.** Faces are flat; depth rides borders, lips, and soft ambient shadows.
+- **No gradients.** Faces are flat; depth rides borders and lips. Static cards are flat (Duolingo-style): a confident 2px border and generous radius, no drop shadow.
 - Dark mode is a first-class theme, and reduced-motion is honored everywhere.
 
 ## 2. Colors: Warm Paper & Ink
@@ -189,7 +189,7 @@ Each accent carries four tuned tints via `color-mix`: a solid (`--mint`), a `-fo
 
 ### Focus
 
-- **Mint Ring** (`--ring`, `oklch(0.6863 0.1743 154)` light / `oklch(0.72 0.14 154)` dark): Focus-visible borders and halos are mint everywhere. Focus is a state, and mint is the state color — the emerald primary stays reserved for choices.
+- **Mint Ring** (`--ring`, `oklch(0.52 0.15 154)` light / `oklch(0.72 0.14 154)` dark): Focus-visible borders and halos are mint everywhere. Focus is a state, and mint is the state color — the emerald primary stays reserved for choices. In light mode `--ring` is intentionally darker than `--mint` so the focus halo holds ≥3:1 against both the page and the sidebar rail.
 
 ### Evidence Stance (fixed, do not alter piecemeal)
 
@@ -205,7 +205,7 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 
 ## 3. Typography
 
-**Display Font:** Fredoka (with `ui-rounded, ui-sans-serif, system-ui, sans-serif`)
+**Display Font:** Nunito Sans (with `ui-rounded, ui-sans-serif, system-ui, sans-serif`)
 **Body / UI Font:** Inter (with `ui-sans-serif, system-ui, sans-serif`)
 **Mono Font:** JetBrains Mono (with `ui-monospace, SFMono-Regular, monospace`)
 **Accent Font:** Caveat (hand) — used sparingly, like a pencil note
@@ -214,8 +214,8 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 
 ### Hierarchy
 
-- **Display** (Fredoka, 500, `clamp(2rem, 5vw, 4rem)`, line-height 1.1): Hero and marketing headlines.
-- **Headline** (Fredoka, 700, 1.55–2rem, line-height 1.2): In-app section and prose headings.
+- **Display** (Nunito Sans, 500, `clamp(2rem, 5vw, 4rem)`, line-height 1.1): Hero and marketing headlines.
+- **Headline** (Nunito Sans, 700, 1.55–2rem, line-height 1.2): In-app section and prose headings.
 - **Title** (Inter, 600, ~0.94rem, line-height 1.4): Card titles, panel headers, dense UI headings.
 - **Body** (Inter, 400, 1rem, line-height 1.72): Reading prose. Capped at 65–75ch for long-form.
 - **Control** (Inter, 500–700, 0.82–0.9rem): Buttons (700), fields (500), menu items, tabs.
@@ -227,11 +227,11 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 
 **The Sentence-Case Rule.** UI copy is sentence case. No all-caps labels and no uppercase eyebrows above sections. The two scoped exceptions are structural micro-labels (table `th`, calendar weekday cells) and solid chip text — both are grammar, not copy.
 
-**The Display-for-Voice, Sans-for-Work Rule.** Headings and moments of voice use Fredoka; anything a user reads to complete a task uses Inter. Never set a button, input, table cell, or data label in the display face or the hand.
+**The Display-for-Voice, Sans-for-Work Rule.** Headings and moments of voice use Nunito Sans; anything a user reads to complete a task uses Inter. Never set a button, input, table cell, or data label in the display face or the hand.
 
 ## 4. Elevation
 
-**Everything sits on a lip.** Depth in this system is a hard, offset, solid shadow — a physical edge, never a blur-only float and never a gradient. Buttons are keycaps; floating surfaces rest on a 3–4px lip in the border color; small controls carry a 2px static lip. The soft ambient shadow (`--shadow-soft-card`) exists only to seat a surface, always paired with its 2px border or lip.
+**Everything sits on a lip.** Depth in this system is a hard, offset, solid shadow — a physical edge, never a blur-only float and never a gradient. Buttons are keycaps; floating surfaces rest on a 3–4px lip in the border color; small controls carry a 2px static lip. Static cards carry no shadow at all — they sit flat on the paper behind their 2px border. The soft ambient shadow (`--shadow-soft-card`) is reserved for surfaces that float (it rides inside `.lip-pop`/`.lip-modal`), never for resting cards.
 
 ### Shadow Vocabulary
 
@@ -241,7 +241,7 @@ The `/deep` stance meter is a CVD-validated four-color scale, hard-coded as hex 
 - **Modal lip** (`.lip-modal` = `0 4px 0 0 var(--border)` + `0 20px 50px rgba(0,0,0,0.18)`): Dialogs and the command menu.
 - **Static lip** (`.lip-static` = `0 2px 0 0 var(--lip-color)`): Non-pressing controls that still have body — checkbox boxes, radio rings, kbd, calendar nav, the active pagination square.
 - **Control inset** (`inset 0 2px 0 0 color-mix(border 45%)`): The subtle top shadow inside inputs, selects, and OTP cells — the field is a shallow tray.
-- **Card ambient** (`--shadow-soft-card` ≈ `0 4px 10px rgba(0,0,0,0.1)`): Seats cards; always with the 2px border.
+- **Flat card** (no shadow): Static cards, panels, banners, and the composer rest flat — 2px border only. `--shadow-soft-card` appears solely inside the pop/modal lips of floating surfaces.
 
 ### Named Rules
 
@@ -271,7 +271,7 @@ Two families share one primitive:
 ### Cards / Containers
 
 - **Corner Style:** `rounded-lg` (16px).
-- **Background:** Raised Paper (`--card`) with a **2px `border-border`** and the soft ambient shadow.
+- **Background:** Raised Paper (`--card`) with a **2px `border-border`**; no shadow — cards are flat.
 - **Internal Padding:** `--card-spacing` = 16px (`sm` = 12px); images bleed to 14px-rounded top/bottom edges (16 − 2px border).
 - **Nesting:** Never nest a card inside a card. Use tonal grouping or 1px hairline dividers instead.
 
@@ -323,7 +323,7 @@ The defining control of the system: a solid button rendered as a physical keycap
 - **Do** give every surface and control a 2px border, and reserve 1px for internal hairlines (table rows, menu separators, avatar rings).
 - **Do** put depth on everything that floats or presses — keycap lips on solid buttons, pop/modal lips on menus and dialogs, static lips on checkboxes and kbd.
 - **Do** follow the state grammar: mint for on/off and focus, ink for exclusive choice. Mint = `@mention`, lavender = `/command`.
-- **Do** set headings in Fredoka and everything a user reads-to-act in Inter; Caveat only as a decorative aside.
+- **Do** set headings in Nunito Sans and everything a user reads-to-act in Inter; Caveat only as a decorative aside.
 - **Do** hold body, placeholder, and muted text to ≥4.5:1 on the warm paper; solid chips carry white text only on the `-strong` faces.
 - **Do** write UI copy in sentence case, use `tabular-nums` for figures, and give every animation a `prefers-reduced-motion` fallback.
 - **Do** treat dark mode as a first-class theme; verify contrast, lips, and chip faces in both.

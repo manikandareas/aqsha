@@ -1,31 +1,12 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { prefersReducedMotion } from 'svelte/motion';
-	import { slide } from 'svelte/transition';
 	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import type { StatsGroup } from '@aqsha/chat-core/stats-viz';
-	import {
-		Icon,
-		AlertCircleIcon,
-		ClockIcon,
-		NotebookIcon,
-		RotateCcwIcon,
-		WrenchIcon,
-		XIcon
-	} from '$lib/icons';
-	import { Button } from '@aqsha/ui-svelte/components/button';
-	import {
-		Conversation,
-		ConversationContent,
-		ConversationScrollButton
-	} from '$lib/components/ai-elements';
-	import { cn } from '@aqsha/ui-svelte/utils';
 	import { queryKeys } from '$lib/query';
-	import { threadTranscriptColumnClass } from '$lib/components/layout/panel-surface';
 	import {
 		useSendStatus,
 		useThreadArtifacts,
@@ -38,22 +19,16 @@
 		type ComposerSendPayload
 	} from '$lib/features/threads/components/composer';
 	import { useRecentThreadSummaries } from '$lib/features/threads/use-recent-thread-summaries.svelte';
-	import MessageList from '$lib/features/threads/components/MessageList.svelte';
-	import QuestionsCard from '$lib/features/threads/components/QuestionsCard.svelte';
-	import ToolCard, { toolCardShellClass } from '$lib/features/threads/components/ToolCard.svelte';
 	import { bucketMessageAttachments } from '$lib/features/threads/lib/attachment-buckets';
 	import { buildThreadPanelLookups } from '$lib/features/threads/lib/thread-panel-data';
-	import { wfStepLabel } from '$lib/features/threads/lib/mastra-timeline';
 	import { setMessageInteractions } from '$lib/features/threads/components/message-interactions';
 	import type { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
 	import type { ResearchSource } from '$lib/features/threads/types';
 	import { getThreadPanel } from './thread-panel-context.svelte';
 	import { LIVE_PLAN_KEY } from '../utils/thread-panel-model';
 	import { blockedNotice, deepBlockedMessage } from '../utils/send-status';
-	import ComposerHeroState from './ComposerHeroState.svelte';
-	import HomeBannerCarousel from '$lib/components/HomeBannerCarousel.svelte';
-	import HomeExploreBento from '$lib/features/discovery/components/HomeExploreBento.svelte';
-	import ExploreHandwrittenCue from '$lib/features/discovery/components/ExploreHandwrittenCue.svelte';
+	import ThreadActiveSurface from './ThreadActiveSurface.svelte';
+	import ThreadLandingSurface from './ThreadLandingSurface.svelte';
 
 	/**
 	 * Mastra chat runtime surface — the V1 composition (rich composer + landing hero) over `ThreadAgent`.
@@ -104,7 +79,6 @@
 	const deepSendStatus = useSendStatus('deep_research');
 
 	const busy = $derived(agent.status !== 'ready');
-	const reduce = $derived(prefersReducedMotion.current);
 	const notice = $derived<ComposerNotice | null>(blockedNotice(sendStatus.data));
 	const blocked = $derived(notice !== null);
 	const isEmpty = $derived(agent.messages.length === 0 && !busy);
@@ -220,223 +194,37 @@
 	}
 </script>
 
-{#snippet deepNoticeCard(
-	body: string,
-	detail: string | null | undefined,
-	primary: { label: string; onClick: () => void; disabled?: boolean; stop?: boolean },
-	secondary?: { label: string; onClick: () => void }
-)}
-	<div
-		class={threadTranscriptColumnClass}
-		transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
-	>
-		<div class={toolCardShellClass}>
-			<div class="flex gap-2">
-				<Icon icon={AlertCircleIcon} class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-				<div class="min-w-0 flex-1">
-					<p class="text-sm text-foreground">{body}</p>
-					{#if detail}<p class="mt-1 text-xs text-muted-foreground">{detail}</p>{/if}
-				</div>
-			</div>
-			<div class="mt-3 flex gap-2 pl-6">
-				<Button size="sm" onclick={primary.onClick} disabled={primary.disabled}>
-					{#if !primary.stop}<Icon icon={RotateCcwIcon} class="size-3.5" />{/if}
-					{primary.label}
-				</Button>
-				{#if secondary}
-					<Button size="sm" variant="ghost" onclick={secondary.onClick}>{secondary.label}</Button>
-				{/if}
-			</div>
-		</div>
-	</div>
-{/snippet}
-
-{#snippet composerDock(showSuggestions: boolean)}
-	<Composer
-		onSend={onComposerSend}
-		onStop={() => agent.stop()}
+{#if isEmpty}
+	<ThreadLandingSurface {compact}>
+		{#snippet composer()}
+			<Composer
+				onSend={onComposerSend}
+				onStop={() => agent.stop()}
+				{busy}
+				disabled={blocked}
+				{notice}
+				{threadId}
+				{threadAgentKind}
+				{errorDraft}
+				showSuggestions={!compact}
+				recentThreads={recentThreads.data}
+				{initialContent}
+			/>
+		{/snippet}
+	</ThreadLandingSurface>
+{:else}
+	<ThreadActiveSurface
+		{agent}
+		panel={panel ?? null}
+		{sourcesByTurn}
+		{statsGroupsByToolCallId}
+		{attachmentsByMessage}
 		{busy}
-		disabled={blocked}
+		blocked={blocked}
 		{notice}
 		{threadId}
 		{threadAgentKind}
 		{errorDraft}
-		{showSuggestions}
-		recentThreads={showSuggestions ? recentThreads.data : []}
-		initialContent={showSuggestions ? initialContent : undefined}
+		{onComposerSend}
 	/>
-{/snippet}
-
-{#if isEmpty}
-	<main
-		class="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-background"
-	>
-		<div
-			class={cn(
-				'relative mx-auto flex w-full flex-col',
-				compact
-					? 'max-w-none flex-1 px-5 pt-3 pb-8 @2xl:px-6'
-					: 'min-h-full max-w-5xl shrink-0 px-4 pt-10 pb-5 @2xl:px-8'
-			)}
-		>
-			<div class="flex w-full flex-1 items-center justify-center">
-				<div class={cn('w-full', compact ? 'max-w-none' : 'max-w-3xl')}>
-					<ComposerHeroState
-						headerClass="mb-5 gap-2"
-						logoClass={compact ? 'size-12 @2xl:size-18' : 'size-12 @2xl:size-22'}
-						titleClass={cn(
-							'font-sans leading-none font-bold tracking-tight text-foreground',
-							compact ? 'text-xl' : 'text-3xl @2xl:text-4xl'
-						)}
-					>
-						{@render composerDock(!compact)}
-					</ComposerHeroState>
-				</div>
-			</div>
-			{#if !compact}
-				<div class="mx-auto w-full max-w-xl">
-					<HomeBannerCarousel />
-				</div>
-				<!-- Cue positioned absolute vs the landing column — top-right, diagonal between the open-panel
-				     action and the hero title. -->
-				<ExploreHandwrittenCue />
-			{/if}
-		</div>
-		{#if !compact}
-			<HomeExploreBento />
-		{/if}
-	</main>
-{:else}
-	<div class="flex h-full min-h-0 w-full flex-col">
-		<Conversation class="flex-1">
-			<ConversationContent class="max-w-none p-0">
-				<div class={cn(threadTranscriptColumnClass, 'flex flex-col gap-4 pt-3 pb-8')}>
-					<MessageList
-						messages={agent.messages}
-						pending={agent.status === 'submitted'}
-						{busy}
-						{sourcesByTurn}
-						{statsGroupsByToolCallId}
-						{attachmentsByMessage}
-						onRegenerate={() => void agent.regenerate()}
-					/>
-					{#if agent.error}
-						<p class="text-sm text-red-500">{agent.error}</p>
-					{/if}
-				</div>
-			</ConversationContent>
-			{#snippet overlay()}
-				<ConversationScrollButton />
-			{/snippet}
-		</Conversation>
-		<div class={cn(threadTranscriptColumnClass, 'flex flex-col gap-2.5 pt-2.5 pb-4')}>
-			{#if agent.deepStalled}
-				{@render deepNoticeCard(
-					agent.deepStalled,
-					null,
-					{ label: 'Mulai ulang', onClick: () => void agent.restartDeep() },
-					{ label: 'Hentikan', onClick: () => agent.stop() }
-				)}
-			{/if}
-			{#if agent.deepFailed}
-				{@render deepNoticeCard(
-					`Riset mendalam gagal${agent.deepFailed.stepId ? ` pada langkah "${wfStepLabel(agent.deepFailed.stepId).toLowerCase()}"` : ''}. Coba lagi akan melanjutkan dari langkah itu tanpa memotong kredit baru.`,
-					agent.deepFailed.message,
-					{ label: 'Coba lagi', onClick: () => void agent.retryDeep(), disabled: busy },
-					{ label: 'Buang', onClick: () => agent.dismissDeepFailure() }
-				)}
-			{/if}
-			{#if agent.deepNotice && !agent.messages.some((m) => m.id === `deep-bail:${agent.deepNotice!.runId}`)}
-				{@render deepNoticeCard(`Riset mendalam dihentikan: ${agent.deepNotice.reason}`, null, {
-					label: 'Tutup',
-					onClick: () => agent.dismissDeepNotice(),
-					stop: true
-				})}
-			{/if}
-			{#if agent.askGate}
-				<div
-					class={threadTranscriptColumnClass}
-					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
-				>
-					<QuestionsCard
-						questions={agent.askGate.questions}
-						findings={agent.askGate.findings}
-						onSubmit={(resume) => void agent.resolveAsk(resume)}
-						onSkip={() => void agent.resolveAsk({ action: 'skipped' })}
-						onOpenPanel={panel ? () => panel.openQuestionsPanel() : undefined}
-					/>
-				</div>
-			{/if}
-			{#if agent.planGate}
-				<div
-					class={threadTranscriptColumnClass}
-					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
-				>
-					<ToolCard
-						icon={NotebookIcon}
-						title="Rencana riset"
-						meta={`${agent.planGate.subQuestions.length} sub-pertanyaan`}
-						onOpenPanel={panel ? () => panel.openPlanPanel(LIVE_PLAN_KEY) : undefined}
-					>
-						<div class="flex gap-2">
-							<Button size="sm" onclick={() => void agent.resolvePlan(true)}>Setujui</Button>
-							<Button size="sm" variant="ghost" onclick={() => void agent.resolvePlan(false)}>
-								Tolak
-							</Button>
-						</div>
-					</ToolCard>
-				</div>
-			{/if}
-			{#if agent.approvals.length > 0}
-				<div
-					class={cn(threadTranscriptColumnClass, 'flex flex-col gap-2.5')}
-					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
-				>
-					{#each agent.approvals as a (a.toolCallId)}
-						<ToolCard
-							icon={WrenchIcon}
-							title={a.title}
-							meta={typeof a.args.artifactId === 'string' ? a.args.artifactId : undefined}
-						>
-							<div class="flex gap-2">
-								<Button size="sm" onclick={() => void agent.approve(a.toolCallId)}>Setujui</Button>
-								<Button size="sm" variant="ghost" onclick={() => void agent.decline(a.toolCallId)}>
-									Tolak
-								</Button>
-							</div>
-						</ToolCard>
-					{/each}
-				</div>
-			{/if}
-			{#if agent.queued.length > 0}
-				<div
-					class={cn(threadTranscriptColumnClass, 'flex flex-col gap-1.5')}
-					transition:slide={reduce ? { duration: 0 } : { duration: 180 }}
-				>
-					{#each agent.queued as q (q.id)}
-						<div
-							class="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[13px]"
-						>
-							<Icon icon={ClockIcon} class="size-3.5 shrink-0 text-muted-foreground/70" />
-							<span class="min-w-0 flex-1 truncate text-foreground/80">{q.text}</span>
-							<span class="shrink-0 text-[11px] text-muted-foreground">
-								{q.mode === 'deep' ? 'Antre · /deep' : q.serverRunId ? 'Antre di server' : 'Antre'}
-							</span>
-							{#if q.serverRunId === undefined}
-								<button
-									type="button"
-									onclick={() => agent.cancelQueued(q.id)}
-									aria-label="Batalkan antrean"
-									class="shrink-0 rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground"
-								>
-									<Icon icon={XIcon} class="size-3.5" />
-								</button>
-							{/if}
-						</div>
-					{/each}
-				</div>
-			{/if}
-			{@render composerDock(false)}
-		</div>
-	</div>
 {/if}

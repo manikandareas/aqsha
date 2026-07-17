@@ -121,43 +121,13 @@
 			var(--tw-shadow, 0 0 #0000);
 	}
 
-	/* Alert-family surface: bg, 2px border, and 3px lip are all color-mixes of
-	   --alert-hue over card. Variants (and toast kinds) only switch the hue. */
+	/* Alert-family surface: bg, 2px border, and 3px lip ride --alert-edge/--alert-fill
+	   (defined in tokens from --alert-hue). Variants only switch the hue. */
 	.alert-surface {
 		--alert-hue: var(--border);
-		border: 2px solid color-mix(in oklch, var(--alert-hue) 55%, var(--card));
-		background-color: color-mix(in oklch, var(--alert-hue) 26%, var(--card));
-		box-shadow: 0 3px 0 0 color-mix(in oklch, var(--alert-hue) 55%, var(--card));
-	}
-
-	/* Toast = alert surface fixed to the corner, with a deeper ambient seat.
-	   Kind hues ride sonner's data-type; surface + hues live here so there is
-	   no important-utility race between base and kind classes. */
-	[data-sonner-toast] {
-		--alert-hue: var(--border);
-		border: 2px solid color-mix(in oklch, var(--alert-hue) 55%, var(--card)) !important;
-		background-color: color-mix(in oklch, var(--alert-hue) 26%, var(--card)) !important;
-		color: var(--foreground) !important;
-		border-radius: var(--radius-lg) !important;
-		box-shadow:
-			0 3px 0 0 color-mix(in oklch, var(--alert-hue) 55%, var(--card)),
-			0 8px 24px rgb(0 0 0 / 0.2) !important;
-	}
-
-	[data-sonner-toast][data-type='info'] {
-		--alert-hue: var(--lavender);
-	}
-
-	[data-sonner-toast][data-type='success'] {
-		--alert-hue: var(--mint);
-	}
-
-	[data-sonner-toast][data-type='warning'] {
-		--alert-hue: var(--lemon);
-	}
-
-	[data-sonner-toast][data-type='error'] {
-		--alert-hue: var(--destructive);
+		border: 2px solid var(--alert-edge);
+		background-color: var(--alert-fill);
+		box-shadow: 0 3px 0 0 var(--alert-edge);
 	}
 }
 

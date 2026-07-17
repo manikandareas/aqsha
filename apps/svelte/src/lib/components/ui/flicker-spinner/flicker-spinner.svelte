@@ -1,16 +1,15 @@
 <script lang="ts">
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import type { SVGAttributes } from 'svelte/elements';
+	// Keyframes must stay global: a component `<style>` would scope keyframe names away
+	// from the inline `style="animation: …"` attributes. Import here (not app.css) so
+	// routes that never mount the spinner do not pay for the stylesheet.
+	import './flicker-spinner.css';
 
 	/**
 	 * Brand loading spinner. A 7x7 LED-style dot grid that flickers a travelling pattern. Theme-aware — lit dots use
 	 * `currentColor` (inherits `text-*`, works light + dark), resting dots are the same color
 	 * dimmed. Size comes from `class` (e.g. `size-7`) or `size`. Respects reduced motion.
-	 *
-	 * The `.flicker-spinner` rules + `@keyframes` live GLOBALLY in styles/globals.css (web
-	 * renders them as a `<style>` child of the SVG; a component `<style>` would scope the
-	 * keyframe names away from the inline `style="animation: …"` references). Here we render
-	 * only the SVG that references those global keyframes.
 	 */
 	let {
 		class: className,

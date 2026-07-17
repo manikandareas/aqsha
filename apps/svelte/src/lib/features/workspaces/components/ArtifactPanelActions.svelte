@@ -3,6 +3,7 @@
 	import * as Popover from '@aqsha/ui-svelte/components/popover';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { cn } from '@aqsha/ui-svelte/utils';
+	import { menuItemClass, menuItemDestructiveClass } from '@aqsha/ui-svelte/recipes';
 	import { Icon, DownloadIcon, InfoIcon, MoreHorizontalIcon, Trash2Icon } from '$lib/icons';
 	import type { ArtifactRenderPayload } from '$lib/features/artifacts/types';
 	import {
@@ -33,8 +34,12 @@
 	let view = $state<'menu' | 'info'>('menu');
 	const download = $derived(resolveArtifactDownload(payload, title));
 
-	const menuItemClass =
-		'flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none';
+	const panelMenuItemClass = cn(menuItemClass, 'w-full text-left');
+	const panelMenuItemDestructiveClass = cn(
+		panelMenuItemClass,
+		menuItemDestructiveClass,
+		'text-destructive hover:bg-destructive/10 focus-visible:bg-destructive/10 dark:hover:bg-destructive/20 dark:focus-visible:bg-destructive/20'
+	);
 
 	function handleOpenChange(next: boolean) {
 		open = next;
@@ -67,7 +72,7 @@
 	>
 		{#if view === 'menu'}
 			<div class="grid gap-0.5">
-				<button type="button" onclick={() => (view = 'info')} class={menuItemClass}>
+				<button type="button" onclick={() => (view = 'info')} class={panelMenuItemClass}>
 					<Icon icon={InfoIcon} class="size-4 text-muted-foreground" />
 					Info
 				</button>
@@ -76,7 +81,7 @@
 						href={download.href}
 						download={download.fileName}
 						onclick={() => (open = false)}
-						class={menuItemClass}
+						class={panelMenuItemClass}
 					>
 						<Icon icon={DownloadIcon} class="size-4 text-muted-foreground" />
 						Download
@@ -88,7 +93,7 @@
 							open = false;
 							triggerArtifactDownload(download);
 						}}
-						class={menuItemClass}
+						class={panelMenuItemClass}
 					>
 						<Icon icon={DownloadIcon} class="size-4 text-muted-foreground" />
 						Download
@@ -96,11 +101,12 @@
 				{/if}
 				<button
 					type="button"
+					data-variant="destructive"
 					onclick={() => {
 						open = false;
 						onDelete();
 					}}
-					class="flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] text-destructive transition-colors hover:bg-destructive/10 focus-visible:bg-destructive/10 focus-visible:outline-none"
+					class={panelMenuItemDestructiveClass}
 				>
 					<Icon icon={Trash2Icon} class="size-4" />
 					Delete

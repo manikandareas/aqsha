@@ -18,3 +18,11 @@ export function mergeRecentThreadSummaries(
 	}
 	return out;
 }
+
+/** Activity-sorted top N rows for compact switchers and the composer start panel. */
+export function takeRecentThreads<T extends { lastActivityAt: number }>(
+	threads: readonly T[],
+	n = 4
+): T[] {
+	return [...threads].sort((a, b) => b.lastActivityAt - a.lastActivityAt).slice(0, n);
+}

@@ -65,7 +65,7 @@
 			{#if content.description}
 				<p class="mt-0.5 break-words text-background/70">{content.description}</p>
 			{/if}
-			<p class="mt-1 text-[10.5px] text-background/55">Klik untuk menghapus</p>
+			<p class="mt-1 text-micro text-background/55">Klik untuk menghapus</p>
 			<div
 				class="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rotate-45 rounded-[2px] bg-foreground"
 			></div>

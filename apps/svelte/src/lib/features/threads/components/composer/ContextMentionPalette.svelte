@@ -49,7 +49,7 @@
 	/>
 	<ComposerPopoverList id="composer-context-mentions">
 		{#if capNotice}
-			<p class="px-2 py-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+			<p class="px-2 py-1.5 text-label font-medium text-lemon-foreground">
 				{capNotice}
 			</p>
 		{/if}
@@ -73,7 +73,7 @@
 								{#if option.isAmbient}
 									<ComposerPopoverBadge tone="muted">ruang ini</ComposerPopoverBadge>
 								{:else if option.disabled && option.disabledReason}
-									<span class="max-w-[7.5rem] truncate text-[10.5px] text-muted-foreground"
+									<span class="max-w-[7.5rem] truncate text-micro text-muted-foreground"
 										>{option.disabledReason}</span
 									>
 								{/if}
@@ -102,7 +102,7 @@
 			{/if}
 		{:else if itemsLoading}
 			<div
-				class="flex items-center justify-center gap-2 px-3 py-6 text-[12px] text-muted-foreground"
+				class="flex items-center justify-center gap-2 px-3 py-6 text-label text-muted-foreground"
 			>
 				<Icon icon={Loader2Icon} class="size-3.5 animate-spin" />
 				Memuat paper…
@@ -122,7 +122,7 @@
 					>
 						{#snippet meta()}
 							{#if option.disabled && option.disabledReason}
-								<span class="max-w-[7.5rem] truncate text-[10.5px] text-muted-foreground"
+								<span class="max-w-[7.5rem] truncate text-micro text-muted-foreground"
 									>{option.disabledReason}</span
 								>
 							{/if}

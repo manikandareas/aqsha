@@ -2,6 +2,7 @@
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import { Icon, ChevronDownIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
+	import { takeRecentThreads } from '$lib/features/threads/lib/recent-thread-summaries';
 	import type { RecentThreadSummary } from '$lib/features/threads/types';
 
 	/**
@@ -25,11 +26,9 @@
 	} = $props();
 
 	const triggerClass =
-		'inline-flex h-auto min-w-0 max-w-[min(100%,18rem)] items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-normal leading-snug text-foreground transition-colors hover:bg-transparent aria-expanded:bg-transparent aria-expanded:text-foreground';
+		'inline-flex h-auto min-w-0 max-w-[min(100%,18rem)] items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-label font-normal leading-snug text-foreground transition-colors hover:bg-transparent aria-expanded:bg-transparent aria-expanded:text-foreground';
 
-	const recentThreads = $derived(
-		[...threads].sort((a, b) => b.lastActivityAt - a.lastActivityAt).slice(0, 4)
-	);
+	const recentThreads = $derived(takeRecentThreads(threads));
 </script>
 
 <DropdownMenu.Root>

@@ -13,6 +13,7 @@
 	import ArtifactDetailView from '$lib/features/workspaces/components/ArtifactDetailView.svelte';
 	import { useArtifactDetailData } from '$lib/features/workspaces/api/use-workspaces-data';
 	import type { ThreadPanelController } from './thread-panel-context.svelte';
+	import PlanGateActions from './PlanGateActions.svelte';
 
 	/**
 	 * Thread-detail side panel body — resolves the current `?panel=` mode against the controller's
@@ -61,7 +62,7 @@
 <SidePanelFrame>
 	{#snippet header()}
 		<div
-			class="sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-3 bg-background/70 px-5 backdrop-blur-xl @2xl:px-6"
+			class="sticky top-0 z-20 flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-5 @2xl:px-6"
 		>
 			<span class="truncate text-sm font-semibold text-foreground">{title}</span>
 			<Button
@@ -134,11 +135,12 @@
 							</ol>
 						{/if}
 						{#if plan.resolve}
-							<div class="flex gap-2 pt-1">
-								<Button size="sm" onclick={() => plan.resolve?.(true)}>Setujui</Button>
-								<Button size="sm" variant="ghost" onclick={() => plan.resolve?.(false)}
-									>Tolak</Button
-								>
+							{@const resolvePlan = plan.resolve}
+							<div class="pt-1">
+								<PlanGateActions
+									onApprove={() => resolvePlan(true)}
+									onDecline={() => resolvePlan(false)}
+								/>
 							</div>
 						{/if}
 					</div>
@@ -146,12 +148,15 @@
 					<p class="text-sm text-muted-foreground">Rencana tidak ditemukan.</p>
 				{/if}
 			{:else if mode.kind === 'questions'}
-				{#if lookups.ask}
+				{#if lookups.ask?.resolve && lookups.ask.skip}
+					{@const ask = lookups.ask}
+					{@const resolveAsk = ask.resolve}
+					{@const skipAsk = ask.skip}
 					<QuestionsForm
-						questions={lookups.ask.questions}
-						findings={lookups.ask.findings}
-						onSubmit={(resume) => lookups.ask?.resolve?.(resume)}
-						onSkip={() => lookups.ask?.skip?.()}
+						questions={ask.questions}
+						findings={ask.findings}
+						onSubmit={(resume) => resolveAsk(resume)}
+						onSkip={() => skipAsk()}
 					/>
 				{:else}
 					<p class="text-sm text-muted-foreground">Tidak ada klarifikasi aktif.</p>
