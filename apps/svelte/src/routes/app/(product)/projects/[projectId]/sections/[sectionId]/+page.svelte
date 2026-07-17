@@ -26,7 +26,7 @@
 		<p class="text-muted-foreground">Bab tidak ditemukan.</p>
 	{:else}
 		<div class="flex items-center gap-2">
-			<h1 class="font-display text-2xl font-bold">{section.title}</h1>
+			<h1 class="font-heading text-2xl font-bold">{section.title}</h1>
 			{#if section.role === 'bibliography'}
 				<Badge variant="outline">otomatis</Badge>
 			{:else}

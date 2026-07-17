@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import PanelCardToolbar from '$lib/components/layout/PanelCardToolbar.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
@@ -270,7 +271,10 @@
 						<dd class="min-w-0 font-medium text-foreground">
 							<span class="flex flex-wrap items-center gap-2">
 								<a
-									href={`/app/workspaces/${workspaceId}/artifacts/${citation.artifactId}`}
+									href={resolve('/app/(product)/projects/[projectId]/artifacts/[artifactId]', {
+										projectId: workspaceId,
+										artifactId: citation.artifactId
+									})}
 									class="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
 								>
 									<Icon icon={BookOpenIcon} class="size-3.5" />

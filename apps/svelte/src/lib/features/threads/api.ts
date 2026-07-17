@@ -24,7 +24,7 @@ const always = () => true;
 
 /**
  * List thread (infinite/keyset, DESC activity). `workspaceId` scopes to a project's threads
- * (`null` = global list) — Task 4/7 pass a getter tracking the active workspace.
+ * (`null` = global list) — callers pass a getter tracking the active workspace.
  */
 export function useThreadsList(
 	enabled: () => boolean = always,
