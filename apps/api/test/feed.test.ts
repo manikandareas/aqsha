@@ -38,12 +38,14 @@ function readJson(res: Response): Promise<any> {
 const ITEM_A = DEDUPE("a");
 const ITEM_B = DEDUPE("b");
 const ITEM_C = DEDUPE("c");
+const ITEM_NEWS = DEDUPE("legacy-news");
 // Slash + colon di key (mirip `doi:10.x/y`) → regression guard transport: key WAJIB lewat
 // query param, bukan path segment (lihat papers route).
 const PAPER_KEY = `doi:10.${suffix}/feedtest`;
 let idA = "";
 let idB = "";
 let idC = "";
+let idNews = "";
 
 function input(dedupeKey: string, over: Partial<FeedItemInput>): FeedItemInput {
   return {
@@ -88,6 +90,17 @@ beforeAll(async () => {
   idA = a.id;
   idB = b.id;
   idC = c.id;
+  // Row legacy kind=news (lane GDELT sudah dicabut, tetap valid di tabel) — `publishedAt` paling
+  // segar di seluruh lane nonpaper supaya pasti masuk halaman balanced pertama; feed API tak boleh
+  // pernah menyajikannya meski begitu.
+  const newsItem = await FeedRepo.upsertByDedupeKey(
+    db,
+    buildFeedItemRow(
+      input(ITEM_NEWS, { kind: "news", title: "Delta (legacy news)", publishedAt: now + 10_000 }),
+      now,
+    ),
+  );
+  idNews = newsItem.id;
   await PaperCacheRepo.upsert(db, {
     key: PAPER_KEY,
     title: "Cached Paper",
@@ -118,6 +131,14 @@ describe("api feed routes", () => {
     const ids = body.items.map((i: { _id: string }) => i._id);
     expect(ids).toContain(idA);
     expect(ids).toContain(idB);
+  });
+
+  itest("GET /feed tidak pernah menyajikan item kind=news (row legacy tetap di tabel)", async () => {
+    // idNews sengaja paling segar di seluruh lane nonpaper → tanpa filter akan menang balanced page.
+    const r = await req("GET", "/feed?mode=foryou&limit=40", tok(OWNER));
+    expect(r.status).toBe(200);
+    const ids = (await readJson(r)).items.map((i: { _id: string }) => i._id);
+    expect(ids).not.toContain(idNews);
   });
 
   itest("GET /feed/:id ada → 200, tak ada → 404", async () => {

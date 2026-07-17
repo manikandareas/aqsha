@@ -7,7 +7,7 @@ import { logger } from "../lib/log";
 /**
  * Worker feed-hydration (ganti cron 3h Convex `hydrateCycle`). Dua jenis job:
  *  - `cycle`: di-fire repeatable cron (setiap 3 jam) → fan-out lane dengan stagger.
- *  - `lane`: satu lane provider (OpenAlex papers / GDELT news + enrich).
+ *  - `lane`: satu lane provider (OpenAlex papers — berita tidak lagi dihidrasi).
  * Business logic di `FeedHydrationService`; worker hanya dispatch + log.
  *
  * Cron monitoring (Sentry): tiap `cycle` dibungkus `Sentry.withMonitor` → check-in

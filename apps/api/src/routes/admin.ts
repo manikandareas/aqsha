@@ -62,15 +62,7 @@ export const admin = new Elysia({ prefix: "/admin" })
     {
       auth: true,
       body: t.Object({
-        lanes: t.Optional(
-          t.Array(
-            t.Union([
-              t.Literal("refreshTrendingPapers"),
-              t.Literal("refreshGdeltNews"),
-              t.Literal("enrichNewsArticles"),
-            ]),
-          ),
-        ),
+        lanes: t.Optional(t.Array(t.Literal("refreshTrendingPapers"))),
         staggerMs: t.Optional(t.Numeric()),
       }),
     },

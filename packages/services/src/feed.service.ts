@@ -45,7 +45,10 @@ export const FeedService = {
     args: { limit?: number; kinds?: FeedKind[]; serendipity?: boolean },
   ): Promise<FeedItemResponse[]> {
     const limit = Math.min(args.limit ?? FEED_PAGE_LIMIT, 80);
-    const requestedKinds = args.kinds && args.kinds.length > 0 ? args.kinds : FEED_KINDS;
+    const requestedKinds = (args.kinds && args.kinds.length > 0 ? args.kinds : FEED_KINDS).filter(
+      // Berita tidak lagi disajikan — fokus penuh literatur; row lama tetap di tabel.
+      (kind) => kind !== "news",
+    );
     const pool = Math.min(limit * 3, 120);
     const now = Date.now();
 
@@ -126,6 +129,8 @@ export const FeedService = {
 
     const scored = page.items
       .filter((item) => !hidden.has(item.id))
+      // Berita tidak lagi disajikan — fokus penuh literatur; row lama tetap di tabel.
+      .filter((item) => item.kind !== "news")
       .filter((item) => !kindSet || kindSet.has(item.kind as FeedKind))
       .filter((item) => !category || matchesTopicCategory(category, item.topics, item.title))
       .map((item) => {

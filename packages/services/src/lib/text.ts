@@ -43,7 +43,7 @@ export function uniqueCompact(values: Array<string | null | undefined>): string[
 
 /**
  * Decode entitas HTML umum (named + numeric dec/hex). Rumah bersama untuk mapper feed/scrape
- * (GDELT title, articlePreview) supaya tak ada decoder yang divergen. Numeric aman via
+ * (articlePreview) supaya tak ada decoder yang divergen. Numeric aman via
  * {@link safeFromCodePoint} (code invalid → dibuang, bukan throw).
  */
 export function decodeHtmlEntities(value: string): string {

@@ -55,6 +55,8 @@ const OLD = NOW - 400 * 86_400_000; // ~13 bulan lalu → recency rendah
 const A = mkRow({ id: "A", trendScore: 100_000, publishedAt: OLD, topics: ["climate"] });
 // B: sitasi 0, baru, cocok minat → menang di "foryou".
 const B = mkRow({ id: "B", trendScore: 0, publishedAt: NOW, topics: ["machine learning"] });
+// N: row legacy kind=news (lane GDELT sudah dicabut, row lama tetap ada di tabel) — harus tersaring.
+const N = mkRow({ id: "N", kind: "news", trendScore: 999_999, publishedAt: NOW, topics: ["machine learning"] });
 
 afterEach(() => {
   spyOn(FeedRepo, "paginateBalanced").mockRestore();
@@ -88,6 +90,19 @@ describe("FeedService.getFeedPaginated re-rank", () => {
     stub([A, B], ["A"], new Map());
     const res = await FeedService.getFeedPaginated(fakeDb, "u", { mode: "foryou" });
     expect(res.items.map((i) => i._id)).toEqual(["B"]);
+  });
+
+  test("item kind=news tersaring walau top-score + eksplisit diminta (row legacy, feed tak lagi menyajikan berita)", async () => {
+    stub([A, B, N], [], new Map([["machine learning", 5]]));
+    const res = await FeedService.getFeedPaginated(fakeDb, "u", {
+      mode: "foryou",
+      kinds: ["news", "paper"],
+    });
+    expect(res.items.map((i) => i._id)).not.toContain("N");
+
+    stub([A, B, N], [], new Map());
+    const newsOnly = await FeedService.getFeedPaginated(fakeDb, "u", { kinds: ["news"] });
+    expect(newsOnly.items).toEqual([]); // diminta HANYA news → tetap kosong, bukan error
   });
 
   test("nextCursor diteruskan dari repo (page boleh menyusut)", async () => {
