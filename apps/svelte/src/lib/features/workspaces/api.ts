@@ -65,7 +65,8 @@ export function useWorkspace(id: () => string, enabled: () => boolean = alwaysTr
 	return createQuery(() => ({
 		queryKey: queryKeys.workspaces.detail(id()),
 		enabled: enabled() && Boolean(id()),
-		queryFn: async () => unwrap(await api.workspaces({ id: id() }).get())
+		// Eden infers kind/stage as loose `string`; narrow to the domain unions like the sibling hooks.
+		queryFn: async () => unwrap(await api.workspaces({ id: id() }).get()) as Workspace
 	}));
 }
 
