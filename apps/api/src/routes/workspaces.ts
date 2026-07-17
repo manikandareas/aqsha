@@ -1,12 +1,30 @@
-import { WORKSPACE_KINDS, WORKSPACE_STAGES, type WorkspaceKind, type WorkspaceStage } from "@aqsha/db";
+import type { WorkspaceKind, WorkspaceStage } from "@aqsha/db";
 import { FolderService, SectionService, WorkspaceService } from "@aqsha/services";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
 import { rateLimitMacro } from "../plugins/rate-limit";
 
-const kindSchema = t.Union(WORKSPACE_KINDS.map((k) => t.Literal(k)));
-const stageSchema = t.Union(WORKSPACE_STAGES.map((s) => t.Literal(s)));
+// Literal arrays spelled out (not `WORKSPACE_KINDS.map(t.Literal)`): `.map` widens a readonly
+// tuple to a plain array, which collapses these fields to `never` when Eden Treaty infers the
+// client body type. Keep in sync with `WORKSPACE_KINDS`/`WORKSPACE_STAGES` in @aqsha/db.
+const kindSchema = t.Union([
+  t.Literal("undergraduate_thesis"),
+  t.Literal("masters_thesis"),
+  t.Literal("dissertation"),
+  t.Literal("journal_article"),
+  t.Literal("proposal"),
+  t.Literal("paper"),
+  t.Literal("freeform"),
+]);
+const stageSchema = t.Union([
+  t.Literal("exploration"),
+  t.Literal("proposal"),
+  t.Literal("research"),
+  t.Literal("writing"),
+  t.Literal("revision"),
+  t.Literal("done"),
+]);
 const sectionStatusSchema = t.Union([
   t.Literal("empty"),
   t.Literal("draft"),
