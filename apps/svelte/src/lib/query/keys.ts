@@ -12,7 +12,8 @@ export const queryKeys = {
 	workspaces: {
 		all: ['workspaces'] as const,
 		list: (params: { includeArchived: boolean }) => ['workspaces', 'list', params] as const,
-		detail: (id: string) => ['workspaces', 'detail', id] as const
+		detail: (id: string) => ['workspaces', 'detail', id] as const,
+		sections: (id: string) => ['workspaces', 'sections', id] as const
 	},
 	folders: {
 		list: (workspaceId: string) => ['folders', 'list', workspaceId] as const

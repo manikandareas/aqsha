@@ -203,7 +203,11 @@ export function useWorkspaceIndexData() {
 			return workspacesQuery.isLoading;
 		},
 		createWorkspace: async (args: { name: string }) => {
-			const workspace = await createWorkspaceMutation.mutateAsync(args);
+			// Sidebar lama tak punya UI pemilihan jenis proyek — diganti total oleh dialog "Proyek baru".
+			const workspace = await createWorkspaceMutation.mutateAsync({
+				name: args.name,
+				kind: 'freeform' as const
+			});
 			return 'id' in workspace ? workspace.id : String(workspace);
 		},
 		archiveWorkspace: async (args: { workspaceId: string }) => {
