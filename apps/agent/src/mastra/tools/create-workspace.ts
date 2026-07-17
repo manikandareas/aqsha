@@ -17,10 +17,12 @@ export const createWorkspace = createTool({
   }),
   execute: async (input, ctx) => {
     const ownerUserId = callerId(ctx);
+    // Tool percakapan membuat proyek bebas; jenis karya tulis dipilih user lewat UI.
     return WorkspaceService.create(getServiceDb(), {
       ownerUserId,
       ownerEmail: callerEmail(ctx),
       name: input.name,
+      kind: "freeform",
     });
   },
 });

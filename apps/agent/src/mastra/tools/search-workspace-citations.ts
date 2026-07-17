@@ -13,18 +13,14 @@ function authorNames(authors: Array<{ family?: string; given?: string; literal?:
 
 /**
  * search_workspace_citations — cari referensi di Citation Library sebuah workspace.
- * READ-only, tanpa approval, tanpa debit. workspaceId di-scope sebagai input (dari catatan
- * konteks referensi tersemat) karena tool tak punya workspaceId ambient.
+ * READ-only, tanpa approval, tanpa debit. Perpustakaan sitasi global per akun —
+ * scope cukup owner dari tool context.
  */
 export const searchWorkspaceCitations = createTool({
   id: "search_workspace_citations",
   description:
-    "Cari referensi/sitasi di Citation Library sebuah workspace (judul, penulis, venue, DOI). READ-only. Butuh workspaceId (dari catatan konteks 'Referensi tersemat', atau minta pengguna menyebut workspace-nya). Untuk membaca metadata lengkap satu referensi, lanjut ke get_workspace_citation.",
+    "Cari referensi/sitasi di perpustakaan sitasi user (judul, penulis, venue, DOI). READ-only. Untuk membaca metadata lengkap satu referensi, lanjut ke get_workspace_citation.",
   inputSchema: z.object({
-    workspaceId: z
-      .string()
-      .min(1)
-      .describe("Workspace yang Citation Library-nya dicari (workspaceId dari catatan konteks)."),
     query: z
       .string()
       .max(500)
@@ -37,7 +33,6 @@ export const searchWorkspaceCitations = createTool({
     const ownerUserId = callerId(ctx);
     const result = await CitationService.list(getServiceDb(), {
       ownerUserId,
-      workspaceId: input.workspaceId,
       cursor: null,
       limit: input.limit ?? 20,
       q: input.query,

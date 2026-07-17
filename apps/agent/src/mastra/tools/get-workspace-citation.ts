@@ -18,16 +18,14 @@ function authorNames(authors: Array<{ family?: string; given?: string; literal?:
 export const getWorkspaceCitation = createTool({
   id: "get_workspace_citation",
   description:
-    "Baca metadata lengkap satu referensi dari Citation Library workspace (judul, penulis, tahun, venue, penerbit, DOI, URL, tags, status, jumlah dokumen pemakai). READ-only. Butuh workspaceId + citationId (dari catatan konteks 'Referensi tersemat' atau hasil search_workspace_citations). JANGAN mengarang field yang tak tercantum.",
+    "Baca metadata lengkap satu referensi dari perpustakaan sitasi user (judul, penulis, tahun, venue, penerbit, DOI, URL, tags, status, jumlah dokumen pemakai). READ-only. Butuh citationId (dari catatan konteks 'Referensi tersemat' atau hasil search_workspace_citations). JANGAN mengarang field yang tak tercantum.",
   inputSchema: z.object({
-    workspaceId: z.string().min(1).describe("Workspace pemilik referensi (workspaceId)."),
     citationId: z.string().min(1).describe("Referensi yang dibaca (citationId)."),
   }),
   execute: async (input, ctx) => {
     const ownerUserId = callerId(ctx);
     const c = await CitationService.get(getServiceDb(), {
       ownerUserId,
-      workspaceId: input.workspaceId,
       citationId: input.citationId,
     });
     return {
