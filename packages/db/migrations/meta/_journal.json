@@ -267,6 +267,13 @@
       "when": 1784268859470,
       "tag": "0037_lucky_pandemic",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1784270551721,
+      "tag": "0038_absent_gambit",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { bigint, index, integer, jsonb, pgTable, text } from "drizzle-orm/pg-core";
 import { artifacts } from "./artifacts";
 import { users } from "./users";
-import { workspaceCitations } from "./workspaceCitations";
+import { citations } from "./citations";
 import { workspaces } from "./workspaces";
 
 /** Locator sitasi in-text (halaman/bab + affix) — CSL cite-item fields. */
@@ -33,7 +33,7 @@ export const documentCitationUsages = pgTable(
       .references(() => artifacts.id, { onDelete: "cascade" }),
     citationId: text("citation_id")
       .notNull()
-      .references(() => workspaceCitations.id),
+      .references(() => citations.id),
     inlineNodeId: text("inline_node_id"),
     occurrenceOrder: integer("occurrence_order").notNull(),
     locatorJson: jsonb("locator_json").$type<CitationLocator>(),

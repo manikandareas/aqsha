@@ -11,7 +11,6 @@ import {
 } from "drizzle-orm/pg-core";
 import { artifacts } from "./artifacts";
 import { users } from "./users";
-import { workspaces } from "./workspaces";
 
 /** Author CSL-style — `literal` untuk corporate author, else family/given. */
 export type CitationAuthor = { family?: string; given?: string; literal?: string };
@@ -21,22 +20,21 @@ export type CitationProvider = "mendeley" | "zotero";
 export type CitationMetadataStatus = "verified" | "needs_review" | "incomplete";
 
 /**
- * workspace_citations — Citation Library workspace-scoped (Citation Manager Fase 1).
- * Entitas baru terpisah dari `artifact_paper_metadata` (referensi bisa tanpa file,
+ * citations — perpustakaan referensi global per akun. Koleksi per proyek hidup di
+ * `workspace_citation_links` (proyek me-reference item, bukan menyalin), sehingga
+ * satu sumber bisa dipakai lintas karya tulis tanpa duplikat.
+ * Entitas terpisah dari `artifact_paper_metadata` (referensi bisa tanpa file,
  * satu referensi dipakai banyak dokumen) dan `research_sources` (thread-scoped).
  * `csl_json` = canonical record; kolom read-model diturunkan darinya utk query/index.
- * Soft delete via `deleted_at` supaya usage dokumen (Fase 3) tetap terdiagnosis.
+ * Soft delete via `deleted_at` supaya usage dokumen tetap terdiagnosis.
  */
-export const workspaceCitations = pgTable(
-  "workspace_citations",
+export const citations = pgTable(
+  "citations",
   {
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => users.ownerUserId, { onDelete: "cascade" }),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id),
     artifactId: text("artifact_id").references(() => artifacts.id),
     source: text("source").notNull(),
     provider: text("provider"),
@@ -60,34 +58,26 @@ export const workspaceCitations = pgTable(
   },
   (t) => [
     check(
-      "workspace_citations_source_check",
+      "citations_source_check",
       sql`${t.source} in ('import', 'provider_sync', 'artifact', 'doi', 'manual')`,
     ),
     check(
-      "workspace_citations_provider_check",
+      "citations_provider_check",
       sql`${t.provider} is null or ${t.provider} in ('mendeley', 'zotero')`,
     ),
     check(
-      "workspace_citations_metadata_status_check",
+      "citations_metadata_status_check",
       sql`${t.metadataStatus} in ('verified', 'needs_review', 'incomplete')`,
     ),
-    index("workspace_citations_by_owner_workspace_updated").on(
-      t.ownerUserId,
-      t.workspaceId,
-      t.updatedAt,
-    ),
-    index("workspace_citations_by_owner_workspace_doi").on(t.ownerUserId, t.workspaceId, t.doi),
-    index("workspace_citations_by_owner_workspace_canonical").on(
-      t.ownerUserId,
-      t.workspaceId,
-      t.canonicalKey,
-    ),
-    index("workspace_citations_by_owner_artifact").on(t.ownerUserId, t.artifactId),
-    uniqueIndex("workspace_citations_by_owner_workspace_external")
-      .on(t.ownerUserId, t.workspaceId, t.provider, t.externalId)
+    index("citations_by_owner_updated").on(t.ownerUserId, t.updatedAt),
+    index("citations_by_owner_doi").on(t.ownerUserId, t.doi),
+    index("citations_by_owner_canonical").on(t.ownerUserId, t.canonicalKey),
+    index("citations_by_owner_artifact").on(t.ownerUserId, t.artifactId),
+    uniqueIndex("citations_by_owner_external")
+      .on(t.ownerUserId, t.provider, t.externalId)
       .where(sql`${t.externalId} is not null`),
   ],
 );
 
-export type WorkspaceCitation = typeof workspaceCitations.$inferSelect;
-export type NewWorkspaceCitation = typeof workspaceCitations.$inferInsert;
+export type Citation = typeof citations.$inferSelect;
+export type NewCitation = typeof citations.$inferInsert;
