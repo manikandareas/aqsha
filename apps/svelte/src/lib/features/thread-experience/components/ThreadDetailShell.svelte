@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { useClerkContext } from 'svelte-clerk';
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
+	import { buildWorkspaceMentionLabel } from '@aqsha/chat-core';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
@@ -32,8 +33,14 @@
 	let {
 		threadId: threadIdProp,
 		compact = false,
-		initialContent
-	}: { threadId?: string; compact?: boolean; initialContent?: string } = $props();
+		initialContent,
+		workspace = null
+	}: {
+		threadId?: string;
+		compact?: boolean;
+		initialContent?: string;
+		workspace?: { id: string; name: string } | null;
+	} = $props();
 
 	const clerk = useClerkContext();
 	const qc = useQueryClient();
@@ -47,6 +54,18 @@
 	setComposerMentions(mentions);
 	const panel = new ThreadPanelController();
 	setThreadPanel(panel);
+
+	// Chip konteks proyek selalu terlihat di composer (channel ambient).
+	$effect(() => {
+		if (!workspace) return;
+		mentions.setAmbientContextRefs([
+			{
+				kind: 'workspace',
+				workspaceId: workspace.id,
+				label: buildWorkspaceMentionLabel(workspace.name)
+			}
+		]);
+	});
 
 	// Stable client-side thread id for a NEW thread (Mastra allows a client-chosen id).
 	const newThreadId = untrack(() =>
@@ -69,7 +88,8 @@
 	);
 
 	const recentThreads = useRecentThreadSummaries(
-		() => isExistingThread && clerkLoaded && Boolean(userId)
+		() => isExistingThread && clerkLoaded && Boolean(userId),
+		() => workspace?.id ?? null
 	);
 	const headerTitle = $derived(
 		isExistingThread ? threadTitle(threadDetail.data ?? { title: null }) : 'Thread baru'
@@ -114,6 +134,7 @@
 			getClient: () => client,
 			threadId: tid,
 			getResourceId: () => (clerk.isLoaded ? clerk.auth.userId : null),
+			getWorkspaceId: () => workspace?.id ?? null,
 			queryClient: qc,
 			initialAgentKind,
 			seed
@@ -172,6 +193,7 @@
 						{threadAgentKind}
 						{compact}
 						{initialContent}
+						ambientWorkspaceId={workspace?.id ?? null}
 					/>
 				</div>
 			{/snippet}

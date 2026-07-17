@@ -114,6 +114,8 @@ export type ThreadAgentOptions = {
 	queryClient: QueryClient;
 	initialAgentKind?: AgentKind;
 	seed?: TimelineMessage[];
+	/** Scope proyek — dikirim per request sebagai RequestContext `aqsha-workspace-id`. */
+	getWorkspaceId?: () => string | null;
 	/**
 	 * Astra's `request_document_edit` tool result routes here. Intentionally UNWIRED pending the
 	 * editor redesign: with document editing read-only there is no editor to apply the instruction,
@@ -188,6 +190,7 @@ export class ThreadAgent {
 	readonly #getClient: () => MastraClient;
 	readonly #threadId: string;
 	readonly #getResourceId: () => string | null | undefined;
+	readonly #getWorkspaceId: () => string | null;
 	readonly #qc: QueryClient;
 	readonly #initialAgentKind: AgentKind;
 	readonly #onRequestDocumentEdit?: (edit: { artifactId: string; instruction: string }) => void;
@@ -226,6 +229,7 @@ export class ThreadAgent {
 		this.#getClient = opts.getClient;
 		this.#threadId = opts.threadId;
 		this.#getResourceId = opts.getResourceId;
+		this.#getWorkspaceId = opts.getWorkspaceId ?? (() => null);
 		this.#qc = opts.queryClient;
 		this.#initialAgentKind = opts.initialAgentKind ?? 'lite';
 		this.#onRequestDocumentEdit = opts.onRequestDocumentEdit;
@@ -436,6 +440,12 @@ export class ThreadAgent {
 
 	// ── send (chat) + queue-while-busy (DUR-6) ─────────────────────────────────────────────────────
 
+	/** Body RequestContext scope proyek — key non-`aqsha__` = boleh dikirim klien (di-merge server Mastra). */
+	#workspaceRequestContext(): { requestContext?: Record<string, string> } {
+		const workspaceId = this.#getWorkspaceId();
+		return workspaceId ? { requestContext: { 'aqsha-workspace-id': workspaceId } } : {};
+	}
+
 	async send(text: string, opts: SendOptions = {}): Promise<void> {
 		const resourceId = this.#getResourceId();
 		if (!text.trim() || !resourceId) return;
@@ -470,6 +480,7 @@ export class ThreadAgent {
 				message: display,
 				resourceId,
 				threadId: this.#threadId,
+				...this.#workspaceRequestContext(),
 				...(opts.clientContext && opts.clientContext.length > 0
 					? {
 							ifIdle: {
@@ -515,13 +526,15 @@ export class ThreadAgent {
 						message: string;
 						resourceId: string;
 						threadId: string;
+						requestContext?: Record<string, string>;
 					}) => Promise<{ runId?: string }>;
 				};
 				const res = await agent.queueMessage({
 					runId: activeChatRunId,
 					message: item.display,
 					resourceId: resourceId!,
-					threadId: this.#threadId
+					threadId: this.#threadId,
+					...this.#workspaceRequestContext()
 				});
 				if (typeof res.runId === 'string') {
 					this.#queuedServerRuns.set(res.runId, {
@@ -644,6 +657,7 @@ export class ThreadAgent {
 				message: lastMatches ? (last!.richText ?? last!.text) : text,
 				resourceId,
 				threadId: this.#threadId,
+				...this.#workspaceRequestContext(),
 				...(lastMatches && last!.clientContext && last!.clientContext.length > 0
 					? {
 							ifIdle: {

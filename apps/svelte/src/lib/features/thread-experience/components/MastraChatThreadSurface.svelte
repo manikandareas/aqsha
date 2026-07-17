@@ -2,7 +2,6 @@
 	import { untrack } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import type { StatsGroup } from '@aqsha/chat-core/stats-viz';
@@ -41,7 +40,9 @@
 		threadAgentKind = 'lite',
 		compact = false,
 		initialContent,
-		bindUrlOnSend = true
+		bindUrlOnSend = true,
+		threadUrlFor,
+		ambientWorkspaceId = null
 	}: {
 		agent: ThreadAgent;
 		threadId: string;
@@ -49,11 +50,18 @@
 		compact?: boolean;
 		initialContent?: string;
 		/**
-		 * Whether the first send of a NEW thread soft-bumps the URL to /app/threads/<id> (default). The
-		 * Explore/reader chat panel passes `false`: it owns the thread lifecycle inside the panel and must
-		 * NOT overwrite the page URL (which carries the Explore `?q=&topic=` state).
+		 * Whether the first send of a NEW thread soft-bumps the URL to the thread's own route (default).
+		 * The Explore/reader chat panel passes `false`: it owns the thread lifecycle inside the panel and
+		 * must NOT overwrite the page URL (which carries the Explore `?q=&topic=` state).
 		 */
 		bindUrlOnSend?: boolean;
+		/**
+		 * Builds the URL to bind on first send of a NEW thread. Required because a thread's route lives
+		 * under its project, so the surface can't hardcode it. Without a builder, binding is a no-op.
+		 */
+		threadUrlFor?: (threadId: string) => string;
+		/** Current project's workspace id — prioritized in the composer's @mention picker. */
+		ambientWorkspaceId?: string | null;
 	} = $props();
 
 	const qc = useQueryClient();
@@ -140,14 +148,15 @@
 		panel.register(lookups);
 	});
 
-	// First send of a NEW thread → bump the URL to /app/threads/<id> (shallow, no navigation) so a
-	// refresh resumes the thread. A new-thread landing has no `?panel=` yet (panels need messages), so a
-	// bare resolve() path is sufficient — no query to preserve on the very first send.
+	// First send of a NEW thread → bump the URL to the thread's own route (shallow, no navigation) so a
+	// refresh resumes the thread. Needs an explicit `threadUrlFor` builder because the route lives under
+	// its project; without one, binding is a no-op. A new-thread landing has no `?panel=` yet (panels
+	// need messages), so the built path is sufficient — no query to preserve on the very first send.
 	let bound = untrack(() => page.url.pathname.includes('/threads/'));
 	function bumpUrl(): void {
-		if (!bindUrlOnSend || bound) return;
+		if (!bindUrlOnSend || bound || !threadUrlFor) return;
 		bound = true;
-		replaceState(resolve('/app/(product)/threads/[threadId]', { threadId }), page.state);
+		replaceState(threadUrlFor(threadId), page.state);
 	}
 
 	function onComposerSend(payload: ComposerSendPayload): void {
@@ -205,6 +214,7 @@
 				{notice}
 				{threadId}
 				{threadAgentKind}
+				{ambientWorkspaceId}
 				{errorDraft}
 				showSuggestions={!compact}
 				recentThreads={recentThreads.data}

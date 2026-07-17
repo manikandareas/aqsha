@@ -18,7 +18,10 @@
 	 * `bindUrlOnSend={false}`: first send must NOT overwrite the Explore `?q=&topic=` URL. The parent keys
 	 * this component by thread id (remount = fresh agent) when the active thread changes.
 	 */
-	let { activeThreadId }: { activeThreadId: string | null } = $props();
+	let {
+		activeThreadId,
+		workspaceId = null
+	}: { activeThreadId: string | null; workspaceId?: string | null } = $props();
 
 	const clerk = useClerkContext();
 	const qc = useQueryClient();
@@ -79,6 +82,7 @@
 			getClient: () => client,
 			threadId: tid,
 			getResourceId: () => (clerk.isLoaded ? clerk.auth.userId : null),
+			getWorkspaceId: () => workspaceId,
 			queryClient: qc,
 			initialAgentKind,
 			seed
