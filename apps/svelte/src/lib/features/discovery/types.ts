@@ -2,7 +2,7 @@
  * Local `FeedItem` subset for component props. apps/svelte must not import `@aqsha/services` (client
  * boundary); Eden still types the route response — this only lists fields the UI renders.
  */
-export type FeedKind = 'paper' | 'news';
+export type FeedKind = 'paper';
 
 export type FeedItem = {
 	_id: string;
@@ -27,10 +27,7 @@ export type FeedItem = {
 	relevanceScore?: number;
 	reason?: string;
 	publishedAt?: number;
-	// paper-only hosted PDF; absent for news.
 	pdfUrl?: string;
-	// news-only: extracted article body (enrichment lane). Rendered in NewsReader.
-	articleText?: string;
 };
 
 export type DiscoveryItemRef =
@@ -96,12 +93,11 @@ export type PaperEnrichment = {
 	related: PaperEnrichmentRef[];
 };
 
-/** Internal reader link per kind. paper→/[key], news→/n/[id]; else→external. */
+/** Internal reader link: paper with a key → `/[key]`; else → external source. */
 export function feedItemHref(item: FeedItem): { href: string; external: boolean } {
 	if (item.kind === 'paper' && item.paperKey) {
 		return { href: `/app/explore/${encodeURIComponent(item.paperKey)}`, external: false };
 	}
-	if (item.kind === 'news') return { href: `/app/explore/n/${item._id}`, external: false };
 	return { href: item.resolvedUrl ?? item.url, external: true };
 }
 
@@ -118,6 +114,5 @@ export const FEED_TOPIC_LABELS: Record<FeedTopic, string> = {
 };
 
 export const KIND_LABELS: Record<FeedKind, string> = {
-	paper: 'Paper',
-	news: 'Berita'
+	paper: 'Paper'
 };

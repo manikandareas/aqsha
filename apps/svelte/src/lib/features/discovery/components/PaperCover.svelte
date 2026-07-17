@@ -14,11 +14,11 @@
 	let { item, class: className }: { item: DiscoveryItem; class?: string } = $props();
 
 	let failedUrl = $state<string | null>(null);
-	const pdfUrl = $derived(item.kind === 'paper' ? item.pdfUrl : undefined);
+	const pdfUrl = $derived(item.pdfUrl);
 </script>
 
 <div class={cn('relative overflow-hidden rounded-[12px]', className)} aria-hidden="true">
-	<GenerativeCover title={item.title} label={kindLabel(item.kind)} openAccess={item.isOpenAccess} />
+	<GenerativeCover title={item.title} label={kindLabel()} openAccess={item.isOpenAccess} />
 	{#if pdfUrl && failedUrl !== pdfUrl}
 		{#key pdfUrl}
 			<PdfThumb {pdfUrl} onFail={() => (failedUrl = pdfUrl ?? null)} />

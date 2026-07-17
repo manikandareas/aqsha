@@ -4,7 +4,6 @@
 
 	const SHELL_WIDTH = {
 		prose: 'max-w-[44rem]',
-		news: 'max-w-4xl',
 		wide: 'max-w-5xl'
 	} as const;
 

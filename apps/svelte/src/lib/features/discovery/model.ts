@@ -49,7 +49,6 @@ export function feedDetailHref(item: DiscoveryItem): string | null {
 	if (item.kind === 'paper' && item.paperKey) {
 		return `/app/explore/${encodeURIComponent(item.paperKey)}`;
 	}
-	if (item.kind === 'news') return `/app/explore/n/${item._id}`;
 	return null;
 }
 
@@ -60,12 +59,10 @@ export function bestIngestUrl(item: DiscoveryItem): string {
 	return item.pdfUrl ?? item.resolvedUrl ?? item.url;
 }
 
-export function kindLabel(kind: FeedItem['kind']): string {
-	return kind === 'paper' ? 'Paper' : 'Berita';
+export function kindLabel(): string {
+	return 'Paper';
 }
 
-export function kindPanelClass(kind: FeedItem['kind']): string {
-	return kind === 'paper'
-		? 'bg-gradient-to-br from-sky-soft to-mint-soft'
-		: 'bg-gradient-to-br from-lemon-soft to-coral-soft';
+export function kindPanelClass(): string {
+	return 'bg-gradient-to-br from-sky-soft to-mint-soft';
 }

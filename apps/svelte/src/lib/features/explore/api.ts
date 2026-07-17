@@ -1,6 +1,6 @@
 // Explore data hooks (driven by the URL `q`).
 //  - useExploreSuggest → typeahead query suggestions (cheap LLM, cached) for the ask-bar.
-// Paper + news search itself uses the discovery feed (`features/discovery/api`).
+// Paper search itself uses the discovery feed (`features/discovery/api`).
 
 import { createQuery } from '@tanstack/svelte-query';
 import { getApiClient } from '$lib/api';

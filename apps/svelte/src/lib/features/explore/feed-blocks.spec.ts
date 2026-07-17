@@ -11,7 +11,7 @@ function items(n: number): DiscoveryItem[] {
 	return Array.from({ length: n }, (_, i) =>
 		feedItemToDiscoveryItem({
 			_id: `f${i}`,
-			kind: 'news',
+			kind: 'paper',
 			title: `t${i}`,
 			summary: 's',
 			url: 'https://x',

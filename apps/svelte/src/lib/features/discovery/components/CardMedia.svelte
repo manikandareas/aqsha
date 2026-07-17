@@ -3,7 +3,7 @@
 	import type { DiscoveryItem } from '../model';
 	import PaperCover from './PaperCover.svelte';
 
-	/** Card media: direct photo for news/OG items; otherwise generative cover (open-access papers may overlay a PDF page-1 preview). */
+	/** Card media: direct photo when the item has one; otherwise generative cover (open-access papers may overlay a PDF page-1 preview). */
 	let {
 		item,
 		title,

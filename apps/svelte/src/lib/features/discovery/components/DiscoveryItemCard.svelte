@@ -21,7 +21,7 @@
 	import { firstInitial } from '$lib/components/generative-cover';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { feedDetailHref } from '../model';
-	import { domainFromUrl, formatCitationCount, relativeTime, sourceName } from '../format';
+	import { formatCitationCount, relativeTime, sourceName } from '../format';
 	import CardMedia from './CardMedia.svelte';
 	import SaveSourceButton from './SaveSourceButton.svelte';
 
@@ -65,11 +65,10 @@
 			: '@xl/feed:grid-cols-[minmax(0,1fr)_minmax(260px,40%)]'
 	);
 
-	const citation = $derived(item.kind === 'paper' ? formatCitationCount(item.citedByCount) : null);
+	const citation = $derived(formatCitationCount(item.citedByCount));
 	const sourceTime = $derived(
 		relativeTime(item.publishedAt) ?? (item.year ? String(item.year) : null)
 	);
-	const avatarDomain = $derived(item.kind === 'news' ? domainFromUrl(item.url) : null);
 </script>
 
 {#snippet cardLink(cls: string, decorative: boolean, content: Snippet)}
@@ -115,21 +114,9 @@
 {#snippet sourceRow()}
 	<div class="flex min-w-0 items-center gap-2">
 		<span
-			class={cn(
-				'relative inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full text-[10px] font-bold leading-none',
-				item.kind === 'paper'
-					? 'bg-mint-soft text-mint-foreground'
-					: 'bg-lemon-soft text-lemon-foreground'
-			)}
+			class="relative inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-mint-soft text-[10px] font-bold leading-none text-mint-foreground"
 		>
 			<span aria-hidden="true">{firstInitial(sourceName(item))}</span>
-			{#if avatarDomain}
-				<span
-					aria-hidden="true"
-					class="absolute inset-0 rounded-full bg-card bg-cover bg-center"
-					style="background-image: url('https://www.google.com/s2/favicons?domain={avatarDomain}&sz=64')"
-				></span>
-			{/if}
 		</span>
 		<p class="min-w-0 truncate text-[12px] font-medium text-muted-foreground">
 			<span class="font-semibold text-foreground/85">{sourceName(item)}</span>

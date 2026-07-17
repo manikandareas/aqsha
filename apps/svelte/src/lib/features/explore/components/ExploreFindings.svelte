@@ -29,7 +29,7 @@
 	import SectionHeader from './SectionHeader.svelte';
 
 	/**
-	 * "Temuan untukmu" — the real combined paper + news feed, using the editorial discovery cards +
+	 * "Temuan untukmu" — the real paper feed, using the editorial discovery cards +
 	 * infinite scroll. Scoped by the active interest pill (topic). Empty `q` → personal/topic feed
 	 * (Jelajah); non-empty `q` → live paper search (Selidiki).
 	 */

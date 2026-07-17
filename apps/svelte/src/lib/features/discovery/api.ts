@@ -16,8 +16,8 @@ import type { DiscoveryItemRef, ExplorePaper, FeedItem, FeedMode, FeedTopic } fr
 
 const FEED_PAGE_SIZE = 20;
 
-// Only papers + science news carry research value; claim/topic/idea kinds are pruned.
-const VISIBLE_KINDS = ['paper', 'news'] as const;
+// Only papers carry research value; claim/topic/idea kinds are pruned.
+const VISIBLE_KINDS = ['paper'] as const;
 
 type FeedPage = { items: FeedItem[]; nextCursor: string | null };
 
@@ -138,7 +138,7 @@ export function usePaper(key: () => string, enabled: () => boolean = always) {
 	}));
 }
 
-/** Reader feed item (news/fact). */
+/** Reader feed item, by feed row id. */
 export function useFeedItem(id: () => string, enabled: () => boolean = always) {
 	const api = getApiClient();
 	return createQuery(() => ({

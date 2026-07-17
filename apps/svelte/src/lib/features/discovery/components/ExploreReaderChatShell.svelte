@@ -5,7 +5,7 @@
 	import { panelHeaderBarClass } from '$lib/components/layout/panel-surface';
 
 	/**
-	 * Reader shell for the Explore pages (paper & news). Owns the fixed `h-svh` frame + breadcrumb header;
+	 * Reader shell for the Explore paper reader page. Owns the fixed `h-svh` frame + breadcrumb header;
 	 * the reader body renders as `children`. Astra chat was removed here — research chat lives inside a
 	 * project now, so a global (workspace-less) reader chat is intentionally gone.
 	 */

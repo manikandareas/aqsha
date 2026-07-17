@@ -12,7 +12,7 @@
 	import ExploreFindings from './ExploreFindings.svelte';
 
 	/**
-	 * Explore surface — paper + news discovery. Sticky glass header (breadcrumb + left-sidebar toggle) over
+	 * Explore surface — paper discovery. Sticky glass header (breadcrumb + left-sidebar toggle) over
 	 * the scrolling feed. Empty `q` → personal/topic feed (Jelajah); non-empty `q` → search results
 	 * (Selidiki). `q` + `topic` live in the URL (pure codec + `page.url`/`goto`). Browse-only: the research
 	 * chat lives inside a project now, so there is no embedded Astra panel here.

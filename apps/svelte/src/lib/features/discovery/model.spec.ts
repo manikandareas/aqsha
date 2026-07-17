@@ -25,15 +25,16 @@ const paperFeed: FeedItem = {
 	topics: ['agents']
 };
 
-const newsFeed: FeedItem = {
-	_id: 'n1',
-	kind: 'news',
-	title: 'AI breakthrough',
+// No doi/pdfUrl → exercises the resolvedUrl/url tail of the bestIngestUrl fallback chain.
+const bareFeed: FeedItem = {
+	_id: 'f2',
+	kind: 'paper',
+	title: 'A paper without a DOI',
 	summary: 'a summary',
-	url: 'https://news.example/x?utm=1',
-	resolvedUrl: 'https://news.example/x',
-	provider: 'gdelt',
-	sourceLabel: 'Example News',
+	url: 'https://arxiv.org/abs/2401.002?utm=1',
+	resolvedUrl: 'https://arxiv.org/abs/2401.002',
+	provider: 'arxiv',
+	sourceLabel: 'arXiv',
 	topics: []
 };
 
@@ -104,14 +105,12 @@ describe('discoveryItemKey', () => {
 });
 
 describe('feedDetailHref', () => {
-	it('routes paper by encoded key, news by id, else null', () => {
+	it('routes paper by encoded key, else null when there is no key', () => {
 		expect(feedDetailHref(feedItemToDiscoveryItem(paperFeed))).toBe(
 			'/app/explore/arxiv%3A2401.001'
 		);
-		expect(feedDetailHref(feedItemToDiscoveryItem(newsFeed))).toBe('/app/explore/n/n1');
 		const externalOnly: DiscoveryItem = {
-			...feedItemToDiscoveryItem(newsFeed),
-			kind: 'paper',
+			...feedItemToDiscoveryItem(bareFeed),
 			paperKey: undefined
 		};
 		expect(feedDetailHref(externalOnly)).toBeNull();
@@ -121,8 +120,8 @@ describe('feedDetailHref', () => {
 describe('bestIngestUrl', () => {
 	it('prefers DOI > pdf > resolved > url', () => {
 		expect(bestIngestUrl(feedItemToDiscoveryItem(paperFeed))).toBe('https://doi.org/10.1/abc');
-		expect(bestIngestUrl(feedItemToDiscoveryItem(newsFeed))).toBe('https://news.example/x');
-		const bare: DiscoveryItem = { ...feedItemToDiscoveryItem(newsFeed), resolvedUrl: undefined };
-		expect(bestIngestUrl(bare)).toBe('https://news.example/x?utm=1');
+		expect(bestIngestUrl(feedItemToDiscoveryItem(bareFeed))).toBe('https://arxiv.org/abs/2401.002');
+		const bare: DiscoveryItem = { ...feedItemToDiscoveryItem(bareFeed), resolvedUrl: undefined };
+		expect(bestIngestUrl(bare)).toBe('https://arxiv.org/abs/2401.002?utm=1');
 	});
 });
