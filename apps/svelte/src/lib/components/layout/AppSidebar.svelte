@@ -2,45 +2,33 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { useClerkContext } from 'svelte-clerk';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import * as Command from '@aqsha/ui-svelte/components/command';
 	import NavUser from './NavUser.svelte';
 	import SidebarSection from './sidebar/SidebarSection.svelte';
-	import ThreadArchiveGroup from './sidebar/ThreadArchiveGroup.svelte';
-	import ThreadActionsMenu from '$lib/features/thread-experience/components/ThreadActionsMenu.svelte';
-	import CreateWorkspacePopover from '$lib/features/workspaces/components/CreateWorkspacePopover.svelte';
-	import NameDialog from '$lib/features/workspaces/components/NameDialog.svelte';
-	import {
-		useWorkspaceIndexData,
-		type SidebarThread,
-		type SidebarWorkspace
-	} from '$lib/features/workspaces/api/use-workspaces-data';
+	import NewProjectDialog from '$lib/features/workspaces/components/NewProjectDialog.svelte';
+	import { useWorkspacesList } from '$lib/features/workspaces/api';
+	import { projectDisplayTitle, type Workspace } from '$lib/features/workspaces/types';
 	import {
 		Icon,
+		BookOpenIcon,
 		HomeIcon,
 		LayoutGridIcon,
-		MessageSquareIcon,
 		PanelLeftIcon,
-		PinIcon,
 		PlusIcon,
 		SearchIcon,
 		SettingsIcon,
-		TrendingUpIcon
+		TrendingUpIcon,
+		type IconSvgElement
 	} from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
-	 * Left navigation rail. Fetches sidebar data via `useWorkspaceIndexData()` (reactive getters);
-	 * selection derives from the route. Renders the workspace tree + thread groups (pinned / recent /
-	 * older) with per-row `ThreadActionsMenu`, `CreateWorkspacePopover`, collapsible sections, and the
-	 * ⌘K command palette.
+	 * Rail navigasi kiri IA project-first: Beranda, Perpustakaan, Jelajahi, Pengaturan +
+	 * daftar proyek (urut aktivitas). Thread tidak lagi global — hidup di dalam proyek.
 	 */
-	const MOBILE_THREAD_TITLE_MAX_CHARS = 42;
-	const THREADS_COLLAPSED_STORAGE_KEY = 'aqsha:sidebar:threads-collapsed';
-	const WORKSPACES_COLLAPSED_STORAGE_KEY = 'aqsha:sidebar:workspaces-collapsed';
-	// Sizing/type/radius live in the menu-button `rail` size variant; this carries the rail's
-	// state grammar. Hover icons follow the text to foreground (green icon over the muted hover
-	// fill misses 3:1); the primary icon is reserved for the active row, where it clears it.
+	const PROJECTS_COLLAPSED_STORAGE_KEY = 'aqsha:sidebar:projects-collapsed';
 	const sidebarItemBaseClass =
 		'gap-2 font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5';
 
@@ -54,51 +42,22 @@
 	}
 
 	const sidebar = Sidebar.useSidebar();
-	const data = useWorkspaceIndexData();
+	const clerk = useClerkContext();
+	const list = useWorkspacesList(
+		() => false,
+		() => clerk.isLoaded && Boolean(clerk.auth.userId)
+	);
+	const projects = $derived<Workspace[]>(list.data?.pages.flatMap((p) => p.items) ?? []);
 
 	let commandOpen = $state(false);
 	let createDialogOpen = $state(false);
 
 	const pathname = $derived(page.url.pathname);
-	const selectedThreadId = $derived(page.params.threadId);
-	const selectedWorkspaceId = $derived(page.params.workspaceId);
-	const isHomeActive = $derived(pathname === '/app' && !selectedThreadId);
-	const isWorkspaceRoute = $derived(pathname.startsWith('/app/workspaces'));
+	const selectedProjectId = $derived(page.params.projectId);
+	const isHomeActive = $derived(pathname === '/app');
+	const isLibraryActive = $derived(pathname.startsWith('/app/library'));
 	const isExploreActive = $derived(pathname.startsWith('/app/explore'));
-
-	const sortedWorkspaces = $derived(
-		[...data.workspaces].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
-	);
-	const sortedThreads = $derived(
-		[...data.threads].sort((a, b) => b.lastActivityAt - a.lastActivityAt)
-	);
-	// Thread yang disematkan diangkat ke grup "Disematkan" (urut pinnedAt DESC). Sisanya (unpinned)
-	// dipisah recent/older dari BE (ThreadService.list `bucket`).
-	const pinnedThreads = $derived(
-		data.threads
-			.filter((t) => t.pinnedAt != null)
-			.sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0))
-	);
-	const unpinnedThreads = $derived(sortedThreads.filter((t) => t.pinnedAt == null));
-	const recentThreads = $derived(unpinnedThreads.filter((t) => t.bucket !== 'older'));
-	const olderThreads = $derived(unpinnedThreads.filter((t) => t.bucket === 'older'));
-
-	async function submitCreateWorkspace({ name }: { name: string }) {
-		const workspaceId = await data.createWorkspace({ name });
-		await goto(
-			resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: String(workspaceId) })
-		);
-	}
-
-	function runCreateThread() {
-		commandOpen = false;
-		void goto(resolve('/app/(product)'));
-	}
-
-	function runCreateWorkspace() {
-		commandOpen = false;
-		createDialogOpen = true;
-	}
+	const isSettingsActive = $derived(pathname.startsWith('/app/settings'));
 
 	function closeSidebar() {
 		if (sidebar.isMobile) {
@@ -108,27 +67,9 @@
 		sidebar.setOpen(false);
 	}
 
-	async function handleDeleteThread(thread: SidebarThread) {
-		await data.removeThread({ threadId: thread.threadId });
-		if (pathname === `/app/threads/${thread.threadId}`) {
-			if (thread.workspaceId) {
-				await goto(
-					resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: thread.workspaceId })
-				);
-			} else {
-				await goto(resolve('/app/(product)'));
-			}
-		}
-	}
-
-	async function handleTogglePin(thread: SidebarThread) {
-		await data.togglePinThread({ threadId: thread.threadId, pinned: thread.pinnedAt == null });
-	}
-
-	function truncateCharacters(value: string, maxLength: number) {
-		const trimmed = value.trim();
-		if (trimmed.length <= maxLength) return trimmed;
-		return `${trimmed.slice(0, maxLength - 1).trimEnd()}...`;
+	function runCreateProject() {
+		commandOpen = false;
+		createDialogOpen = true;
 	}
 
 	function handleShortcut(event: KeyboardEvent) {
@@ -141,7 +82,7 @@
 
 <svelte:window onkeydown={handleShortcut} />
 
-{#snippet workspaceEmojiGlyph(emoji: string | undefined, active: boolean)}
+{#snippet projectEmojiGlyph(emoji: string | null, active: boolean)}
 	<span
 		aria-hidden="true"
 		class={cn(
@@ -153,66 +94,16 @@
 	</span>
 {/snippet}
 
-{#snippet workspaceRow(workspace: SidebarWorkspace)}
-	{@const active = isWorkspaceRoute && workspace._id === selectedWorkspaceId}
+{#snippet navItem(href: string, label: string, icon: IconSvgElement, active: boolean)}
 	<Sidebar.MenuItem class="min-w-0 overflow-hidden">
-		<Sidebar.MenuButton
-			isActive={active}
-			size="rail"
-			class={cn(sidebarItemClass(active), 'w-full min-w-0 max-w-full overflow-hidden')}
-		>
+		<Sidebar.MenuButton isActive={active} size="rail" class={sidebarItemClass(active)}>
 			{#snippet child({ props })}
-				<a
-					{...props}
-					href={resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: workspace._id })}
-				>
-					{@render workspaceEmojiGlyph(workspace.emoji, active)}
-					<span class="min-w-0 flex-1 truncate font-normal">{workspace.name}</span>
+				<a {...props} {href}>
+					<Icon {icon} class="size-3.5 shrink-0" />
+					<span>{label}</span>
 				</a>
 			{/snippet}
 		</Sidebar.MenuButton>
-	</Sidebar.MenuItem>
-{/snippet}
-
-{#snippet threadRow(thread: SidebarThread)}
-	{@const active = thread.threadId === selectedThreadId}
-	{@const isPinned = thread.pinnedAt != null}
-	{@const deleteDescription = thread.workspaceId
-		? 'Thread dan pesannya akan dihapus permanen dari workspace ini.'
-		: 'Thread dan pesannya akan dihapus permanen.'}
-	<Sidebar.MenuItem class="min-w-0 overflow-hidden">
-		<Sidebar.MenuButton
-			isActive={active}
-			size="rail"
-			class={cn(sidebarItemClass(active), 'w-full min-w-0 max-w-full overflow-hidden pr-8')}
-		>
-			{#snippet child({ props })}
-				<a
-					{...props}
-					href={resolve('/app/(product)/threads/[threadId]', { threadId: thread.threadId })}
-					aria-label={thread.title}
-					title={thread.title}
-				>
-					<Icon icon={MessageSquareIcon} class="size-3.5 shrink-0" />
-					<span class="min-w-0 flex-1 truncate font-normal">
-						{truncateCharacters(thread.title, MOBILE_THREAD_TITLE_MAX_CHARS)}
-					</span>
-					{#if isPinned}
-						<Icon icon={PinIcon} class="size-3 shrink-0 text-primary" />
-					{/if}
-					{#if thread.status === 'streaming'}
-						<span class="inline-flex size-1.5 shrink-0 rounded-full bg-primary"></span>
-					{/if}
-				</a>
-			{/snippet}
-		</Sidebar.MenuButton>
-		<ThreadActionsMenu
-			variant="sidebar-row"
-			description={deleteDescription}
-			onDelete={() => handleDeleteThread(thread)}
-			{isPinned}
-			onTogglePin={() => handleTogglePin(thread)}
-		/>
 	</Sidebar.MenuItem>
 {/snippet}
 
@@ -231,114 +122,65 @@
 				type="button"
 				onclick={() => (commandOpen = true)}
 				class="flex size-6 items-center justify-center rounded-sm text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
-				aria-label="Cari thread"
+				aria-label="Cari proyek"
 			>
 				<Icon icon={SearchIcon} class="size-3.5" />
 			</button>
 		</div>
 
 		<Sidebar.Menu class="gap-1">
-			<Sidebar.MenuItem class="min-w-0 overflow-hidden">
-				<Sidebar.MenuButton
-					isActive={isHomeActive}
-					size="rail"
-					class={sidebarItemClass(isHomeActive)}
-				>
-					{#snippet child({ props })}
-						<a {...props} href={resolve('/app/(product)')}>
-							<Icon icon={HomeIcon} class="size-3.5 shrink-0" />
-							<span>Home</span>
-						</a>
-					{/snippet}
-				</Sidebar.MenuButton>
-			</Sidebar.MenuItem>
-			<Sidebar.MenuItem class="min-w-0 overflow-hidden">
-				<Sidebar.MenuButton
-					isActive={isExploreActive}
-					size="rail"
-					class={sidebarItemClass(isExploreActive)}
-				>
-					{#snippet child({ props })}
-						<a {...props} href={resolve('/app/(product)/explore')}>
-							<Icon icon={TrendingUpIcon} class="size-3.5 shrink-0" />
-							<span>Jelajahi</span>
-						</a>
-					{/snippet}
-				</Sidebar.MenuButton>
-			</Sidebar.MenuItem>
+			{@render navItem(resolve('/app/(product)'), 'Beranda', HomeIcon, isHomeActive)}
+			{@render navItem(resolve('/app/(product)/library'), 'Perpustakaan', BookOpenIcon, isLibraryActive)}
+			{@render navItem(resolve('/app/(product)/explore'), 'Jelajahi', TrendingUpIcon, isExploreActive)}
+			{@render navItem(resolve('/app/settings/overview'), 'Pengaturan', SettingsIcon, isSettingsActive)}
 		</Sidebar.Menu>
 	</Sidebar.Header>
 
 	<Sidebar.Content class="min-h-0 px-3 pb-3 pt-2">
-		<div class="grid min-w-0 gap-5 overflow-hidden">
-			<SidebarSection
-				label="Workspaces"
-				first
-				collapsible
-				storageKey={WORKSPACES_COLLAPSED_STORAGE_KEY}
-			>
-				{#snippet action()}
-					<CreateWorkspacePopover onSubmit={submitCreateWorkspace} />
-				{/snippet}
-				{#if sortedWorkspaces.length > 0}
-					<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
-						{#each sortedWorkspaces as workspace (workspace._id)}
-							{@render workspaceRow(workspace)}
-						{/each}
-					</Sidebar.Menu>
-				{:else}
-					<div
-						class="rounded-sm border border-dashed border-border/70 px-2.5 py-2 text-label font-medium leading-5 text-muted-foreground"
-					>
-						Belum ada workspace.
-					</div>
-				{/if}
-			</SidebarSection>
-
-			<SidebarSection label="Threads" collapsible storageKey={THREADS_COLLAPSED_STORAGE_KEY}>
-				{#snippet action()}
-					<button
-						type="button"
-						onclick={runCreateThread}
-						class="flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
-						aria-label="Thread baru"
-					>
-						<Icon icon={PlusIcon} class="size-3.5" />
-					</button>
-				{/snippet}
-				{#if sortedThreads.length > 0}
-					<div class="min-w-0 overflow-hidden">
-						<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
-							{#if pinnedThreads.length > 0}
-								<li role="presentation" aria-hidden="true" class="flex items-center gap-1 px-1">
-									<Icon icon={PinIcon} class="size-3 shrink-0 text-primary" />
-									<span
-										class="min-w-0 flex-1 truncate text-label font-medium text-muted-foreground"
+		<SidebarSection label="Proyek" first collapsible storageKey={PROJECTS_COLLAPSED_STORAGE_KEY}>
+			{#snippet action()}
+				<button
+					type="button"
+					onclick={runCreateProject}
+					class="flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
+					aria-label="Proyek baru"
+				>
+					<Icon icon={PlusIcon} class="size-3.5" />
+				</button>
+			{/snippet}
+			{#if projects.length > 0}
+				<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
+					{#each projects as project (project.id)}
+						{@const active = project.id === selectedProjectId}
+						<Sidebar.MenuItem class="min-w-0 overflow-hidden">
+							<Sidebar.MenuButton
+								isActive={active}
+								size="rail"
+								class={cn(sidebarItemClass(active), 'w-full min-w-0 max-w-full overflow-hidden')}
+							>
+								{#snippet child({ props })}
+									<a
+										{...props}
+										href={resolve('/app/(product)/projects/[projectId]', { projectId: project.id })}
 									>
-										Disematkan
-									</span>
-								</li>
-								{#each pinnedThreads as thread (thread.threadId)}
-									{@render threadRow(thread)}
-								{/each}
-							{/if}
-							{#each recentThreads as thread (thread.threadId)}
-								{@render threadRow(thread)}
-							{/each}
-						</Sidebar.Menu>
-						{#if olderThreads.length > 0}
-							<ThreadArchiveGroup threads={olderThreads} {selectedThreadId} {threadRow} />
-						{/if}
-					</div>
-				{:else}
-					<div
-						class="rounded-sm border border-dashed border-border/70 px-2.5 py-2 text-label font-medium leading-5 text-muted-foreground"
-					>
-						Belum ada thread.
-					</div>
-				{/if}
-			</SidebarSection>
-		</div>
+										{@render projectEmojiGlyph(project.emoji, active)}
+										<span class="min-w-0 flex-1 truncate font-normal">
+											{projectDisplayTitle(project)}
+										</span>
+									</a>
+								{/snippet}
+							</Sidebar.MenuButton>
+						</Sidebar.MenuItem>
+					{/each}
+				</Sidebar.Menu>
+			{:else}
+				<div
+					class="rounded-sm border border-dashed border-border/70 px-2.5 py-2 text-label font-medium leading-5 text-muted-foreground"
+				>
+					Belum ada proyek.
+				</div>
+			{/if}
+		</SidebarSection>
 	</Sidebar.Content>
 
 	<Sidebar.Footer class="mt-auto gap-3 p-3">
@@ -351,13 +193,9 @@
 	<Command.List>
 		<Command.Empty>Tidak ada hasil.</Command.Empty>
 		<Command.Group heading="Buat">
-			<Command.Item onSelect={runCreateThread}>
-				<Icon icon={MessageSquareIcon} class="size-4" />
-				Chat baru
-			</Command.Item>
-			<Command.Item onSelect={runCreateWorkspace}>
+			<Command.Item onSelect={runCreateProject}>
 				<Icon icon={LayoutGridIcon} class="size-4" />
-				Workspace baru
+				Proyek baru
 			</Command.Item>
 		</Command.Group>
 		<Command.Group heading="Buka">
@@ -370,6 +208,16 @@
 			>
 				<Icon icon={HomeIcon} class="size-4" />
 				Beranda
+			</Command.Item>
+			<Command.Item
+				value="buka-perpustakaan"
+				onSelect={() => {
+					commandOpen = false;
+					goto(resolve('/app/(product)/library'));
+				}}
+			>
+				<Icon icon={BookOpenIcon} class="size-4" />
+				Perpustakaan
 			</Command.Item>
 			<Command.Item
 				value="buka-jelajahi"
@@ -392,38 +240,19 @@
 				Pengaturan
 			</Command.Item>
 		</Command.Group>
-		{#if sortedWorkspaces.length > 0}
-			<Command.Group heading="Workspaces">
-				{#each sortedWorkspaces as workspace (workspace._id)}
+		{#if projects.length > 0}
+			<Command.Group heading="Proyek">
+				{#each projects as project (project.id)}
 					<Command.Item
-						value={`workspace-${workspace._id}`}
-						keywords={[workspace.name]}
+						value={`project-${project.id}`}
+						keywords={[projectDisplayTitle(project)]}
 						onSelect={() => {
 							commandOpen = false;
-							goto(
-								resolve('/app/(product)/workspaces/[workspaceId]', { workspaceId: workspace._id })
-							);
+							goto(resolve('/app/(product)/projects/[projectId]', { projectId: project.id }));
 						}}
 					>
-						{@render workspaceEmojiGlyph(workspace.emoji, false)}
-						<span class="truncate">{workspace.name}</span>
-					</Command.Item>
-				{/each}
-			</Command.Group>
-		{/if}
-		{#if sortedThreads.length > 0}
-			<Command.Group heading="Threads">
-				{#each sortedThreads as thread (thread.threadId)}
-					<Command.Item
-						value={`thread-${thread.threadId}`}
-						keywords={[thread.title]}
-						onSelect={() => {
-							commandOpen = false;
-							goto(resolve('/app/(product)/threads/[threadId]', { threadId: thread.threadId }));
-						}}
-					>
-						<Icon icon={MessageSquareIcon} class="size-4" />
-						<span class="truncate">{thread.title}</span>
+						{@render projectEmojiGlyph(project.emoji, false)}
+						<span class="truncate">{projectDisplayTitle(project)}</span>
 					</Command.Item>
 				{/each}
 			</Command.Group>
@@ -431,11 +260,4 @@
 	</Command.List>
 </Command.Dialog>
 
-<NameDialog
-	open={createDialogOpen}
-	onOpenChange={(open) => (createDialogOpen = open)}
-	title="Workspace baru"
-	description="Buat area riset personal."
-	submitLabel="Buat"
-	onSubmit={submitCreateWorkspace}
-/>
+<NewProjectDialog open={createDialogOpen} onOpenChange={(open) => (createDialogOpen = open)} />
