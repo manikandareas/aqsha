@@ -560,6 +560,17 @@ export function useAssignCitationSection() {
 // ── Simpan citation-first dari pencarian/feed ────────────────────────────────
 
 /**
+ * Menandai kegagalan pada tahap link-ke-proyek setelah citation berhasil dibuat, supaya
+ * `onError` bisa membedakannya dari kegagalan create dan menampilkan satu toast yang akurat
+ * (bukan toast warning dari sini ditambah toast success caller karena mutation "berhasil").
+ */
+class SourceLinkError extends Error {
+	constructor(cause: unknown) {
+		super('Gagal menautkan sumber ke proyek.', { cause });
+	}
+}
+
+/**
  * Simpan sumber hasil pencarian: buat citation di perpustakaan akun (duplikat →
  * pakai yang lama, tanpa entri dobel) lalu opsional auto-link ke proyek/bab.
  */
@@ -587,14 +598,12 @@ export function useSaveSource() {
 							.link.post({ sectionId: input.sectionId ?? null })
 					);
 				} catch (e) {
-					// Citation already exists in the library at this point — a link failure isn't
-					// a total save failure, so warn instead of rejecting the mutation.
-					toast.warning(
-						readableApiErrorMessage(
-							e,
-							'Tersimpan ke perpustakaan, tapi gagal ditautkan ke proyek ini.'
-						)
-					);
+					// Citation is already saved to the library at this point. The mutation still
+					// rejects (so callers' onSuccess — and their "saved & linked" toast — doesn't
+					// fire), so invalidate here rather than relying on the onSuccess below.
+					qc.invalidateQueries({ queryKey: queryKeys.citations.all });
+					qc.invalidateQueries({ queryKey: queryKeys.citations.links(input.workspaceId) });
+					throw new SourceLinkError(e);
 				}
 			}
 			return citation;
@@ -608,6 +617,9 @@ export function useSaveSource() {
 				qc.invalidateQueries({ queryKey: queryKeys.citations.links(input.workspaceId) });
 			}
 		},
-		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menyimpan sumber.'))
+		onError: (e) =>
+			e instanceof SourceLinkError
+				? toast.warning('Sumber tersimpan ke perpustakaan, tapi gagal ditautkan ke proyek.')
+				: toast.error(readableApiErrorMessage(e, 'Gagal menyimpan sumber.'))
 	}));
 }
