@@ -1,5 +1,5 @@
 import type { CitationLocator, Db, DbOrTx, NewDocumentCitationUsage } from "@aqsha/db";
-import { DocumentCitationUsageRepo, WorkspaceCitationRepo } from "@aqsha/db";
+import { CitationRepo, DocumentCitationUsageRepo } from "@aqsha/db";
 
 /** Cluster sitasi yang di-parse dari satu inline node `citation` di blocksJson. */
 export type ParsedCitationCluster = {
@@ -104,10 +104,10 @@ export const CitationUsageService = {
 
     let validIds = new Set<string>();
     if (referencedIds.length > 0) {
-      const rows = await WorkspaceCitationRepo.findByIds(db, input.ownerUserId, referencedIds);
-      validIds = new Set(
-        rows.filter((r) => r.workspaceId === input.workspaceId).map((r) => r.id),
-      );
+      // Perpustakaan global per akun: cukup owner yang cocok (dokumen boleh memakai
+      // item mana pun milik owner, koleksi proyek hanyalah view).
+      const rows = await CitationRepo.findByIds(db, input.ownerUserId, referencedIds);
+      validIds = new Set(rows.map((r) => r.id));
     }
 
     const now = Date.now();

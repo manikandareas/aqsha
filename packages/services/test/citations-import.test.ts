@@ -2,8 +2,9 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   AppError,
   CitationImportBatchRepo,
+  CitationRepo,
   DocumentCitationUsageRepo,
-  WorkspaceCitationRepo,
+  WorkspaceCitationLinkRepo,
 } from "@aqsha/db";
 import { CitationImportService } from "../src/citations/citation-import.service";
 import { CitationService } from "../src/citations/citation.service";
@@ -40,7 +41,6 @@ function existingRow(over: Record<string, unknown> = {}) {
   return {
     id: "cit_existing",
     ownerUserId: OWNER,
-    workspaceId: WS,
     artifactId: null,
     source: "import",
     provider: null,
@@ -81,10 +81,14 @@ function stubOwner() {
   spyOn(WorkspaceService, "assertWorkspaceOwner").mockResolvedValue({} as never);
 }
 
+function stubLinks() {
+  return spyOn(WorkspaceCitationLinkRepo, "insert").mockResolvedValue();
+}
+
 describe("CitationImportService.preview", () => {
   test("tandai duplikat vs library + antar-record batch, persist staging", async () => {
     stubOwner();
-    spyOn(WorkspaceCitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
+    spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
     const insertBatch = spyOn(CitationImportBatchRepo, "insert").mockResolvedValue();
 
     const preview = await CitationImportService.preview(fakeDb, {
@@ -125,7 +129,7 @@ describe("CitationImportService.preview", () => {
 describe("CitationImportService.commit", () => {
   async function stagedBatch() {
     stubOwner();
-    spyOn(WorkspaceCitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
+    spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
     let captured: Record<string, unknown> | null = null;
     spyOn(CitationImportBatchRepo, "insert").mockImplementation(async (_db, row) => {
       captured = row as Record<string, unknown>;
@@ -145,12 +149,13 @@ describe("CitationImportService.commit", () => {
     };
   }
 
-  test("policy skip: duplikat dilewati, non-duplikat dibuat", async () => {
+  test("policy skip: duplikat dilewati, non-duplikat dibuat + ter-link ke proyek", async () => {
     const { preview, batchRow } = await stagedBatch();
     spyOn(CitationImportBatchRepo, "findById").mockResolvedValue(batchRow as never);
-    spyOn(WorkspaceCitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
-    const insertMany = spyOn(WorkspaceCitationRepo, "insertMany").mockResolvedValue();
+    spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
+    const insertMany = spyOn(CitationRepo, "insertMany").mockResolvedValue();
     const updateBatch = spyOn(CitationImportBatchRepo, "updateById").mockResolvedValue();
+    const insertLink = stubLinks();
 
     const result = await CitationImportService.commit(fakeDb, {
       ownerUserId: OWNER,
@@ -163,6 +168,8 @@ describe("CitationImportService.commit", () => {
     const rows = insertMany.mock.calls[0]?.[1] as Array<{ title: string; source: string }>;
     expect(rows.map((r) => r.title)).toEqual(["Entry Dua"]);
     expect(rows[0]?.source).toBe("import");
+    // Row baru langsung masuk koleksi proyek asal import.
+    expect(insertLink).toHaveBeenCalledTimes(1);
     const patch = updateBatch.mock.calls[0]?.[2] as Record<string, unknown>;
     expect(patch.status).toBe("committed");
     expect(patch.recordsJson).toBeNull();
@@ -171,10 +178,11 @@ describe("CitationImportService.commit", () => {
   test("policy merge: patch field kosong existing, duplikat batch tanpa row → skip", async () => {
     const { preview, batchRow } = await stagedBatch();
     spyOn(CitationImportBatchRepo, "findById").mockResolvedValue(batchRow as never);
-    spyOn(WorkspaceCitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
-    spyOn(WorkspaceCitationRepo, "insertMany").mockResolvedValue();
-    const updateCitation = spyOn(WorkspaceCitationRepo, "updateById").mockResolvedValue();
+    spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
+    spyOn(CitationRepo, "insertMany").mockResolvedValue();
+    const updateCitation = spyOn(CitationRepo, "updateById").mockResolvedValue();
     spyOn(CitationImportBatchRepo, "updateById").mockResolvedValue();
+    stubLinks();
 
     const result = await CitationImportService.commit(fakeDb, {
       ownerUserId: OWNER,
@@ -194,9 +202,10 @@ describe("CitationImportService.commit", () => {
   test("policy import: semua terpilih dibuat baru", async () => {
     const { preview, batchRow } = await stagedBatch();
     spyOn(CitationImportBatchRepo, "findById").mockResolvedValue(batchRow as never);
-    spyOn(WorkspaceCitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
-    const insertMany = spyOn(WorkspaceCitationRepo, "insertMany").mockResolvedValue();
+    spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
+    const insertMany = spyOn(CitationRepo, "insertMany").mockResolvedValue();
     spyOn(CitationImportBatchRepo, "updateById").mockResolvedValue();
+    stubLinks();
 
     const result = await CitationImportService.commit(fakeDb, {
       ownerUserId: OWNER,
@@ -254,20 +263,18 @@ describe("CitationImportService.commit", () => {
 
 describe("CitationService guards", () => {
   test("createManual duplikat → citation_duplicate 409; allowDuplicate lolos", async () => {
-    stubOwner();
-    spyOn(WorkspaceCitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
-    const insert = spyOn(WorkspaceCitationRepo, "insert").mockResolvedValue();
-    spyOn(WorkspaceCitationRepo, "findById").mockImplementation(
-      async (_db, _owner, id) => existingRow({ id }) as never,
+    spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
+    const insert = spyOn(CitationRepo, "insert").mockResolvedValue();
+    spyOn(CitationRepo, "findById").mockImplementation(
+      async (_db: unknown, _owner: unknown, id: unknown) => existingRow({ id: id as string }) as never,
     );
-    // createManual mengembalikan lewat get() → butuh stub usage count (Fase 3).
+    // createManual mengembalikan lewat get() → butuh stub usage count.
     spyOn(DocumentCitationUsageRepo, "countDocumentsUsingCitation").mockResolvedValue(0);
 
     expect(
       await appErrorCode(
         CitationService.createManual(fakeDb, {
           ownerUserId: OWNER,
-          workspaceId: WS,
           fields: { title: "Entry Satu", doi: "10.1/dup" },
         }),
       ),
@@ -276,21 +283,28 @@ describe("CitationService guards", () => {
 
     await CitationService.createManual(fakeDb, {
       ownerUserId: OWNER,
-      workspaceId: WS,
       fields: { title: "Entry Satu", doi: "10.1/dup" },
       allowDuplicate: true,
     });
     expect(insert).toHaveBeenCalledTimes(1);
   });
 
-  test("get citation workspace lain → citation_not_found", async () => {
-    stubOwner();
-    spyOn(WorkspaceCitationRepo, "findById").mockResolvedValue(
-      existingRow({ workspaceId: "ws_lain" }),
-    );
+  test("get citation yang sudah dihapus tetap terbaca (allowDeleted)", async () => {
+    spyOn(CitationRepo, "findById").mockResolvedValue(existingRow({ deletedAt: 99 }));
+    spyOn(DocumentCitationUsageRepo, "countDocumentsUsingCitation").mockResolvedValue(0);
+    const detail = await CitationService.get(fakeDb, { ownerUserId: OWNER, citationId: "x" });
+    expect(detail.deletedAt).toBe(99);
+  });
+
+  test("update citation yang sudah dihapus → citation_not_found", async () => {
+    spyOn(CitationRepo, "findById").mockResolvedValue(existingRow({ deletedAt: 99 }));
     expect(
       await appErrorCode(
-        CitationService.get(fakeDb, { ownerUserId: OWNER, workspaceId: WS, citationId: "x" }),
+        CitationService.update(fakeDb, {
+          ownerUserId: OWNER,
+          citationId: "x",
+          tags: ["a"],
+        }),
       ),
     ).toBe("citation_not_found");
   });

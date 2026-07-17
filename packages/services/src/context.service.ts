@@ -108,14 +108,13 @@ export const ContextService = {
       ),
     ]);
 
-    // Referensi Citation Library: metadata terstruktur saja (bukan file/token). Ownership
-    // divalidasi per-item oleh `CitationService.get` (assertWorkspaceOwner) → gagal/foreign =
+    // Referensi perpustakaan: metadata terstruktur saja (bukan file/token). Ownership
+    // divalidasi per-item oleh `CitationService.get` (owner-scoped) → gagal/foreign =
     // drop senyap. Dijalankan setelah batch di atas (jumlahnya kecil, tak memblok resolver publik).
     const citations = await Promise.all(
       wantCitations.map((c) =>
         CitationService.get(db, {
           ownerUserId: input.ownerUserId,
-          workspaceId: c.workspaceId,
           citationId: c.citationId,
         }).catch(() => null),
       ),

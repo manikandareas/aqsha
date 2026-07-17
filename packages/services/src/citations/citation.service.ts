@@ -1,6 +1,7 @@
 import type {
   ArtifactPaperMetadata,
   BibliographySort,
+  Citation,
   CitationAuthor,
   CitationMetadataStatus,
   CitationProvider,
@@ -8,15 +9,14 @@ import type {
   CitationStyleId,
   Db,
   DbOrTx,
-  NewWorkspaceCitation,
-  WorkspaceCitation,
+  NewCitation,
 } from "@aqsha/db";
 import {
   ArtifactPaperMetadataRepo,
+  CitationRepo,
   decodeKeysetCursor,
   DocumentCitationUsageRepo,
   throwAppError,
-  WorkspaceCitationRepo,
   WorkspaceCitationSettingsRepo,
 } from "@aqsha/db";
 import { classifyPaperText } from "../papers/identifiers";
@@ -70,7 +70,7 @@ export type CitationDetail = CitationListItem & {
   reviewedAt: number | null;
   createdAt: number;
   deletedAt: number | null;
-  /** Jumlah dokumen yang memakai citation ini (hanya diisi oleh `get`, Fase 3). */
+  /** Jumlah dokumen yang memakai citation ini (hanya diisi oleh `get`). */
   usageCount?: number;
 };
 
@@ -92,7 +92,7 @@ export type CitationDuplicateGroup = {
   members: CitationListItem[];
 };
 
-function toListItem(row: WorkspaceCitation): CitationListItem {
+function toListItem(row: Citation): CitationListItem {
   return {
     id: row.id,
     documentType: row.documentType,
@@ -110,7 +110,7 @@ function toListItem(row: WorkspaceCitation): CitationListItem {
   };
 }
 
-function toDetail(row: WorkspaceCitation): CitationDetail {
+function toDetail(row: Citation): CitationDetail {
   return {
     ...toListItem(row),
     publisher: row.publisher,
@@ -125,12 +125,11 @@ function toDetail(row: WorkspaceCitation): CitationDetail {
 async function requireCitation(
   db: DbOrTx,
   ownerUserId: string,
-  workspaceId: string,
   citationId: string,
   options: { allowDeleted?: boolean } = {},
-): Promise<WorkspaceCitation> {
-  const row = await WorkspaceCitationRepo.findById(db, ownerUserId, citationId);
-  if (!row || row.workspaceId !== workspaceId || (!options.allowDeleted && row.deletedAt)) {
+): Promise<Citation> {
+  const row = await CitationRepo.findById(db, ownerUserId, citationId);
+  if (!row || (!options.allowDeleted && row.deletedAt)) {
     throwAppError({
       message: "Referensi tidak ditemukan",
       code: "citation_not_found",
@@ -144,14 +143,11 @@ async function requireCitation(
 async function assertNotDuplicate(
   db: DbOrTx,
   ownerUserId: string,
-  workspaceId: string,
   canonicalKey: string,
   allowDuplicate: boolean,
 ): Promise<void> {
   if (allowDuplicate) return;
-  const hits = await WorkspaceCitationRepo.findActiveByCanonicalKeys(db, ownerUserId, workspaceId, [
-    canonicalKey,
-  ]);
+  const hits = await CitationRepo.findActiveByCanonicalKeys(db, ownerUserId, [canonicalKey]);
   const hit = hits[0];
   if (hit) {
     throwAppError({
@@ -165,7 +161,6 @@ async function assertNotDuplicate(
 
 function rowFromCsl(input: {
   ownerUserId: string;
-  workspaceId: string;
   source: CitationSource;
   csl: CslItem;
   tags: string[];
@@ -173,12 +168,11 @@ function rowFromCsl(input: {
   artifactId?: string | null;
   provider?: CitationProvider | null;
   externalId?: string | null;
-}): NewWorkspaceCitation {
+}): NewCitation {
   const columns = cslItemToColumns(input.csl);
   return {
     id: crypto.randomUUID(),
     ownerUserId: input.ownerUserId,
-    workspaceId: input.workspaceId,
     artifactId: input.artifactId ?? null,
     source: input.source,
     provider: input.provider ?? null,
@@ -230,7 +224,7 @@ function buildCslFromResolvedPaper(paper: ResolvedPaper): CslItem {
   return csl;
 }
 
-/** Peta `artifact_paper_metadata` → CSL-JSON (Fase 2 artifact bridge). Hanya field terisi. */
+/** Peta `artifact_paper_metadata` → CSL-JSON (artifact bridge). Hanya field terisi. */
 function buildCslFromPaperMetadata(meta: ArtifactPaperMetadata): CslItem {
   const csl: CslItem = { type: "article-journal", title: meta.title ?? "" };
   const authors = (meta.authors ?? [])
@@ -247,7 +241,7 @@ function buildCslFromPaperMetadata(meta: ArtifactPaperMetadata): CslItem {
 }
 
 /** Skor kelengkapan metadata — dipakai memilih target default saat merge banyak. */
-function completenessScore(row: WorkspaceCitation): number {
+function completenessScore(row: Citation): number {
   let score = 0;
   if (row.doi) score += 3;
   if (row.authorsJson.length > 0) score += 2;
@@ -261,7 +255,7 @@ function completenessScore(row: WorkspaceCitation): number {
 }
 
 /** Target merge default: paling lengkap; seri → yang lebih dulu dibuat (identitas stabil). */
-function pickMergeTarget(rows: WorkspaceCitation[]): WorkspaceCitation {
+function pickMergeTarget(rows: Citation[]): Citation {
   return rows.reduce((best, row) => {
     const a = completenessScore(row);
     const b = completenessScore(best);
@@ -272,16 +266,16 @@ function pickMergeTarget(rows: WorkspaceCitation[]): WorkspaceCitation {
 }
 
 /**
- * CitationService — CRUD + dedupe + export + render Citation Library workspace
- * (Citation Manager Fase 1). Semua method mengasumsikan pemanggil route sudah
- * ter-autentikasi; otorisasi workspace ditegakkan di sini.
+ * CitationService — CRUD + dedupe + export + render perpustakaan referensi akun.
+ * Semua method mengasumsikan pemanggil route sudah ter-autentikasi; scoping =
+ * ownerUserId. Yang tetap per proyek: `createFromArtifact` (artifact hidup di
+ * workspace) dan settings/render (gaya sitasi per proyek).
  */
 export const CitationService = {
   async list(
     db: DbOrTx,
     input: {
       ownerUserId: string;
-      workspaceId: string;
       limit?: number;
       cursor?: string | null;
       q?: string;
@@ -290,12 +284,10 @@ export const CitationService = {
       tag?: string;
     },
   ): Promise<{ items: CitationListItem[]; nextCursor: string | null; total: number }> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
     const limit = Math.min(Math.max(input.limit ?? DEFAULT_LIST_LIMIT, 1), MAX_LIST_LIMIT);
     const [page, total] = await Promise.all([
-      WorkspaceCitationRepo.listByWorkspace(db, {
+      CitationRepo.listByOwner(db, {
         ownerUserId: input.ownerUserId,
-        workspaceId: input.workspaceId,
         limit,
         cursor: decodeKeysetCursor(input.cursor),
         filters: {
@@ -305,25 +297,20 @@ export const CitationService = {
           tag: input.tag,
         },
       }),
-      WorkspaceCitationRepo.countActive(db, input.ownerUserId, input.workspaceId),
+      CitationRepo.countActive(db, input.ownerUserId),
     ]);
     return { items: page.items.map(toListItem), nextCursor: page.nextCursor, total };
   },
 
-  async listTags(
-    db: DbOrTx,
-    input: { ownerUserId: string; workspaceId: string },
-  ): Promise<string[]> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
-    return WorkspaceCitationRepo.listActiveTags(db, input.ownerUserId, input.workspaceId);
+  async listTags(db: DbOrTx, input: { ownerUserId: string }): Promise<string[]> {
+    return CitationRepo.listActiveTags(db, input.ownerUserId);
   },
 
   async get(
     db: DbOrTx,
-    input: { ownerUserId: string; workspaceId: string; citationId: string },
+    input: { ownerUserId: string; citationId: string },
   ): Promise<CitationDetail> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
-    const row = await requireCitation(db, input.ownerUserId, input.workspaceId, input.citationId, {
+    const row = await requireCitation(db, input.ownerUserId, input.citationId, {
       allowDeleted: true,
     });
     const usageCount = await DocumentCitationUsageRepo.countDocumentsUsingCitation(
@@ -338,15 +325,11 @@ export const CitationService = {
     db: DbOrTx,
     input: {
       ownerUserId: string;
-      workspaceId: string;
       fields: ManualCitationInput;
       tags?: string[];
       allowDuplicate?: boolean;
     },
   ): Promise<CitationDetail> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId, {
-      requireActive: true,
-    });
     if (!input.fields.title?.trim()) {
       throwAppError({
         message: "Judul wajib diisi",
@@ -357,40 +340,25 @@ export const CitationService = {
     const csl = buildCslFromManualInput(input.fields);
     const row = rowFromCsl({
       ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
       source: "manual",
       csl,
       tags: input.tags ?? [],
       now: Date.now(),
     });
-    await assertNotDuplicate(
-      db,
-      input.ownerUserId,
-      input.workspaceId,
-      row.canonicalKey,
-      input.allowDuplicate ?? false,
-    );
-    await WorkspaceCitationRepo.insert(db, row);
-    return this.get(db, {
-      ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
-      citationId: row.id,
-    });
+    await assertNotDuplicate(db, input.ownerUserId, row.canonicalKey, input.allowDuplicate ?? false);
+    await CitationRepo.insert(db, row);
+    return this.get(db, { ownerUserId: input.ownerUserId, citationId: row.id });
   },
 
   async createByDoi(
     db: DbOrTx,
     input: {
       ownerUserId: string;
-      workspaceId: string;
       doi: string;
       tags?: string[];
       allowDuplicate?: boolean;
     },
   ): Promise<CitationDetail> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId, {
-      requireActive: true,
-    });
     const classified = classifyPaperText(input.doi) ?? {
       kind: "doi" as const,
       doi: normalizeDoi(input.doi),
@@ -417,32 +385,22 @@ export const CitationService = {
 
     const row = rowFromCsl({
       ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
       source: "doi",
       csl,
       tags: input.tags ?? [],
       now: Date.now(),
     });
-    await assertNotDuplicate(
-      db,
-      input.ownerUserId,
-      input.workspaceId,
-      row.canonicalKey,
-      input.allowDuplicate ?? false,
-    );
-    await WorkspaceCitationRepo.insert(db, row);
-    return this.get(db, {
-      ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
-      citationId: row.id,
-    });
+    await assertNotDuplicate(db, input.ownerUserId, row.canonicalKey, input.allowDuplicate ?? false);
+    await CitationRepo.insert(db, row);
+    return this.get(db, { ownerUserId: input.ownerUserId, citationId: row.id });
   },
 
   /**
-   * Buat citation dari artifact paper (Fase 2 bridge). Baca `artifact_paper_metadata`
-   * (sudah owner-scoped + membawa `workspace_id`) — tanpa memindahkan file. Idempotent:
-   * artifact yang sudah tertaut / duplikat canonical key tidak menggandakan; row
-   * duplikat tanpa tautan artifact "diadopsi" (di-set `artifact_id`).
+   * Buat citation dari artifact paper (artifact bridge). Baca `artifact_paper_metadata`
+   * (owner-scoped + membawa `workspace_id` artifact) — tanpa memindahkan file; hasil
+   * citation masuk perpustakaan akun. Idempotent: artifact yang sudah tertaut /
+   * duplikat canonical key tidak menggandakan; row duplikat tanpa tautan artifact
+   * "diadopsi" (di-set `artifact_id`).
    */
   async createFromArtifact(
     db: DbOrTx,
@@ -478,19 +436,13 @@ export const CitationService = {
       });
     }
     // Idempotent: artifact sudah tertaut citation aktif → kembalikan yang ada.
-    const linked = await WorkspaceCitationRepo.findActiveByArtifact(
-      db,
-      input.ownerUserId,
-      input.workspaceId,
-      input.artifactId,
-    );
+    const linked = await CitationRepo.findActiveByArtifact(db, input.ownerUserId, input.artifactId);
     if (linked) {
       return { citation: toDetail(linked), created: false, linkedExisting: true };
     }
     const csl = buildCslFromPaperMetadata(meta);
     const row = rowFromCsl({
       ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
       source: "artifact",
       csl,
       tags: input.tags ?? [],
@@ -498,53 +450,41 @@ export const CitationService = {
       artifactId: input.artifactId,
     });
     // Dedupe: referensi serupa sudah ada → adopsi (tautkan) bila belum punya artifact.
-    const dupes = await WorkspaceCitationRepo.findActiveByCanonicalKeys(
-      db,
-      input.ownerUserId,
-      input.workspaceId,
-      [row.canonicalKey],
-    );
+    const dupes = await CitationRepo.findActiveByCanonicalKeys(db, input.ownerUserId, [
+      row.canonicalKey,
+    ]);
     const match = dupes[0];
     if (match) {
       if (!match.artifactId) {
-        await WorkspaceCitationRepo.updateById(db, match.id, {
+        await CitationRepo.updateById(db, match.id, {
           artifactId: input.artifactId,
           updatedAt: Date.now(),
         });
         return {
-          citation: await this.get(db, {
-            ownerUserId: input.ownerUserId,
-            workspaceId: input.workspaceId,
-            citationId: match.id,
-          }),
+          citation: await this.get(db, { ownerUserId: input.ownerUserId, citationId: match.id }),
           created: false,
           linkedExisting: true,
         };
       }
       return { citation: toDetail(match), created: false, linkedExisting: true };
     }
-    await WorkspaceCitationRepo.insert(db, row);
+    await CitationRepo.insert(db, row);
     return {
-      citation: await this.get(db, {
-        ownerUserId: input.ownerUserId,
-        workspaceId: input.workspaceId,
-        citationId: row.id,
-      }),
+      citation: await this.get(db, { ownerUserId: input.ownerUserId, citationId: row.id }),
       created: true,
       linkedExisting: false,
     };
   },
 
   /**
-   * Perbarui metadata citation dari DOI-nya (quality workflow Fase 2). Re-resolve
+   * Perbarui metadata citation dari DOI-nya (quality workflow). Re-resolve
    * lalu isi HANYA field yang kosong (jangan clobber edit user); status → verified.
    */
   async resolveFromDoi(
     db: DbOrTx,
-    input: { ownerUserId: string; workspaceId: string; citationId: string },
+    input: { ownerUserId: string; citationId: string },
   ): Promise<CitationDetail> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
-    const row = await requireCitation(db, input.ownerUserId, input.workspaceId, input.citationId);
+    const row = await requireCitation(db, input.ownerUserId, input.citationId);
     const doi = row.doi;
     if (!doi) {
       throwAppError({
@@ -576,7 +516,7 @@ export const CitationService = {
     }
     const columns = cslItemToColumns(mergedCsl);
     const now = Date.now();
-    await WorkspaceCitationRepo.updateById(db, row.id, {
+    await CitationRepo.updateById(db, row.id, {
       cslJson: mergedCsl,
       documentType: columns.documentType,
       title: columns.title,
@@ -591,18 +531,13 @@ export const CitationService = {
       reviewedAt: now,
       updatedAt: now,
     });
-    return this.get(db, {
-      ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
-      citationId: row.id,
-    });
+    return this.get(db, { ownerUserId: input.ownerUserId, citationId: row.id });
   },
 
   async update(
     db: DbOrTx,
     input: {
       ownerUserId: string;
-      workspaceId: string;
       citationId: string;
       fields?: ManualCitationInput;
       tags?: string[];
@@ -610,10 +545,9 @@ export const CitationService = {
       markReviewed?: boolean;
     },
   ): Promise<CitationDetail> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
-    const row = await requireCitation(db, input.ownerUserId, input.workspaceId, input.citationId);
+    const row = await requireCitation(db, input.ownerUserId, input.citationId);
     const now = Date.now();
-    const patch: Partial<NewWorkspaceCitation> = { updatedAt: now };
+    const patch: Partial<NewCitation> = { updatedAt: now };
 
     if (input.fields) {
       if (!input.fields.title?.trim()) {
@@ -652,21 +586,16 @@ export const CitationService = {
       patch.reviewedAt = now;
     }
 
-    await WorkspaceCitationRepo.updateById(db, row.id, patch);
-    return this.get(db, {
-      ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
-      citationId: row.id,
-    });
+    await CitationRepo.updateById(db, row.id, patch);
+    return this.get(db, { ownerUserId: input.ownerUserId, citationId: row.id });
   },
 
   async softDelete(
     db: DbOrTx,
-    input: { ownerUserId: string; workspaceId: string; citationId: string },
+    input: { ownerUserId: string; citationId: string },
   ): Promise<{ ok: true }> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
-    const row = await requireCitation(db, input.ownerUserId, input.workspaceId, input.citationId);
-    await WorkspaceCitationRepo.updateById(db, row.id, {
+    const row = await requireCitation(db, input.ownerUserId, input.citationId);
+    await CitationRepo.updateById(db, row.id, {
       deletedAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -678,12 +607,10 @@ export const CitationService = {
     db: Db,
     input: {
       ownerUserId: string;
-      workspaceId: string;
       sourceId: string;
       targetId: string;
     },
   ): Promise<CitationDetail> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
     if (input.sourceId === input.targetId) {
       throwAppError({
         message: "Referensi sumber dan target sama",
@@ -692,9 +619,9 @@ export const CitationService = {
     }
     const now = Date.now();
     await db.transaction(async (tx) => {
-      const source = await requireCitation(tx, input.ownerUserId, input.workspaceId, input.sourceId);
-      const target = await requireCitation(tx, input.ownerUserId, input.workspaceId, input.targetId);
-      const patch: Partial<NewWorkspaceCitation> = { updatedAt: now };
+      const source = await requireCitation(tx, input.ownerUserId, input.sourceId);
+      const target = await requireCitation(tx, input.ownerUserId, input.targetId);
+      const patch: Partial<NewCitation> = { updatedAt: now };
       if (target.publishedYear === null && source.publishedYear !== null) {
         patch.publishedYear = source.publishedYear;
       }
@@ -718,28 +645,19 @@ export const CitationService = {
         }
       }
       if (cslChanged) patch.cslJson = mergedCsl;
-      await WorkspaceCitationRepo.updateById(tx, target.id, patch);
-      await WorkspaceCitationRepo.updateById(tx, source.id, { deletedAt: now, updatedAt: now });
+      await CitationRepo.updateById(tx, target.id, patch);
+      await CitationRepo.updateById(tx, source.id, { deletedAt: now, updatedAt: now });
     });
-    return this.get(db, {
-      ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
-      citationId: input.targetId,
-    });
+    return this.get(db, { ownerUserId: input.ownerUserId, citationId: input.targetId });
   },
 
   /** Grup kandidat duplikat (canonical key sama, ≥2 anggota) — untuk "Kelola duplikat". */
   async listDuplicateGroups(
     db: DbOrTx,
-    input: { ownerUserId: string; workspaceId: string },
+    input: { ownerUserId: string },
   ): Promise<CitationDuplicateGroup[]> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
-    const rows = await WorkspaceCitationRepo.listAllActive(
-      db,
-      input.ownerUserId,
-      input.workspaceId,
-    );
-    const byKey = new Map<string, WorkspaceCitation[]>();
+    const rows = await CitationRepo.listAllActive(db, input.ownerUserId);
+    const byKey = new Map<string, Citation[]>();
     for (const row of rows) {
       const bucket = byKey.get(row.canonicalKey);
       if (bucket) bucket.push(row);
@@ -763,12 +681,10 @@ export const CitationService = {
     db: Db,
     input: {
       ownerUserId: string;
-      workspaceId: string;
       ids: string[];
       targetId?: string;
     },
   ): Promise<CitationDetail> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
     const uniqueIds = [...new Set(input.ids)];
     if (uniqueIds.length < 2) {
       throwAppError({
@@ -779,8 +695,8 @@ export const CitationService = {
     const now = Date.now();
     let resolvedTargetId = "";
     await db.transaction(async (tx) => {
-      const rows = await WorkspaceCitationRepo.findByIds(tx, input.ownerUserId, uniqueIds);
-      const active = rows.filter((r) => r.workspaceId === input.workspaceId && !r.deletedAt);
+      const rows = await CitationRepo.findByIds(tx, input.ownerUserId, uniqueIds);
+      const active = rows.filter((r) => !r.deletedAt);
       if (active.length < 2) {
         throwAppError({
           message: "Referensi untuk digabungkan tidak ditemukan",
@@ -827,7 +743,7 @@ export const CitationService = {
         }
         tagBuckets.push(source.tags);
       }
-      await WorkspaceCitationRepo.updateById(tx, target.id, {
+      await CitationRepo.updateById(tx, target.id, {
         publishedYear,
         venue,
         publisher,
@@ -839,35 +755,30 @@ export const CitationService = {
         updatedAt: now,
       });
       for (const source of sources) {
-        await WorkspaceCitationRepo.updateById(tx, source.id, { deletedAt: now, updatedAt: now });
+        await CitationRepo.updateById(tx, source.id, { deletedAt: now, updatedAt: now });
       }
     });
-    return this.get(db, {
-      ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
-      citationId: resolvedTargetId,
-    });
+    return this.get(db, { ownerUserId: input.ownerUserId, citationId: resolvedTargetId });
   },
 
   /** Tambah tag ke banyak citation sekaligus (bulk bar). Union per-baris, cap normal. */
   async bulkAddTag(
     db: Db,
-    input: { ownerUserId: string; workspaceId: string; ids: string[]; tags: string[] },
+    input: { ownerUserId: string; ids: string[]; tags: string[] },
   ): Promise<{ affected: number }> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
     const addTags = normalizeTags(input.tags);
     const uniqueIds = [...new Set(input.ids)];
     if (addTags.length === 0 || uniqueIds.length === 0) return { affected: 0 };
     const now = Date.now();
     let affected = 0;
     await db.transaction(async (tx) => {
-      const rows = (await WorkspaceCitationRepo.findByIds(tx, input.ownerUserId, uniqueIds)).filter(
-        (r) => r.workspaceId === input.workspaceId && !r.deletedAt,
+      const rows = (await CitationRepo.findByIds(tx, input.ownerUserId, uniqueIds)).filter(
+        (r) => !r.deletedAt,
       );
       for (const row of rows) {
         const merged = normalizeTags([...row.tags, ...addTags]);
         if (merged.length !== row.tags.length) {
-          await WorkspaceCitationRepo.updateById(tx, row.id, { tags: merged, updatedAt: now });
+          await CitationRepo.updateById(tx, row.id, { tags: merged, updatedAt: now });
           affected++;
         }
       }
@@ -875,21 +786,14 @@ export const CitationService = {
     return { affected };
   },
 
-  /** Soft delete banyak citation (bulk bar). Guard owner+workspace+aktif di repo. */
+  /** Soft delete banyak citation (bulk bar). Guard owner+aktif di repo. */
   async bulkSoftDelete(
     db: DbOrTx,
-    input: { ownerUserId: string; workspaceId: string; ids: string[] },
+    input: { ownerUserId: string; ids: string[] },
   ): Promise<{ affected: number }> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
     const uniqueIds = [...new Set(input.ids)];
     if (uniqueIds.length === 0) return { affected: 0 };
-    const affected = await WorkspaceCitationRepo.softDeleteMany(
-      db,
-      input.ownerUserId,
-      input.workspaceId,
-      uniqueIds,
-      Date.now(),
-    );
+    const affected = await CitationRepo.softDeleteMany(db, input.ownerUserId, uniqueIds, Date.now());
     return { affected };
   },
 
@@ -897,17 +801,15 @@ export const CitationService = {
     db: DbOrTx,
     input: {
       ownerUserId: string;
-      workspaceId: string;
       format: CitationExportFormat;
       citationIds?: string[];
     },
   ): Promise<{ content: string; mimeType: string; filename: string }> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
     const rows = input.citationIds?.length
-      ? (await WorkspaceCitationRepo.findByIds(db, input.ownerUserId, input.citationIds)).filter(
-          (r) => r.workspaceId === input.workspaceId && !r.deletedAt,
+      ? (await CitationRepo.findByIds(db, input.ownerUserId, input.citationIds)).filter(
+          (r) => !r.deletedAt,
         )
-      : await WorkspaceCitationRepo.listAllActive(db, input.ownerUserId, input.workspaceId);
+      : await CitationRepo.listAllActive(db, input.ownerUserId);
     if (rows.length === 0) {
       throwAppError({
         message: "Tidak ada referensi untuk diekspor",
@@ -920,7 +822,10 @@ export const CitationService = {
     return { content, mimeType, filename: `sitasi.${extension}` };
   },
 
-  /** Render preview per-citation + bibliography utuh pada style tertentu. */
+  /**
+   * Render preview per-citation + bibliography utuh pada style tertentu. Tetap
+   * menerima `workspaceId` karena gaya sitasi adalah pengaturan per proyek.
+   */
   async render(
     db: DbOrTx,
     input: {
@@ -934,7 +839,6 @@ export const CitationService = {
     entries: Array<{ id: string; text: string }>;
     bibliography: string;
   }> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
     const settings = await this.getSettings(db, {
       ownerUserId: input.ownerUserId,
       workspaceId: input.workspaceId,
@@ -942,10 +846,10 @@ export const CitationService = {
     const styleId =
       input.styleId && isCitationStyleId(input.styleId) ? input.styleId : settings.defaultStyleId;
     const rows = input.citationIds?.length
-      ? (await WorkspaceCitationRepo.findByIds(db, input.ownerUserId, input.citationIds)).filter(
-          (r) => r.workspaceId === input.workspaceId && !r.deletedAt,
+      ? (await CitationRepo.findByIds(db, input.ownerUserId, input.citationIds)).filter(
+          (r) => !r.deletedAt,
         )
-      : await WorkspaceCitationRepo.listAllActive(db, input.ownerUserId, input.workspaceId);
+      : await CitationRepo.listAllActive(db, input.ownerUserId);
     const items = rows.map((r) => ({ ...(r.cslJson as CslItem), id: r.id }));
     return {
       styleId,
@@ -956,9 +860,9 @@ export const CitationService = {
 
   /**
    * Render sitasi in-text seluruh dokumen (per cluster, numbering konsisten) +
-   * bibliography used-in-document (Fase 3). `clusters` urut kemunculan di dokumen;
-   * id yang sudah dihapus/tak ada dilaporkan di `missingIds` supaya editor bisa
-   * menandai node missing alih-alih menghilangkannya diam-diam.
+   * bibliography used-in-document. `clusters` urut kemunculan di dokumen; id yang
+   * sudah dihapus/tak ada dilaporkan di `missingIds` supaya editor bisa menandai
+   * node missing alih-alih menghilangkannya diam-diam.
    */
   async renderDocument(
     db: DbOrTx,
@@ -981,7 +885,6 @@ export const CitationService = {
     bibliography: Array<{ id: string; text: string }>;
     missingIds: string[];
   }> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
     const settings = await this.getSettings(db, {
       ownerUserId: input.ownerUserId,
       workspaceId: input.workspaceId,
@@ -991,8 +894,8 @@ export const CitationService = {
 
     const referencedIds = [...new Set(input.clusters.flatMap((c) => c.citationIds))];
     const rows = referencedIds.length
-      ? (await WorkspaceCitationRepo.findByIds(db, input.ownerUserId, referencedIds)).filter(
-          (r) => r.workspaceId === input.workspaceId && !r.deletedAt,
+      ? (await CitationRepo.findByIds(db, input.ownerUserId, referencedIds)).filter(
+          (r) => !r.deletedAt,
         )
       : [];
     const byId = new Map(rows.map((r) => [r.id, r]));

@@ -45,6 +45,7 @@ export {
   parseBibliographyFile,
   sniffBibliographyFormat,
 } from "./citation-parse";
+export { CitationLinkService } from "./citation-link.service";
 export {
   type CitationDetail,
   type CitationListItem,

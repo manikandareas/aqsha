@@ -6,10 +6,15 @@ import type {
   DbOrTx,
   ImportBatchFormat,
   ImportBatchSourceKind,
-  NewWorkspaceCitation,
-  WorkspaceCitation,
+  Citation,
+  NewCitation,
 } from "@aqsha/db";
-import { CitationImportBatchRepo, throwAppError, WorkspaceCitationRepo } from "@aqsha/db";
+import {
+  CitationImportBatchRepo,
+  CitationRepo,
+  throwAppError,
+  WorkspaceCitationLinkRepo,
+} from "@aqsha/db";
 import { WorkspaceService } from "../workspace.service";
 import {
   canonicalKeyForCsl,
@@ -109,8 +114,8 @@ function missingFieldPatch(
     cslJson: unknown;
   },
   incoming: { columns: CitationColumns; csl: CslItem },
-): Partial<NewWorkspaceCitation> {
-  const patch: Partial<NewWorkspaceCitation> = {};
+): Partial<NewCitation> {
+  const patch: Partial<NewCitation> = {};
   if (existing.publishedYear === null && incoming.columns.publishedYear !== null) {
     patch.publishedYear = incoming.columns.publishedYear;
   }
@@ -197,22 +202,20 @@ export async function stageImportBatch(
   }
 
   // Kandidat duplikat: vs library existing (canonical key + provider externalId) + antar-record.
-  const existing = await WorkspaceCitationRepo.findActiveByCanonicalKeys(
+  const existing = await CitationRepo.findActiveByCanonicalKeys(
     db,
     input.ownerUserId,
-    input.workspaceId,
     usable.map((r) => r.canonicalKey),
   );
   const existingByKey = new Map(existing.map((c) => [c.canonicalKey, c]));
-  const existingByExternal = new Map<string, WorkspaceCitation>();
+  const existingByExternal = new Map<string, Citation>();
   if (input.provider) {
     const externalIds = usable
       .map((r) => r.externalId)
       .filter((v): v is string => Boolean(v));
-    const existingExternal = await WorkspaceCitationRepo.findActiveByExternalIds(
+    const existingExternal = await CitationRepo.findActiveByExternalIds(
       db,
       input.ownerUserId,
-      input.workspaceId,
       input.provider,
       externalIds,
     );
@@ -361,23 +364,21 @@ export const CitationImportService = {
 
     await db.transaction(async (tx) => {
       // Re-check duplikat saat commit — library bisa berubah sejak preview.
-      const current = await WorkspaceCitationRepo.findActiveByCanonicalKeys(
+      const current = await CitationRepo.findActiveByCanonicalKeys(
         tx,
         input.ownerUserId,
-        input.workspaceId,
         chosen.map((r) => r.canonicalKey),
       );
       const currentByKey = new Map(current.map((c) => [c.canonicalKey, c]));
       // Provider sync: cocokkan juga by externalId (idempotensi + hindari unique violation).
-      const currentByExternal = new Map<string, WorkspaceCitation>();
+      const currentByExternal = new Map<string, Citation>();
       if (isProviderSync && batchProvider) {
         const externalIds = chosen
           .map((r) => r.externalId)
           .filter((v): v is string => Boolean(v));
-        const currentExternal = await WorkspaceCitationRepo.findActiveByExternalIds(
+        const currentExternal = await CitationRepo.findActiveByExternalIds(
           tx,
           input.ownerUserId,
-          input.workspaceId,
           batchProvider,
           externalIds,
         );
@@ -385,7 +386,8 @@ export const CitationImportService = {
           if (c.externalId) currentByExternal.set(c.externalId, c);
         }
       }
-      const rowsToInsert: NewWorkspaceCitation[] = [];
+      const rowsToInsert: NewCitation[] = [];
+      const linkedCitationIds = new Set<string>();
       const insertedKeys = new Set<string>();
 
       for (const record of chosen) {
@@ -402,11 +404,12 @@ export const CitationImportService = {
             if (existing) {
               const patch = missingFieldPatch(existing, record);
               if (Object.keys(patch).length > 0) {
-                await WorkspaceCitationRepo.updateById(tx, existing.id, {
+                await CitationRepo.updateById(tx, existing.id, {
                   ...patch,
                   updatedAt: now,
                 });
               }
+              linkedCitationIds.add(existing.id);
               result.merged++;
             } else {
               // Duplikat antar-record batch tanpa row existing → yang pertama sudah masuk.
@@ -416,10 +419,10 @@ export const CitationImportService = {
           }
           // policy "import": jatuh ke insert di bawah.
         }
+        const newId = crypto.randomUUID();
         rowsToInsert.push({
-          id: crypto.randomUUID(),
+          id: newId,
           ownerUserId: input.ownerUserId,
-          workspaceId: input.workspaceId,
           artifactId: null,
           source: isProviderSync ? "provider_sync" : "import",
           provider: isProviderSync ? batchProvider : null,
@@ -440,10 +443,21 @@ export const CitationImportService = {
           updatedAt: now,
         });
         insertedKeys.add(record.canonicalKey);
+        linkedCitationIds.add(newId);
         result.created++;
       }
 
-      await WorkspaceCitationRepo.insertMany(tx, rowsToInsert);
+      await CitationRepo.insertMany(tx, rowsToInsert);
+      // Import berjalan dalam konteks proyek → hasilnya langsung masuk koleksi proyek.
+      for (const citationId of linkedCitationIds) {
+        await WorkspaceCitationLinkRepo.insert(tx, {
+          id: crypto.randomUUID(),
+          workspaceId: input.workspaceId,
+          citationId,
+          sectionId: null,
+          createdAt: now,
+        });
+      }
       await CitationImportBatchRepo.updateById(tx, batch.id, {
         status: "committed",
         committedAt: now,
