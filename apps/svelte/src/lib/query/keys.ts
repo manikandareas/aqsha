@@ -56,20 +56,17 @@ export const queryKeys = {
 	},
 	citations: {
 		all: ['citations'] as const,
-		workspace: (workspaceId: string) => ['citations', workspaceId] as const,
-		list: (
-			workspaceId: string,
-			params: { q: string; status: string | null; source: string | null; tag: string | null }
-		) => ['citations', workspaceId, 'list', params] as const,
-		detail: (workspaceId: string, citationId: string) =>
-			['citations', workspaceId, 'detail', citationId] as const,
-		tags: (workspaceId: string) => ['citations', workspaceId, 'tags'] as const,
-		duplicates: (workspaceId: string) => ['citations', workspaceId, 'duplicates'] as const,
+		list: (params: { q: string; status: string | null; source: string | null; tag: string | null }) =>
+			['citations', 'list', params] as const,
+		detail: (citationId: string) => ['citations', 'detail', citationId] as const,
+		tags: () => ['citations', 'tags'] as const,
+		duplicates: () => ['citations', 'duplicates'] as const,
+		links: (workspaceId: string) => ['citations', 'links', workspaceId] as const,
 		render: (workspaceId: string, params: { styleId: string | null; ids: string[] }) =>
-			['citations', workspaceId, 'render', params] as const,
+			['citations', 'render', workspaceId, params] as const,
 		renderDocument: (workspaceId: string, signature: string) =>
-			['citations', workspaceId, 'render-document', signature] as const,
-		settings: (workspaceId: string) => ['citations', workspaceId, 'settings'] as const
+			['citations', 'render-document', workspaceId, signature] as const,
+		settings: (workspaceId: string) => ['citations', 'settings', workspaceId] as const
 	},
 	integrations: {
 		all: ['integrations'] as const,

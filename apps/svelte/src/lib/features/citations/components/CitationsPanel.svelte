@@ -105,22 +105,16 @@
 	let tagDraft = $state('');
 	let confirmBulkDelete = $state(false);
 
-	const list = useCitationsList(
-		() => workspaceId,
-		() => filters
-	);
-	const tags = useCitationTags(() => workspaceId);
-	const createCitation = useCreateCitation(() => workspaceId);
-	const deleteCitation = useDeleteCitation(() => workspaceId);
+	const list = useCitationsList(() => filters);
+	const tags = useCitationTags();
+	const createCitation = useCreateCitation();
+	const deleteCitation = useDeleteCitation();
 	const copyCitation = useCopyCitation(() => workspaceId);
-	const bulkTag = useBulkTagCitations(() => workspaceId);
-	const bulkDelete = useBulkDeleteCitations(() => workspaceId);
-	const mergeMany = useMergeManyCitations(() => workspaceId);
-	const editDetail = useCitationDetail(
-		() => workspaceId,
-		() => editTargetId
-	);
-	const updateCitation = useUpdateCitation(() => workspaceId);
+	const bulkTag = useBulkTagCitations();
+	const bulkDelete = useBulkDeleteCitations();
+	const mergeMany = useMergeManyCitations();
+	const editDetail = useCitationDetail(() => editTargetId);
+	const updateCitation = useUpdateCitation();
 
 	const items = $derived((list.data?.pages ?? []).flatMap((page) => page.items));
 	const total = $derived(list.data?.pages[0]?.total ?? 0);
@@ -215,7 +209,7 @@
 				</DropdownMenu.Item>
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
-		<CitationExportMenu {workspaceId} disabled={total === 0} />
+		<CitationExportMenu disabled={total === 0} />
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
 				{#snippet child({ props })}
@@ -552,7 +546,7 @@
 						</form>
 					</Popover.Content>
 				</Popover.Root>
-				<CitationExportMenu {workspaceId} ids={bulkIds} />
+				<CitationExportMenu ids={bulkIds} />
 				<Button
 					type="button"
 					variant="ghost"

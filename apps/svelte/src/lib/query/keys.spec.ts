@@ -25,14 +25,17 @@ describe('queryKeys registry', () => {
 		]);
 	});
 
-	it('citations (nested + params)', () => {
-		expect(
-			queryKeys.citations.list('w1', { q: 'x', status: null, source: null, tag: null })
-		).toEqual(['citations', 'w1', 'list', { q: 'x', status: null, source: null, tag: null }]);
+	it('citations (perpustakaan akun + params)', () => {
+		expect(queryKeys.citations.list({ q: 'x', status: null, source: null, tag: null })).toEqual([
+			'citations',
+			'list',
+			{ q: 'x', status: null, source: null, tag: null }
+		]);
+		expect(queryKeys.citations.links('w1')).toEqual(['citations', 'links', 'w1']);
 		expect(queryKeys.citations.render('w1', { styleId: 'apa', ids: ['a', 'b'] })).toEqual([
 			'citations',
-			'w1',
 			'render',
+			'w1',
 			{ styleId: 'apa', ids: ['a', 'b'] }
 		]);
 	});

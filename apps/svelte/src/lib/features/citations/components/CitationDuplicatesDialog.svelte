@@ -21,11 +21,8 @@
 		onOpenChange: (open: boolean) => void;
 	} = $props();
 
-	const groups = useDuplicateGroups(
-		() => workspaceId,
-		() => open
-	);
-	const mergeMany = useMergeManyCitations(() => workspaceId);
+	const groups = useDuplicateGroups(() => open);
+	const mergeMany = useMergeManyCitations();
 	const data = $derived(groups.data ?? []);
 </script>
 

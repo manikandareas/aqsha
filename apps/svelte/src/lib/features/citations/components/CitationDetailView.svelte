@@ -47,18 +47,15 @@
 		onAddToChat?: (citation: { id: string; title: string }) => void;
 	} = $props();
 
-	const detail = useCitationDetail(
-		() => workspaceId,
-		() => citationId
-	);
+	const detail = useCitationDetail(() => citationId);
 	const render = useCitationRender(
 		() => workspaceId,
 		() => ({ styleId: null, ids: [citationId] })
 	);
 	const copyCitation = useCopyCitation(() => workspaceId);
-	const updateCitation = useUpdateCitation(() => workspaceId);
-	const deleteCitation = useDeleteCitation(() => workspaceId);
-	const resolveCitation = useResolveCitation(() => workspaceId);
+	const updateCitation = useUpdateCitation();
+	const deleteCitation = useDeleteCitation();
+	const resolveCitation = useResolveCitation();
 	let editOpen = $state(false);
 	let confirmDelete = $state(false);
 
