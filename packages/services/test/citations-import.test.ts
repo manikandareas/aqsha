@@ -272,4 +272,36 @@ describe("CitationService guards", () => {
       ),
     ).toBe("citation_not_found");
   });
+
+  test("createManual onDuplicate return-existing mengembalikan referensi lama, bukan 409", async () => {
+    let stored: ReturnType<typeof existingRow> | null = null;
+    spyOn(CitationRepo, "findActiveByCanonicalKeys").mockImplementation(async () =>
+      stored ? [stored] : [],
+    );
+    spyOn(CitationRepo, "insert").mockImplementation(async (_db, row) => {
+      stored = row as ReturnType<typeof existingRow>;
+    });
+    spyOn(CitationRepo, "findById").mockImplementation(async () => stored as never);
+    spyOn(DocumentCitationUsageRepo, "countDocumentsUsingCitation").mockResolvedValue(0);
+
+    const first = await CitationService.createManual(fakeDb, {
+      ownerUserId: OWNER,
+      fields: { title: "Dedupe Return Existing" },
+    });
+    expect(first.created).toBe(true);
+
+    const second = await CitationService.createManual(fakeDb, {
+      ownerUserId: OWNER,
+      fields: { title: "Dedupe Return Existing" },
+      onDuplicate: "return-existing",
+    });
+    expect(second.created).toBe(false);
+    expect(second.id).toBe(first.id);
+  });
+
+  test("render tanpa workspace memakai default apa-7", async () => {
+    spyOn(CitationRepo, "listAllActive").mockResolvedValue([]);
+    const result = await CitationService.render(fakeDb, { ownerUserId: OWNER });
+    expect(result.styleId).toBe("apa-7");
+  });
 });

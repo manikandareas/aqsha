@@ -176,6 +176,36 @@ describe("api citations — CRUD perpustakaan owner", () => {
     expect((await readJson(dup)).code).toBe("citation_duplicate");
   });
 
+  itest("create manual onDuplicate return-existing → id sama, created:false, tanpa 409", async () => {
+    const first = await req("POST", "/citations", tok(OWNER), {
+      fields: { title: "Referensi Dedupe Return" },
+    });
+    expect(first.status).toBe(200);
+    const firstBody = await readJson(first);
+    expect(firstBody.created).toBe(true);
+
+    const second = await req("POST", "/citations", tok(OWNER), {
+      fields: { title: "Referensi Dedupe Return" },
+      onDuplicate: "return-existing",
+    });
+    expect(second.status).toBe(200);
+    const secondBody = await readJson(second);
+    expect(secondBody.created).toBe(false);
+    expect(secondBody.id).toBe(firstBody.id);
+
+    // Bersihkan supaya hitungan total di describe berikutnya (import preview/commit) tak bergeser.
+    await req("DELETE", `/citations/${firstBody.id}`, tok(OWNER));
+  });
+
+  itest("render account-level (tanpa workspace) → 200 default apa-7", async () => {
+    const res = await req("POST", "/citations/render", tok(OWNER), {
+      citationIds: [manualId],
+    });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.styleId).toBe("apa-7");
+  });
+
   itest("user lain: perpustakaannya sendiri kosong; detail/patch item owner → 404", async () => {
     const list = await readJson(await req("GET", "/citations", tok(INTRUDER)));
     expect(list.total).toBe(0);

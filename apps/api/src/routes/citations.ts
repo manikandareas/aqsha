@@ -39,9 +39,11 @@ const styleId = t.Union([
 /**
  * Route Citation Manager — perpustakaan referensi per AKUN (`/citations/*`,
  * termasuk import batch) + koleksi per proyek via link (`/workspaces/:id/citations*`).
- * Yang tetap workspace-scoped: render/render-document (gaya sitasi per proyek),
- * from-artifact (artifact hidup di workspace), dan citation-settings. Tipis: auth →
- * validasi `t` permisif → 1 service call. Path statis (tags/export/duplicates/imports/...)
+ * `render` ada di kedua level: `/citations/render` (akun, tanpa proyek → default
+ * global) dan `/workspaces/:id/citations/render` (ikut gaya sitasi proyek). Yang
+ * tetap workspace-scoped: render-document (numbering per dokumen), from-artifact
+ * (artifact hidup di workspace), dan citation-settings. Tipis: auth → validasi `t`
+ * permisif → 1 service call. Path statis (tags/export/duplicates/imports/...)
  * dideklarasikan sebelum `/:citationId`.
  */
 export const citations = new Elysia()
@@ -222,6 +224,7 @@ export const citations = new Elysia()
           doi: body.doi,
           tags: body.tags,
           allowDuplicate: body.allowDuplicate,
+          onDuplicate: body.onDuplicate,
         });
       }
       return CitationService.createManual(db, {
@@ -230,6 +233,7 @@ export const citations = new Elysia()
         fields: body.fields ?? { title: "" },
         tags: body.tags,
         allowDuplicate: body.allowDuplicate,
+        onDuplicate: body.onDuplicate,
       });
     },
     {
@@ -240,6 +244,25 @@ export const citations = new Elysia()
         fields: t.Optional(manualFields),
         tags: t.Optional(t.Array(t.String())),
         allowDuplicate: t.Optional(t.Boolean()),
+        onDuplicate: t.Optional(t.Literal("return-existing")),
+      }),
+    },
+  )
+  .post(
+    "/citations/render",
+    ({ ownerUserId, body }) => {
+      const { db } = getDb();
+      return CitationService.render(db, {
+        ownerUserId,
+        styleId: body.styleId,
+        citationIds: body.citationIds,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        styleId: t.Optional(styleId),
+        citationIds: t.Optional(t.Array(t.String())),
       }),
     },
   )

@@ -139,24 +139,14 @@ async function requireCitation(
   return row;
 }
 
-/** Guard duplikat untuk create tunggal (manual/DOI) — 409 kecuali `allowDuplicate`. */
-async function assertNotDuplicate(
+/** Duplikat aktif by canonical key milik owner; null bila tidak ada. */
+async function findActiveDuplicate(
   db: DbOrTx,
   ownerUserId: string,
   canonicalKey: string,
-  allowDuplicate: boolean,
-): Promise<void> {
-  if (allowDuplicate) return;
+): Promise<Citation | null> {
   const hits = await CitationRepo.findActiveByCanonicalKeys(db, ownerUserId, [canonicalKey]);
-  const hit = hits[0];
-  if (hit) {
-    throwAppError({
-      message: `Referensi serupa sudah ada: "${hit.title}"`,
-      code: "citation_duplicate",
-      status: 409,
-      severity: "warning",
-    });
-  }
+  return hits[0] ?? null;
 }
 
 function rowFromCsl(input: {
@@ -328,8 +318,9 @@ export const CitationService = {
       fields: ManualCitationInput;
       tags?: string[];
       allowDuplicate?: boolean;
+      onDuplicate?: "return-existing";
     },
-  ): Promise<CitationDetail> {
+  ): Promise<CitationDetail & { created: boolean }> {
     if (!input.fields.title?.trim()) {
       throwAppError({
         message: "Judul wajib diisi",
@@ -345,9 +336,29 @@ export const CitationService = {
       tags: input.tags ?? [],
       now: Date.now(),
     });
-    await assertNotDuplicate(db, input.ownerUserId, row.canonicalKey, input.allowDuplicate ?? false);
+    if (!input.allowDuplicate) {
+      const existing = await findActiveDuplicate(db, input.ownerUserId, row.canonicalKey);
+      if (existing) {
+        // "Simpan dari pencarian" tidak boleh membuat entri dobel — kembalikan
+        // referensi existing sebagai hasil sukses alih-alih 409.
+        if (input.onDuplicate === "return-existing") {
+          const detail = await this.get(db, {
+            ownerUserId: input.ownerUserId,
+            citationId: existing.id,
+          });
+          return { ...detail, created: false };
+        }
+        throwAppError({
+          message: `Referensi serupa sudah ada: "${existing.title}"`,
+          code: "citation_duplicate",
+          status: 409,
+          severity: "warning",
+        });
+      }
+    }
     await CitationRepo.insert(db, row);
-    return this.get(db, { ownerUserId: input.ownerUserId, citationId: row.id });
+    const detail = await this.get(db, { ownerUserId: input.ownerUserId, citationId: row.id });
+    return { ...detail, created: true };
   },
 
   async createByDoi(
@@ -357,8 +368,9 @@ export const CitationService = {
       doi: string;
       tags?: string[];
       allowDuplicate?: boolean;
+      onDuplicate?: "return-existing";
     },
-  ): Promise<CitationDetail> {
+  ): Promise<CitationDetail & { created: boolean }> {
     const classified = classifyPaperText(input.doi) ?? {
       kind: "doi" as const,
       doi: normalizeDoi(input.doi),
@@ -390,9 +402,29 @@ export const CitationService = {
       tags: input.tags ?? [],
       now: Date.now(),
     });
-    await assertNotDuplicate(db, input.ownerUserId, row.canonicalKey, input.allowDuplicate ?? false);
+    if (!input.allowDuplicate) {
+      const existing = await findActiveDuplicate(db, input.ownerUserId, row.canonicalKey);
+      if (existing) {
+        // "Simpan dari pencarian" tidak boleh membuat entri dobel — kembalikan
+        // referensi existing sebagai hasil sukses alih-alih 409.
+        if (input.onDuplicate === "return-existing") {
+          const detail = await this.get(db, {
+            ownerUserId: input.ownerUserId,
+            citationId: existing.id,
+          });
+          return { ...detail, created: false };
+        }
+        throwAppError({
+          message: `Referensi serupa sudah ada: "${existing.title}"`,
+          code: "citation_duplicate",
+          status: 409,
+          severity: "warning",
+        });
+      }
+    }
     await CitationRepo.insert(db, row);
-    return this.get(db, { ownerUserId: input.ownerUserId, citationId: row.id });
+    const detail = await this.get(db, { ownerUserId: input.ownerUserId, citationId: row.id });
+    return { ...detail, created: true };
   },
 
   /**
@@ -823,14 +855,15 @@ export const CitationService = {
   },
 
   /**
-   * Render preview per-citation + bibliography utuh pada style tertentu. Tetap
-   * menerima `workspaceId` karena gaya sitasi adalah pengaturan per proyek.
+   * Render preview per-citation + bibliography utuh pada style tertentu. `workspaceId`
+   * opsional: dengan proyek, gaya sitasi ikut pengaturan proyek; tanpa proyek (konteks
+   * perpustakaan akun) dipakai default global.
    */
   async render(
     db: DbOrTx,
     input: {
       ownerUserId: string;
-      workspaceId: string;
+      workspaceId?: string;
       styleId?: string;
       citationIds?: string[];
     },
@@ -839,10 +872,14 @@ export const CitationService = {
     entries: Array<{ id: string; text: string }>;
     bibliography: string;
   }> {
-    const settings = await this.getSettings(db, {
-      ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
-    });
+    // Tanpa workspace (konteks perpustakaan akun) tidak ada settings proyek —
+    // pakai default global.
+    const settings = input.workspaceId
+      ? await this.getSettings(db, {
+          ownerUserId: input.ownerUserId,
+          workspaceId: input.workspaceId,
+        })
+      : { defaultStyleId: DEFAULT_STYLE, bibliographySort: DEFAULT_SORT };
     const styleId =
       input.styleId && isCitationStyleId(input.styleId) ? input.styleId : settings.defaultStyleId;
     const rows = input.citationIds?.length
