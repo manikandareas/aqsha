@@ -260,6 +260,13 @@
       "when": 1784268720129,
       "tag": "0036_short_doctor_doom",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1784268859470,
+      "tag": "0037_lucky_pandemic",
+      "breakpoints": true
     }
   ]
 }
