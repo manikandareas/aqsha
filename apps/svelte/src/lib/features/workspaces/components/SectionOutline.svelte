@@ -137,7 +137,10 @@
 						<DropdownMenu.Item disabled={i === 0} onSelect={() => move(section, -1)}>
 							<Icon icon={ArrowUpIcon} class="size-4" /> Naik
 						</DropdownMenu.Item>
-						<DropdownMenu.Item disabled={i === sections.length - 1} onSelect={() => move(section, 1)}>
+						<DropdownMenu.Item
+							disabled={i === sections.length - 1}
+							onSelect={() => move(section, 1)}
+						>
 							<Icon icon={ArrowDownIcon} class="size-4" /> Turun
 						</DropdownMenu.Item>
 						<DropdownMenu.Separator />

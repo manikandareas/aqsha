@@ -55,16 +55,14 @@
 <Dialog.Content>
 	<Dialog.Header>
 		<Dialog.Title>Proyek baru</Dialog.Title>
-		<Dialog.Description>Kamu lagi nulis apa? Cukup jenis dan topik kasarnya dulu.</Dialog.Description>
+		<Dialog.Description
+			>Kamu lagi nulis apa? Cukup jenis dan topik kasarnya dulu.</Dialog.Description
+		>
 	</Dialog.Header>
 	<form class="grid gap-4" onsubmit={submit}>
 		<div class="grid gap-1.5">
 			<label class="text-label font-medium" for="project-kind">Jenis karya tulis</label>
-			<Select.Root
-				type="single"
-				value={kind}
-				onValueChange={(v) => (kind = v as WorkspaceKind)}
-			>
+			<Select.Root type="single" value={kind} onValueChange={(v) => (kind = v as WorkspaceKind)}>
 				<Select.Trigger id="project-kind" class="w-full">
 					{kind ? WORKSPACE_KIND_LABELS[kind] : 'Pilih jenis…'}
 				</Select.Trigger>

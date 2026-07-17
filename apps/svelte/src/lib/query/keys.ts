@@ -56,8 +56,12 @@ export const queryKeys = {
 	},
 	citations: {
 		all: ['citations'] as const,
-		list: (params: { q: string; status: string | null; source: string | null; tag: string | null }) =>
-			['citations', 'list', params] as const,
+		list: (params: {
+			q: string;
+			status: string | null;
+			source: string | null;
+			tag: string | null;
+		}) => ['citations', 'list', params] as const,
 		detail: (citationId: string) => ['citations', 'detail', citationId] as const,
 		tags: () => ['citations', 'tags'] as const,
 		duplicates: () => ['citations', 'duplicates'] as const,

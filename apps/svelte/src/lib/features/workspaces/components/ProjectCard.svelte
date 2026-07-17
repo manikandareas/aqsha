@@ -34,7 +34,11 @@
 		<Badge variant="outline">{WORKSPACE_KIND_LABELS[workspace.kind]}</Badge>
 		<Badge variant="secondary" class="ml-auto">{WORKSPACE_STAGE_LABELS[workspace.stage]}</Badge>
 	</div>
-	<p class={untitled ? 'font-heading text-lg italic text-muted-foreground' : 'font-heading text-lg font-bold text-foreground'}>
+	<p
+		class={untitled
+			? 'font-heading text-lg italic text-muted-foreground'
+			: 'font-heading text-lg font-bold text-foreground'}
+	>
 		{projectDisplayTitle(workspace)}
 	</p>
 	{#if !isFreeform && progress && progress.total > 0}

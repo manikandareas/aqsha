@@ -23,9 +23,7 @@
 	$effect(() => {
 		if (deadlineOpen) {
 			deadlineInput =
-				workspace.deadline != null
-					? new Date(workspace.deadline).toISOString().slice(0, 10)
-					: '';
+				workspace.deadline != null ? new Date(workspace.deadline).toISOString().slice(0, 10) : '';
 		}
 	});
 

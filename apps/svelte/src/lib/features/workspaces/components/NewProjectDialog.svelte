@@ -7,10 +7,7 @@
 	 * di tahap eksplorasi (default backend) lalu langsung dibuka. Reused by the sidebar's own
 	 * "Proyek baru" entry point.
 	 */
-	let {
-		open,
-		onOpenChange
-	}: { open: boolean; onOpenChange: (open: boolean) => void } = $props();
+	let { open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void } = $props();
 </script>
 
 <Dialog.Root {open} {onOpenChange}>

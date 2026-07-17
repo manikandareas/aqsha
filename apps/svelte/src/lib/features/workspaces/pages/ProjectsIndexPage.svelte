@@ -37,10 +37,13 @@
 			{/each}
 		</div>
 	{:else if projects.length === 0}
-		<div class="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border p-12 text-center">
+		<div
+			class="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border p-12 text-center"
+		>
 			<h2 class="font-heading text-xl font-bold">Kamu lagi nulis apa?</h2>
 			<p class="max-w-sm text-sm text-muted-foreground">
-				Skripsi, artikel jurnal, atau ide yang masih mentah — mulai dari satu proyek, judulnya bisa menyusul.
+				Skripsi, artikel jurnal, atau ide yang masih mentah — mulai dari satu proyek, judulnya bisa
+				menyusul.
 			</p>
 			<Button type="button" onclick={() => (dialogOpen = true)}>Buat proyek pertama</Button>
 		</div>

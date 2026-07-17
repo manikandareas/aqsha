@@ -18,10 +18,7 @@
 	 * Koleksi sumber proyek: item perpustakaan akun yang di-link ke proyek ini
 	 * (+ opsional ditandai untuk satu bab). Kelola perpustakaan penuh = /app/library.
 	 */
-	let {
-		workspaceId,
-		sections
-	}: { workspaceId: string; sections: WorkspaceSection[] } = $props();
+	let { workspaceId, sections }: { workspaceId: string; sections: WorkspaceSection[] } = $props();
 
 	const linked = useWorkspaceCitations(() => workspaceId);
 	const unlink = useUnlinkCitation();
