@@ -6,11 +6,9 @@
 	import ProviderSyncFlow from './ProviderSyncFlow.svelte';
 
 	let {
-		workspaceId,
 		onOpenChange,
 		onDone
 	}: {
-		workspaceId: string;
 		onOpenChange: (open: boolean) => void;
 		onDone: () => void;
 	} = $props();
@@ -45,7 +43,6 @@
 	</Dialog.Content>
 {:else}
 	<ProviderSyncFlow
-		{workspaceId}
 		provider={activeProvider}
 		providers={connected.map((c) => c.provider)}
 		onProviderChange={(p) => (provider = p)}

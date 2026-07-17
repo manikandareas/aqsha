@@ -17,11 +17,9 @@
 		| { step: 'done'; result: ImportCommitResult };
 
 	let {
-		workspaceId,
 		onOpenChange,
 		onDone
 	}: {
-		workspaceId: string;
 		onOpenChange: (open: boolean) => void;
 		onDone: () => void;
 	} = $props();
@@ -31,8 +29,8 @@
 	const selected = new SvelteSet<number>();
 	let policy = $state<ImportDuplicatePolicy>('skip');
 	let dragOver = $state(false);
-	const preview = useImportPreview(() => workspaceId);
-	const commit = useImportCommit(() => workspaceId);
+	const preview = useImportPreview();
+	const commit = useImportCommit();
 
 	async function handleFile(file: File | null | undefined) {
 		if (!file) return;

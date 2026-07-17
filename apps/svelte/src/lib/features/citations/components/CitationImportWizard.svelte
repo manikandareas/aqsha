@@ -8,12 +8,10 @@
 	 * commit mengikuti checkbox + policy duplikat.
 	 */
 	let {
-		workspaceId,
 		open,
 		onOpenChange,
 		onDone
 	}: {
-		workspaceId: string;
 		open: boolean;
 		onOpenChange: (open: boolean) => void;
 		onDone: () => void;
@@ -22,6 +20,6 @@
 
 <Dialog.Root {open} {onOpenChange}>
 	{#if open}
-		<CitationImportWizardContent {workspaceId} {onOpenChange} {onDone} />
+		<CitationImportWizardContent {onOpenChange} {onDone} />
 	{/if}
 </Dialog.Root>

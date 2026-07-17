@@ -583,13 +583,11 @@
 	</div>
 
 	<CitationImportWizard
-		{workspaceId}
 		open={dialog === 'import'}
 		onOpenChange={(open) => (dialog = open ? 'import' : null)}
 		onDone={() => (dialog = null)}
 	/>
 	<ProviderSyncWizard
-		{workspaceId}
 		open={dialog === 'provider'}
 		onOpenChange={(open) => (dialog = open ? 'provider' : null)}
 		onDone={() => (dialog = null)}
@@ -611,7 +609,6 @@
 		onOpenChange={(open) => (dialog = open ? 'settings' : null)}
 	/>
 	<CitationDuplicatesDialog
-		{workspaceId}
 		open={dialog === 'duplicates'}
 		onOpenChange={(open) => (dialog = open ? 'duplicates' : null)}
 	/>

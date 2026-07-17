@@ -41,7 +41,7 @@
 		onBack,
 		onAddToChat
 	}: {
-		workspaceId: string;
+		workspaceId: string | null;
 		citationId: string;
 		onBack: () => void;
 		/** Sematkan referensi ini sebagai konteks chip di composer chat Astra. */
@@ -265,7 +265,7 @@
 						{citation.tags.length > 0 ? citation.tags.join(', ') : '—'}
 					</dd>
 				</div>
-				{#if citation.artifactId}
+				{#if citation.artifactId && workspaceId}
 					<div class="grid grid-cols-[6rem_1fr] items-baseline gap-2">
 						<dt class="text-[12px] font-semibold text-muted-foreground">Artifact</dt>
 						<dd class="min-w-0 font-medium text-foreground">

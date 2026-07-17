@@ -117,7 +117,8 @@ export function useCreateCitation() {
 			fields?: ManualCitationFields;
 			tags?: string[];
 			allowDuplicate?: boolean;
-		}) => unwrap(await api.citations.post(input)) as CitationDetail,
+			onDuplicate?: 'return-existing';
+		}) => unwrap(await api.citations.post(input)) as CitationDetail & { created: boolean },
 		onSuccess: () => invalidate()
 	}));
 }
@@ -258,17 +259,15 @@ export function useResolveCitation() {
 	}));
 }
 
-export function useImportPreview(workspaceId: () => string) {
+export function useImportPreview() {
 	const api = getApiClient();
 	return createMutation(() => ({
 		mutationFn: async (file: File) =>
-			unwrap(
-				await api.workspaces({ id: workspaceId() }).citations.imports.preview.post({ file })
-			) as ImportPreviewResult
+			unwrap(await api.citations.imports.preview.post({ file })) as ImportPreviewResult
 	}));
 }
 
-export function useImportCommit(workspaceId: () => string) {
+export function useImportCommit() {
 	const api = getApiClient();
 	const invalidate = useInvalidateCitations();
 	return createMutation(() => ({
@@ -278,13 +277,10 @@ export function useImportCommit(workspaceId: () => string) {
 			duplicatePolicy: ImportDuplicatePolicy;
 		}) =>
 			unwrap(
-				await api
-					.workspaces({ id: workspaceId() })
-					.citations.imports({ batchId: input.batchId })
-					.commit.post({
-						selectedIndexes: input.selectedIndexes,
-						duplicatePolicy: input.duplicatePolicy
-					})
+				await api.citations.imports({ batchId: input.batchId }).commit.post({
+					selectedIndexes: input.selectedIndexes,
+					duplicatePolicy: input.duplicatePolicy
+				})
 			) as ImportCommitResult,
 		onSuccess: () => invalidate()
 	}));
@@ -307,16 +303,12 @@ export function useProviderFolders(
 }
 
 /** Preview penarikan folder provider → reuse UI wizard import. */
-export function useProviderSyncPreview(
-	workspaceId: () => string,
-	provider: () => IntegrationProviderKey
-) {
+export function useProviderSyncPreview(provider: () => IntegrationProviderKey) {
 	const api = getApiClient();
 	return createMutation(() => ({
 		mutationFn: async (input: { folderId: string | null }) =>
 			unwrap(
 				await api.integrations({ provider: provider() }).sync.preview.post({
-					workspaceId: workspaceId(),
 					folderId: input.folderId
 				})
 			) as ImportPreviewResult
@@ -324,10 +316,7 @@ export function useProviderSyncPreview(
 }
 
 /** Commit hasil sync provider — reuse pipeline commit import. */
-export function useProviderSyncCommit(
-	workspaceId: () => string,
-	provider: () => IntegrationProviderKey
-) {
+export function useProviderSyncCommit(provider: () => IntegrationProviderKey) {
 	const api = getApiClient();
 	const invalidate = useInvalidateCitations();
 	return createMutation(() => ({
@@ -341,7 +330,6 @@ export function useProviderSyncCommit(
 					.integrations({ provider: provider() })
 					.sync({ batchId: input.batchId })
 					.commit.post({
-						workspaceId: workspaceId(),
 						selectedIndexes: input.selectedIndexes,
 						duplicatePolicy: input.duplicatePolicy
 					})
@@ -350,9 +338,12 @@ export function useProviderSyncCommit(
 	}));
 }
 
-/** Render preview terformat (per-entry + bibliography) — dipakai detail + "Salin sitasi". Workspace-scoped (gaya sitasi per proyek). */
+/**
+ * Render preview terformat (per-entry + bibliography) — dipakai detail + "Salin sitasi".
+ * `workspaceId` non-null → gaya sitasi proyek; `null` → perpustakaan akun (default apa-7).
+ */
 export function useCitationRender(
-	workspaceId: () => string,
+	workspaceId: () => string | null,
 	params: () => { styleId: CitationStyleId | null; ids: string[] },
 	enabled: () => boolean = alwaysTrue
 ) {
@@ -362,11 +353,15 @@ export function useCitationRender(
 		enabled: enabled() && params().ids.length > 0,
 		queryFn: async () => {
 			const p = params();
+			const body = {
+				...(p.styleId ? { styleId: p.styleId } : {}),
+				citationIds: p.ids
+			};
+			const wsId = workspaceId();
 			return unwrap(
-				await api.workspaces({ id: workspaceId() }).citations.render.post({
-					...(p.styleId ? { styleId: p.styleId } : {}),
-					citationIds: p.ids
-				})
+				wsId
+					? await api.workspaces({ id: wsId }).citations.render.post(body)
+					: await api.citations.render.post(body)
 			) as CitationRenderResult;
 		}
 	}));
@@ -403,14 +398,16 @@ export function useRenderDocumentCitations(
 }
 
 /** "Salin sitasi": render satu referensi pada style default lalu salin ke clipboard. */
-export function useCopyCitation(workspaceId: () => string) {
+export function useCopyCitation(workspaceId: () => string | null) {
 	const api = getApiClient();
 	return createMutation(() => ({
 		mutationFn: async (citationId: string) => {
+			const body = { citationIds: [citationId] };
+			const wsId = workspaceId();
 			const result = unwrap(
-				await api.workspaces({ id: workspaceId() }).citations.render.post({
-					citationIds: [citationId]
-				})
+				wsId
+					? await api.workspaces({ id: wsId }).citations.render.post(body)
+					: await api.citations.render.post(body)
 			) as CitationRenderResult;
 			const text = result.entries[0]?.text;
 			if (!text) throw new Error('render kosong');

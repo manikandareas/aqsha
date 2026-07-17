@@ -19,14 +19,12 @@
 		| { step: 'done'; result: ImportCommitResult };
 
 	let {
-		workspaceId,
 		provider,
 		providers,
 		onProviderChange,
 		onOpenChange,
 		onDone
 	}: {
-		workspaceId: string;
 		provider: IntegrationProviderKey;
 		providers: IntegrationProviderKey[];
 		onProviderChange: (provider: IntegrationProviderKey) => void;
@@ -44,14 +42,8 @@
 		() => provider,
 		() => wizard.step === 'folder'
 	);
-	const preview = useProviderSyncPreview(
-		() => workspaceId,
-		() => provider
-	);
-	const commit = useProviderSyncCommit(
-		() => workspaceId,
-		() => provider
-	);
+	const preview = useProviderSyncPreview(() => provider);
+	const commit = useProviderSyncCommit(() => provider);
 
 	async function handlePreview() {
 		error = null;

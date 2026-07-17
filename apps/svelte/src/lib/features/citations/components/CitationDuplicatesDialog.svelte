@@ -12,11 +12,9 @@
 	 * di-soft-delete. Fallback judul hanya KANDIDAT, jadi keputusan gabung tetap manual.
 	 */
 	let {
-		workspaceId,
 		open,
 		onOpenChange
 	}: {
-		workspaceId: string;
 		open: boolean;
 		onOpenChange: (open: boolean) => void;
 	} = $props();
