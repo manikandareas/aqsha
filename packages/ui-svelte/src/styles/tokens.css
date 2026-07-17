@@ -10,7 +10,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--background: oklch(0.9195 0.0169 88.003);
+	--background: oklch(0.953 0.0156 86.4257);
 	--foreground: oklch(0.235 0 0);
 	--card: oklch(0.953 0.0156 86.4257);
 	--card-foreground: oklch(0.235 0 0);
@@ -35,8 +35,8 @@
 	--chart-3: oklch(0.4688 0.0136 84.5932);
 	--chart-4: oklch(0.7057 0.025 82.0932);
 	--chart-5: oklch(0.834 0.0232 87.163);
-	/* Sidebar rail sits one step lighter than the page (same surface as --card). */
-	--sidebar: oklch(0.953 0.0156 86.4257);
+	/* Sidebar rail sits one step darker than the page. */
+	--sidebar: oklch(0.9195 0.0169 88.003);
 	--sidebar-foreground: oklch(0.235 0 0);
 	--sidebar-primary: oklch(0.55 0.14 160);
 	--sidebar-primary-foreground: oklch(0.97 0.02 160);
