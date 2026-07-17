@@ -28,7 +28,10 @@
 	} = $props();
 
 	let q = $state('');
-	const list = useCitationsList(() => ({ ...EMPTY_CITATION_FILTERS, q }));
+	const list = useCitationsList(
+		() => ({ ...EMPTY_CITATION_FILTERS, q }),
+		() => open
+	);
 	const linked = useWorkspaceCitations(
 		() => workspaceId,
 		() => open

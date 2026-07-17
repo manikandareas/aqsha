@@ -66,10 +66,14 @@ function useInvalidateCitations() {
 }
 
 /** List referensi perpustakaan akun (infinite/keyset) + `total` untuk count toolbar. */
-export function useCitationsList(filters: () => CitationListFilters) {
+export function useCitationsList(
+	filters: () => CitationListFilters,
+	enabled: () => boolean = alwaysTrue
+) {
 	const api = getApiClient();
 	return createInfiniteQuery(() => ({
 		queryKey: queryKeys.citations.list(filters()),
+		enabled: enabled(),
 		initialPageParam: null as string | null,
 		queryFn: async ({ pageParam }: { pageParam: string | null }) => {
 			const f = filters();
