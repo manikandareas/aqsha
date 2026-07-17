@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { useClerkContext } from 'svelte-clerk';
@@ -9,11 +10,31 @@
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
-	import { Icon, FilterIcon, SearchIcon, XIcon } from '$lib/icons';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import { Icon, FilterIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, XIcon } from '$lib/icons';
 	import CitationDetailView from '../components/CitationDetailView.svelte';
+	import CitationDoiDialog from '../components/CitationDoiDialog.svelte';
+	import CitationDuplicatesDialog from '../components/CitationDuplicatesDialog.svelte';
 	import CitationEmptyState from '../components/CitationEmptyState.svelte';
+	import CitationExportMenu from '../components/CitationExportMenu.svelte';
+	import CitationFormDialog from '../components/CitationFormDialog.svelte';
+	import CitationImportWizard from '../components/CitationImportWizard.svelte';
+	import ProviderSyncWizard from '../components/ProviderSyncWizard.svelte';
+	import AddToProjectDialog from '../components/library/AddToProjectDialog.svelte';
+	import LibraryBulkBar from '../components/library/LibraryBulkBar.svelte';
 	import LibraryRow from '../components/library/LibraryRow.svelte';
-	import { useCitationsList, useCitationTags, useCopyCitation } from '../api';
+	import {
+		useBulkDeleteCitations,
+		useBulkTagCitations,
+		useCitationDetail,
+		useCitationsList,
+		useCitationTags,
+		useCopyCitation,
+		useCreateCitation,
+		useDeleteCitation,
+		useMergeManyCitations,
+		useUpdateCitation
+	} from '../api';
 	import { CITATION_SOURCE_LABELS, CITATION_STATUS_LABELS, type CitationListItem } from '../types';
 	import { applyLibraryUrl, readLibraryUrl, type LibraryUrlState } from '../library-url-model';
 
@@ -42,6 +63,29 @@
 	const list = useCitationsList(() => filters);
 	const tags = useCitationTags();
 	const copy = useCopyCitation(() => null);
+
+	type DialogKind = 'doi' | 'manual' | 'import' | 'provider' | 'duplicates' | null;
+	let dialog = $state<DialogKind>(null);
+	let addToProjectId = $state<string | null>(null);
+	let editTargetId = $state<string | null>(null);
+	let deleteTarget = $state<CitationListItem | null>(null);
+	let confirmBulkDelete = $state(false);
+
+	let selectionMode = $state(false);
+	const selectedIds = new SvelteSet<string>();
+	function clearSelection() {
+		selectionMode = false;
+		selectedIds.clear();
+	}
+
+	const createCitation = useCreateCitation();
+	const updateCitation = useUpdateCitation();
+	const deleteCitation = useDeleteCitation();
+	const bulkTag = useBulkTagCitations();
+	const bulkDelete = useBulkDeleteCitations();
+	const mergeMany = useMergeManyCitations();
+	// `useCitationDetail` gates its own query on the id being non-null — no separate `enabled` getter.
+	const editTarget = useCitationDetail(() => editTargetId);
 
 	const items = $derived<CitationListItem[]>(list.data?.pages.flatMap((p) => p.items) ?? []);
 	const total = $derived(list.data?.pages[0]?.total ?? 0);
@@ -83,7 +127,51 @@
 						{total} referensi lintas proyek — tambahkan ke proyek kapan pun.
 					</p>
 				</div>
-				<!-- Slot aksi header: tambah sumber, export, kelola duplikat, mode pilih -->
+				<div class="flex items-center gap-2">
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button {...props} type="button" class="gap-1.5">
+									<Icon icon={PlusIcon} class="size-4" /> Tambah sumber
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="end">
+							<DropdownMenu.Item onSelect={() => (dialog = 'doi')}>Dari DOI</DropdownMenu.Item>
+							<DropdownMenu.Item onSelect={() => (dialog = 'manual')}>Isi manual</DropdownMenu.Item>
+							<DropdownMenu.Item onSelect={() => (dialog = 'import')}>
+								Import file (.bib/.ris)
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onSelect={() => (dialog = 'provider')}>
+								Tarik dari Mendeley/Zotero
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+					<CitationExportMenu disabled={items.length === 0} />
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									type="button"
+									variant="outline"
+									size="icon"
+									aria-label="Opsi lain"
+								>
+									<Icon icon={MoreHorizontalIcon} class="size-4" />
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="end">
+							<DropdownMenu.Item onSelect={() => (selectionMode = true)}>
+								Pilih beberapa
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onSelect={() => (dialog = 'duplicates')}>
+								Kelola duplikat
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				</div>
 			</header>
 
 			<div class="flex flex-wrap items-center gap-2 px-6 py-3">
@@ -168,11 +256,10 @@
 					</div>
 				{:else if items.length === 0 && !hasFilter}
 					<CitationEmptyState
-						onImportFile={() => {}}
-						onAddByDoi={() => {}}
-						onAddManual={() => {}}
+						onImportFile={() => (dialog = 'import')}
+						onAddByDoi={() => (dialog = 'doi')}
+						onAddManual={() => (dialog = 'manual')}
 					/>
-					<!-- Callback empty state menautkan ke dialog impor file, tambah DOI, dan tambah manual -->
 				{:else if items.length === 0}
 					<p class="py-16 text-center text-sm text-muted-foreground">
 						Tidak ada referensi yang cocok dengan filter.
@@ -182,17 +269,32 @@
 						{#each items as item (item.id)}
 							<LibraryRow
 								{item}
-								selectionMode={false}
-								selected={false}
-								onToggleSelect={() => {}}
+								{selectionMode}
+								selected={selectedIds.has(item.id)}
+								onToggleSelect={() =>
+									selectedIds.has(item.id) ? selectedIds.delete(item.id) : selectedIds.add(item.id)}
 								onOpen={() => navigate({ cite: item.id })}
 								onCopy={() => copy.mutate(item.id)}
-								onAddToProject={() => {}}
-								onEdit={() => {}}
-								onDelete={() => {}}
+								onAddToProject={() => (addToProjectId = item.id)}
+								onEdit={() => (editTargetId = item.id)}
+								onDelete={() => (deleteTarget = item)}
 							/>
 						{/each}
 					</ul>
+					{#if selectionMode && selectedIds.size > 0}
+						<LibraryBulkBar
+							ids={[...selectedIds]}
+							onTag={(newTags) =>
+								bulkTag.mutate(
+									{ ids: [...selectedIds], tags: newTags },
+									{ onSuccess: clearSelection }
+								)}
+							onMerge={() =>
+								mergeMany.mutate({ ids: [...selectedIds] }, { onSuccess: clearSelection })}
+							onDelete={() => (confirmBulkDelete = true)}
+							onClear={clearSelection}
+						/>
+					{/if}
 					{#if list.hasNextPage}
 						<Button
 							type="button"
@@ -220,3 +322,79 @@
 		{/snippet}
 	</DetailSplitLayout>
 </div>
+
+<CitationDoiDialog
+	open={dialog === 'doi'}
+	onOpenChange={(open) => (dialog = open ? 'doi' : null)}
+	onSubmit={async (value) => {
+		await createCitation.mutateAsync({ doi: value.doi, allowDuplicate: value.allowDuplicate });
+		dialog = null;
+	}}
+/>
+<CitationFormDialog
+	open={dialog === 'manual' || editTargetId !== null}
+	citation={editTargetId !== null ? (editTarget.data ?? null) : null}
+	onOpenChange={(open) => {
+		if (!open) {
+			dialog = dialog === 'manual' ? null : dialog;
+			editTargetId = null;
+		}
+	}}
+	onSubmit={async (value) => {
+		if (editTargetId) {
+			await updateCitation.mutateAsync({ citationId: editTargetId, ...value });
+			editTargetId = null;
+		} else {
+			await createCitation.mutateAsync(value);
+			dialog = null;
+		}
+	}}
+/>
+<CitationImportWizard
+	open={dialog === 'import'}
+	onOpenChange={(open) => (dialog = open ? 'import' : null)}
+	onDone={() => (dialog = null)}
+/>
+<ProviderSyncWizard
+	open={dialog === 'provider'}
+	onOpenChange={(open) => (dialog = open ? 'provider' : null)}
+	onDone={() => (dialog = null)}
+/>
+<CitationDuplicatesDialog
+	open={dialog === 'duplicates'}
+	onOpenChange={(open) => (dialog = open ? 'duplicates' : null)}
+/>
+<AddToProjectDialog
+	open={addToProjectId !== null}
+	onOpenChange={(open) => {
+		if (!open) addToProjectId = null;
+	}}
+	citationId={addToProjectId}
+/>
+<ConfirmDialog
+	open={deleteTarget !== null}
+	onOpenChange={(open) => {
+		if (!open) deleteTarget = null;
+	}}
+	title="Hapus referensi?"
+	description={`"${deleteTarget?.title ?? ''}" dihapus dari perpustakaan (bisa dilihat lagi lewat filter di masa depan — soft delete).`}
+	confirmLabel="Hapus"
+	onConfirm={async () => {
+		if (!deleteTarget) return;
+		await deleteCitation.mutateAsync(deleteTarget.id);
+		if (urlState.cite === deleteTarget.id) navigate({ cite: null });
+		deleteTarget = null;
+	}}
+/>
+<ConfirmDialog
+	open={confirmBulkDelete}
+	onOpenChange={(open) => (confirmBulkDelete = open)}
+	title={`Hapus ${selectedIds.size} referensi?`}
+	description="Referensi terpilih dihapus dari perpustakaan."
+	confirmLabel="Hapus"
+	onConfirm={async () => {
+		await bulkDelete.mutateAsync([...selectedIds]);
+		confirmBulkDelete = false;
+		clearSelection();
+	}}
+/>
