@@ -22,17 +22,27 @@ const LIST_PAGE_SIZE = 30;
 
 const always = () => true;
 
-/** List thread (infinite/keyset, DESC activity). */
-export function useThreadsList(enabled: () => boolean = always) {
+/**
+ * List thread (infinite/keyset, DESC activity). `workspaceId` scopes to a project's threads
+ * (`null` = global list) — Task 4/7 pass a getter tracking the active workspace.
+ */
+export function useThreadsList(
+	enabled: () => boolean = always,
+	workspaceId: () => string | null = () => null
+) {
 	const api = getApiClient();
 	return createInfiniteQuery(() => ({
-		queryKey: queryKeys.threads.list(),
+		queryKey: queryKeys.threads.list(workspaceId()),
 		enabled: enabled(),
 		initialPageParam: null as string | null,
 		queryFn: async ({ pageParam }: { pageParam: string | null }) =>
 			unwrap(
 				await api.threads.get({
-					query: { limit: LIST_PAGE_SIZE, ...(pageParam ? { cursor: pageParam } : {}) }
+					query: {
+						limit: LIST_PAGE_SIZE,
+						...(workspaceId() ? { workspaceId: workspaceId()! } : {}),
+						...(pageParam ? { cursor: pageParam } : {})
+					}
 				})
 			) as { items: ChatThread[]; nextCursor: string | null },
 		getNextPageParam: (last: { items: ChatThread[]; nextCursor: string | null }) => last.nextCursor

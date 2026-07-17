@@ -14,7 +14,8 @@ describe('queryKeys registry', () => {
 	});
 
 	it('threads (termasuk default sendStatus)', () => {
-		expect(queryKeys.threads.list()).toEqual(['threads', 'list']);
+		expect(queryKeys.threads.list()).toEqual(['threads', 'list', null]);
+		expect(queryKeys.threads.list('w1')).toEqual(['threads', 'list', 'w1']);
 		expect(queryKeys.threads.pinned()).toEqual(['threads', 'pinned']);
 		expect(queryKeys.threads.messages('t1')).toEqual(['threads', 'messages', 't1']);
 		expect(queryKeys.threads.sendStatus()).toEqual(['threads', 'send-status', 'normal_chat']);
