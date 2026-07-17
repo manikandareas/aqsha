@@ -174,35 +174,6 @@ export function useMoveArtifact() {
 	}));
 }
 
-/**
- * Save URL ke workspace (createUrl) → enqueue url-ingestion. Idempotent (dedupe).
- * Unbound: workspaceId di call-time (library pakai current ws; SaveToWorkspaceButton
- * pakai ws dari picker).
- */
-export function useSaveUrl() {
-	const api = getApiClient();
-	const qc = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: async (input: {
-			workspaceId: string;
-			url: string;
-			title?: string;
-			folderId?: string;
-		}) => {
-			const res = unwrap(
-				await api.workspaces({ id: input.workspaceId }).artifacts.url.post({
-					url: input.url,
-					title: input.title,
-					folderId: input.folderId
-				})
-			);
-			return res as { artifactId: string };
-		},
-		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.artifacts.all }),
-		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menyimpan tautan.'))
-	}));
-}
-
 export function useRetryUrlExtraction(id: () => string) {
 	const api = getApiClient();
 	const qc = useQueryClient();

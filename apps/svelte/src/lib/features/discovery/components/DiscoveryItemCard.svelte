@@ -20,10 +20,10 @@
 	} from '$lib/icons';
 	import { firstInitial } from '$lib/components/generative-cover';
 	import { cn } from '@aqsha/ui-svelte/utils';
-	import { bestIngestUrl, feedDetailHref } from '../model';
+	import { feedDetailHref } from '../model';
 	import { domainFromUrl, formatCitationCount, relativeTime, sourceName } from '../format';
 	import CardMedia from './CardMedia.svelte';
-	import SaveToWorkspaceButton from './SaveToWorkspaceButton.svelte';
+	import SaveSourceButton from './SaveSourceButton.svelte';
 
 	/**
 	 * Editorial discovery card — hero, feature (+ imageSide), and standard variants. `handlers` =
@@ -187,13 +187,19 @@
 	<div class="flex items-center justify-between gap-3">
 		{@render sourceRow()}
 		<div class="-mr-1 flex shrink-0 items-center gap-0.5">
-			<SaveToWorkspaceButton
-				url={bestIngestUrl(item)}
-				title={item.title}
+			<SaveSourceButton
+				source={{
+					title: item.title,
+					doi: item.doi ?? null,
+					url: item.url ?? null,
+					authors: item.authors ?? [],
+					year: item.year ?? null,
+					venue: item.venue ?? null
+				}}
 				label=""
 				size="icon"
 				variant="ghost"
-				ariaLabel="Simpan ke workspace"
+				ariaLabel="Simpan ke perpustakaan"
 				class="size-8 rounded-full text-muted-foreground hover:text-foreground"
 				onSaved={() => handlers.onSaved(item)}
 			/>

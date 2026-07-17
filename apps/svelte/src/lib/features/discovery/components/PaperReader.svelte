@@ -5,7 +5,7 @@
 	import { formatCitationCount } from '../format';
 	import type { PaperEnrichmentRef } from '../types';
 	import PaperAside from './PaperAside.svelte';
-	import SaveToWorkspaceButton from './SaveToWorkspaceButton.svelte';
+	import SaveSourceButton from './SaveSourceButton.svelte';
 	import {
 		Eyebrow,
 		ExpandableText,
@@ -86,9 +86,15 @@
 				<PillCta href={paper.url} variant={downloadHref ? 'outline' : 'solid'}>
 					Lihat di penerbit
 				</PillCta>
-				<SaveToWorkspaceButton
-					url={paper.url}
-					title={paper.title}
+				<SaveSourceButton
+					source={{
+						title: paper.title,
+						doi: paper.doi ?? null,
+						url: paper.url ?? null,
+						authors: paper.authors,
+						year: paper.year ?? null,
+						venue: paper.venue ?? null
+					}}
 					label="Simpan"
 					size="sm"
 					variant="ghost"
