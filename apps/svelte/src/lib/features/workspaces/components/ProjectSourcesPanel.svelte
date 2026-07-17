@@ -4,7 +4,7 @@
 	import * as Select from '@aqsha/ui-svelte/components/select';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Spinner } from '$lib/components/ui/spinner';
-	import { Icon, MoreHorizontalIcon, SearchIcon } from '$lib/icons';
+	import { Icon, MoreHorizontalIcon, PlusIcon, SearchIcon } from '$lib/icons';
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import {
@@ -13,6 +13,7 @@
 		useWorkspaceCitations
 	} from '$lib/features/citations/api';
 	import { citationMetaLine, type CitationAuthor } from '$lib/features/citations/types';
+	import LibraryPickerDialog from '$lib/features/citations/components/LibraryPickerDialog.svelte';
 	import type { WorkspaceSection } from '../types';
 
 	/**
@@ -24,6 +25,8 @@
 	const linked = useWorkspaceCitations(() => workspaceId);
 	const unlink = useUnlinkCitation();
 	const assignSection = useAssignCitationSection();
+
+	let pickerOpen = $state(false);
 
 	const NO_SECTION = '__none__';
 	const sectionOptions = $derived(sections.filter((s) => s.role !== 'bibliography'));
@@ -53,6 +56,15 @@
 			class="flex-1 gap-1.5"
 		>
 			<Icon icon={SearchIcon} class="size-3.5" /> Cari sumber
+		</Button>
+		<Button
+			type="button"
+			variant="outline"
+			size="sm"
+			class="flex-1 gap-1.5"
+			onclick={() => (pickerOpen = true)}
+		>
+			<Icon icon={PlusIcon} class="size-3.5" /> Dari perpustakaan
 		</Button>
 	</div>
 	{#if linked.isPending}
@@ -133,3 +145,5 @@
 		</ul>
 	{/if}
 </div>
+
+<LibraryPickerDialog open={pickerOpen} onOpenChange={(open) => (pickerOpen = open)} {workspaceId} />
