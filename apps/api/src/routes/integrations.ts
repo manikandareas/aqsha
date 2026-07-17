@@ -22,10 +22,11 @@ function settingsRedirect(query: Record<string, string>): Response {
 }
 
 /**
- * Route integrasi provider referensi (Fase 5). Koneksi = account-level; penarikan
- * data = per-workspace (reuse pipeline import). Tipis: auth → 1 service call.
- * Credential TIDAK PERNAH keluar dari service. Callback OAuth tak ber-bearer:
- * identitas dari signed `state`; error di-redirect (bukan JSON) agar UX mulus.
+ * Route integrasi provider referensi. Koneksi = account-level; penarikan data
+ * juga account-level (reuse pipeline import ke perpustakaan akun). Tipis: auth →
+ * 1 service call. Credential TIDAK PERNAH keluar dari service. Callback OAuth
+ * tak ber-bearer: identitas dari signed `state`; error di-redirect (bukan JSON)
+ * agar UX mulus.
  */
 export const integrations = new Elysia()
   .use(authMacro)
@@ -124,7 +125,6 @@ export const integrations = new Elysia()
       const { db } = getDb();
       return CitationSyncService.previewFolder(db, {
         ownerUserId,
-        workspaceId: body.workspaceId,
         provider: params.provider,
         folderId: body.folderId ?? null,
       });
@@ -134,7 +134,6 @@ export const integrations = new Elysia()
       rateLimit: "integrations:sync",
       params: providerParams,
       body: t.Object({
-        workspaceId: t.String(),
         folderId: t.Optional(t.Union([t.String(), t.Null()])),
       }),
     },
@@ -145,7 +144,6 @@ export const integrations = new Elysia()
       const { db } = getDb();
       return CitationImportService.commit(db, {
         ownerUserId,
-        workspaceId: body.workspaceId,
         batchId: params.batchId,
         selectedIndexes: body.selectedIndexes,
         duplicatePolicy: body.duplicatePolicy,
@@ -156,7 +154,6 @@ export const integrations = new Elysia()
       rateLimit: "integrations:sync",
       params: t.Object({ provider: providerLiteral, batchId: t.String() }),
       body: t.Object({
-        workspaceId: t.String(),
         selectedIndexes: t.Array(t.Number()),
         duplicatePolicy,
       }),

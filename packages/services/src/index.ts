@@ -248,8 +248,8 @@ export {
   type ManualCitationInput,
 } from "./citations";
 
-// Citation Manager (Fase 5) — integrasi provider referensi (Mendeley OAuth / Zotero).
-// Koneksi account-level terenkripsi; penarikan data per-workspace via CitationSyncService.
+// Citation Manager — integrasi provider referensi (Mendeley OAuth / Zotero).
+// Koneksi account-level terenkripsi; penarikan data ke perpustakaan akun via CitationSyncService.
 export {
   CitationSyncService,
   type IntegrationAdapter,

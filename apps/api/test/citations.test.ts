@@ -2,8 +2,8 @@
  * Citation Manager — itest route perpustakaan akun (`/citations*`) + koleksi per
  * proyek (`/workspaces/:id/citations*`) (butuh Postgres live via DATABASE_URL;
  * tanpa env → skip). Fokus kontrak API: owner CRUD round-trip, isolasi user lain,
- * import preview→commit multipart (auto-link ke proyek asal), export, link
- * perpustakaan↔proyek, settings per proyek.
+ * import preview→commit multipart account-level (tanpa auto-link proyek), export,
+ * link perpustakaan↔proyek, settings per proyek.
  */
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { createDb } from "@aqsha/db";
@@ -234,7 +234,7 @@ describe("api citations — import preview + commit", () => {
 
   itest("preview multipart .bib → counts + records, belum membuat citation", async () => {
     const res = await reqMultipart(
-      `/workspaces/${workspaceId}/citations/imports/preview`,
+      "/citations/imports/preview",
       tok(OWNER),
       "refs.bib",
       BIB,
@@ -252,7 +252,7 @@ describe("api citations — import preview + commit", () => {
 
   itest("file malformed → 400, tidak ada record dibuat", async () => {
     const res = await reqMultipart(
-      `/workspaces/${workspaceId}/citations/imports/preview`,
+      "/citations/imports/preview",
       tok(OWNER),
       "bukan.bib",
       "isi acak tanpa format bibliografi",
@@ -261,25 +261,23 @@ describe("api citations — import preview + commit", () => {
     expect((await readJson(res)).code).toBe("citation_import_invalid");
   });
 
-  itest("commit selected → created + auto-link ke proyek; batch tak bisa commit dua kali", async () => {
+  itest("commit selected → created ke perpustakaan akun; batch tak bisa commit dua kali", async () => {
     const res = await req(
       "POST",
-      `/workspaces/${workspaceId}/citations/imports/${batchId}/commit`,
+      `/citations/imports/${batchId}/commit`,
       tok(OWNER),
       { selectedIndexes: [0, 1], duplicatePolicy: "skip" },
     );
     expect(res.status).toBe(200);
     expect(await readJson(res)).toEqual({ created: 2, merged: 0, skipped: 0 });
 
-    // Hasil import langsung masuk koleksi proyek asal import.
-    const inProject = await readJson(
-      await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)),
-    );
-    expect(inProject.items.length).toBe(2);
+    // Hasil import masuk perpustakaan akun (bukan koleksi proyek — tanpa auto-link).
+    const list = await readJson(await req("GET", "/citations", tok(OWNER)));
+    expect(list.total).toBe(3); // 1 manual sebelumnya + 2 hasil import
 
     const again = await req(
       "POST",
-      `/workspaces/${workspaceId}/citations/imports/${batchId}/commit`,
+      `/citations/imports/${batchId}/commit`,
       tok(OWNER),
       { selectedIndexes: [0], duplicatePolicy: "skip" },
     );
@@ -290,7 +288,7 @@ describe("api citations — import preview + commit", () => {
   itest("intruder tidak bisa commit batch owner", async () => {
     const res = await req(
       "POST",
-      `/workspaces/${workspaceId}/citations/imports/${batchId}/commit`,
+      `/citations/imports/${batchId}/commit`,
       tok(INTRUDER),
       { selectedIndexes: [0], duplicatePolicy: "skip" },
     );

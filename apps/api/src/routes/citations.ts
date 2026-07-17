@@ -37,12 +37,12 @@ const styleId = t.Union([
 ]);
 
 /**
- * Route Citation Manager — perpustakaan referensi per AKUN (`/citations/*`) +
- * koleksi per proyek via link (`/workspaces/:id/citations*`). Yang tetap
- * workspace-scoped: render/render-document (gaya sitasi per proyek), import
- * (batch berkonteks proyek), from-artifact (artifact hidup di workspace), dan
- * citation-settings. Tipis: auth → validasi `t` permisif → 1 service call.
- * Path statis (tags/export/duplicates/...) dideklarasikan sebelum `/:citationId`.
+ * Route Citation Manager — perpustakaan referensi per AKUN (`/citations/*`,
+ * termasuk import batch) + koleksi per proyek via link (`/workspaces/:id/citations*`).
+ * Yang tetap workspace-scoped: render/render-document (gaya sitasi per proyek),
+ * from-artifact (artifact hidup di workspace), dan citation-settings. Tipis: auth →
+ * validasi `t` permisif → 1 service call. Path statis (tags/export/duplicates/imports/...)
+ * dideklarasikan sebelum `/:citationId`.
  */
 export const citations = new Elysia()
   .use(authMacro)
@@ -174,6 +174,42 @@ export const citations = new Elysia()
     {
       auth: true,
       body: t.Object({ ids: t.Array(t.String()) }),
+    },
+  )
+  .post(
+    "/citations/imports/preview",
+    async ({ ownerUserId, body }) => {
+      const { db } = getDb();
+      return CitationImportService.preview(db, {
+        ownerUserId,
+        fileName: body.file.name,
+        content: await body.file.text(),
+      });
+    },
+    {
+      auth: true,
+      rateLimit: "citations:import",
+      body: t.Object({ file: t.File({ maxSize: MAX_IMPORT_FILE_BYTES }) }),
+    },
+  )
+  .post(
+    "/citations/imports/:batchId/commit",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationImportService.commit(db, {
+        ownerUserId,
+        batchId: params.batchId,
+        selectedIndexes: body.selectedIndexes,
+        duplicatePolicy: body.duplicatePolicy,
+      });
+    },
+    {
+      auth: true,
+      rateLimit: "citations:import",
+      body: t.Object({
+        selectedIndexes: t.Array(t.Number()),
+        duplicatePolicy: t.Union([t.Literal("skip"), t.Literal("merge"), t.Literal("import")]),
+      }),
     },
   )
   .post(
@@ -354,44 +390,6 @@ export const citations = new Elysia()
             suffix: t.Optional(t.String()),
           }),
         ),
-      }),
-    },
-  )
-  .post(
-    "/workspaces/:id/citations/imports/preview",
-    async ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return CitationImportService.preview(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        fileName: body.file.name,
-        content: await body.file.text(),
-      });
-    },
-    {
-      auth: true,
-      rateLimit: "citations:import",
-      body: t.Object({ file: t.File({ maxSize: MAX_IMPORT_FILE_BYTES }) }),
-    },
-  )
-  .post(
-    "/workspaces/:id/citations/imports/:batchId/commit",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return CitationImportService.commit(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        batchId: params.batchId,
-        selectedIndexes: body.selectedIndexes,
-        duplicatePolicy: body.duplicatePolicy,
-      });
-    },
-    {
-      auth: true,
-      rateLimit: "citations:import",
-      body: t.Object({
-        selectedIndexes: t.Array(t.Number()),
-        duplicatePolicy: t.Union([t.Literal("skip"), t.Literal("merge"), t.Literal("import")]),
       }),
     },
   )

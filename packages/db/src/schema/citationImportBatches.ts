@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { bigint, check, index, integer, jsonb, pgTable, text } from "drizzle-orm/pg-core";
 import { users } from "./users";
-import { workspaces } from "./workspaces";
 
 export type ImportBatchSourceKind = "file" | "provider_sync";
 export type ImportBatchFormat = "bibtex" | "ris";
@@ -9,9 +8,10 @@ export type ImportBatchStatus = "pending" | "committed";
 
 /**
  * citation_import_batches — audit + staging batch import (bukan source of truth).
- * `records_json` menahan record hasil parse antara preview → commit, lalu
- * dikosongkan saat commit (raw file tidak dipertahankan). Reused oleh provider
- * sync (Fase 5–6) via `source_kind = 'provider_sync'`.
+ * Batch milik AKUN (perpustakaan account-level), bukan proyek — import/sync tidak
+ * lagi menautkan hasil ke workspace mana pun. `records_json` menahan record hasil
+ * parse antara preview → commit, lalu dikosongkan saat commit (raw file tidak
+ * dipertahankan). Reused oleh provider sync (Fase 5–6) via `source_kind = 'provider_sync'`.
  */
 export const citationImportBatches = pgTable(
   "citation_import_batches",
@@ -20,9 +20,6 @@ export const citationImportBatches = pgTable(
     ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => users.ownerUserId, { onDelete: "cascade" }),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id),
     sourceKind: text("source_kind").notNull(),
     format: text("format"),
     provider: text("provider"),
@@ -51,11 +48,7 @@ export const citationImportBatches = pgTable(
       "citation_import_batches_status_check",
       sql`${t.status} in ('pending', 'committed')`,
     ),
-    index("citation_import_batches_by_owner_workspace_created").on(
-      t.ownerUserId,
-      t.workspaceId,
-      t.createdAt,
-    ),
+    index("citation_import_batches_by_owner_created").on(t.ownerUserId, t.createdAt),
   ],
 );
 

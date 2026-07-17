@@ -4,16 +4,13 @@ import {
   CitationImportBatchRepo,
   CitationRepo,
   DocumentCitationUsageRepo,
-  WorkspaceCitationLinkRepo,
 } from "@aqsha/db";
 import { CitationImportService } from "../src/citations/citation-import.service";
 import { CitationService } from "../src/citations/citation.service";
-import { WorkspaceService } from "../src/workspace.service";
 
 const fakeDb = { transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb) } as never;
 
 const OWNER = "user_1";
-const WS = "ws_1";
 
 const BIB = `@article{a1,
  title = {Entry Satu},
@@ -77,23 +74,13 @@ async function appErrorCode(p: Promise<unknown>): Promise<string> {
 
 afterEach(() => mock.restore());
 
-function stubOwner() {
-  spyOn(WorkspaceService, "assertWorkspaceOwner").mockResolvedValue({} as never);
-}
-
-function stubLinks() {
-  return spyOn(WorkspaceCitationLinkRepo, "insert").mockResolvedValue();
-}
-
 describe("CitationImportService.preview", () => {
   test("tandai duplikat vs library + antar-record batch, persist staging", async () => {
-    stubOwner();
     spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
     const insertBatch = spyOn(CitationImportBatchRepo, "insert").mockResolvedValue();
 
     const preview = await CitationImportService.preview(fakeDb, {
       ownerUserId: OWNER,
-      workspaceId: WS,
       fileName: "refs.bib",
       content: BIB,
     });
@@ -112,12 +99,10 @@ describe("CitationImportService.preview", () => {
   });
 
   test("file bukan bib/ris → citation_import_invalid", async () => {
-    stubOwner();
     expect(
       await appErrorCode(
         CitationImportService.preview(fakeDb, {
           ownerUserId: OWNER,
-          workspaceId: WS,
           fileName: "x.txt",
           content: "bukan bibliografi",
         }),
@@ -128,7 +113,6 @@ describe("CitationImportService.preview", () => {
 
 describe("CitationImportService.commit", () => {
   async function stagedBatch() {
-    stubOwner();
     spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
     let captured: Record<string, unknown> | null = null;
     spyOn(CitationImportBatchRepo, "insert").mockImplementation(async (_db, row) => {
@@ -136,12 +120,10 @@ describe("CitationImportService.commit", () => {
     });
     const preview = await CitationImportService.preview(fakeDb, {
       ownerUserId: OWNER,
-      workspaceId: WS,
       fileName: "refs.bib",
       content: BIB,
     });
     mock.restore();
-    stubOwner();
     // Kolom ber-default DB (status) tidak ada di payload insert — isi manual seperti DB.
     return {
       preview,
@@ -149,17 +131,15 @@ describe("CitationImportService.commit", () => {
     };
   }
 
-  test("policy skip: duplikat dilewati, non-duplikat dibuat + ter-link ke proyek", async () => {
+  test("policy skip: duplikat dilewati, non-duplikat dibuat", async () => {
     const { preview, batchRow } = await stagedBatch();
     spyOn(CitationImportBatchRepo, "findById").mockResolvedValue(batchRow as never);
     spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
     const insertMany = spyOn(CitationRepo, "insertMany").mockResolvedValue();
     const updateBatch = spyOn(CitationImportBatchRepo, "updateById").mockResolvedValue();
-    const insertLink = stubLinks();
 
     const result = await CitationImportService.commit(fakeDb, {
       ownerUserId: OWNER,
-      workspaceId: WS,
       batchId: preview.batchId,
       selectedIndexes: [0, 1, 2],
       duplicatePolicy: "skip",
@@ -168,8 +148,6 @@ describe("CitationImportService.commit", () => {
     const rows = insertMany.mock.calls[0]?.[1] as Array<{ title: string; source: string }>;
     expect(rows.map((r) => r.title)).toEqual(["Entry Dua"]);
     expect(rows[0]?.source).toBe("import");
-    // Row baru langsung masuk koleksi proyek asal import.
-    expect(insertLink).toHaveBeenCalledTimes(1);
     const patch = updateBatch.mock.calls[0]?.[2] as Record<string, unknown>;
     expect(patch.status).toBe("committed");
     expect(patch.recordsJson).toBeNull();
@@ -182,11 +160,9 @@ describe("CitationImportService.commit", () => {
     spyOn(CitationRepo, "insertMany").mockResolvedValue();
     const updateCitation = spyOn(CitationRepo, "updateById").mockResolvedValue();
     spyOn(CitationImportBatchRepo, "updateById").mockResolvedValue();
-    stubLinks();
 
     const result = await CitationImportService.commit(fakeDb, {
       ownerUserId: OWNER,
-      workspaceId: WS,
       batchId: preview.batchId,
       selectedIndexes: [0, 1, 2],
       duplicatePolicy: "merge",
@@ -205,11 +181,9 @@ describe("CitationImportService.commit", () => {
     spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
     const insertMany = spyOn(CitationRepo, "insertMany").mockResolvedValue();
     spyOn(CitationImportBatchRepo, "updateById").mockResolvedValue();
-    stubLinks();
 
     const result = await CitationImportService.commit(fakeDb, {
       ownerUserId: OWNER,
-      workspaceId: WS,
       batchId: preview.batchId,
       selectedIndexes: [0, 1, 2],
       duplicatePolicy: "import",
@@ -219,10 +193,8 @@ describe("CitationImportService.commit", () => {
   });
 
   test("batch sudah committed → citation_batch_committed", async () => {
-    stubOwner();
     spyOn(CitationImportBatchRepo, "findById").mockResolvedValue({
       id: "b1",
-      workspaceId: WS,
       status: "committed",
       recordsJson: null,
     } as never);
@@ -230,7 +202,6 @@ describe("CitationImportService.commit", () => {
       await appErrorCode(
         CitationImportService.commit(fakeDb, {
           ownerUserId: OWNER,
-          workspaceId: WS,
           batchId: "b1",
           selectedIndexes: [0],
           duplicatePolicy: "skip",
@@ -239,19 +210,12 @@ describe("CitationImportService.commit", () => {
     ).toBe("citation_batch_committed");
   });
 
-  test("batch workspace lain → citation_batch_not_found", async () => {
-    stubOwner();
-    spyOn(CitationImportBatchRepo, "findById").mockResolvedValue({
-      id: "b1",
-      workspaceId: "ws_lain",
-      status: "pending",
-      recordsJson: [],
-    } as never);
+  test("batch tidak ditemukan (owner lain/id salah) → citation_batch_not_found", async () => {
+    spyOn(CitationImportBatchRepo, "findById").mockResolvedValue(null);
     expect(
       await appErrorCode(
         CitationImportService.commit(fakeDb, {
           ownerUserId: OWNER,
-          workspaceId: WS,
           batchId: "b1",
           selectedIndexes: [0],
           duplicatePolicy: "skip",

@@ -139,7 +139,7 @@ async function persistConnection(
 /**
  * Lifecycle koneksi akun ke aplikasi referensi (account-level). Credential
  * dienkripsi at-rest (`crypto.ts`) dan TAK PERNAH keluar dari service. Penarikan
- * data per-workspace ada di `CitationSyncService`.
+ * data ke perpustakaan akun ada di `CitationSyncService`.
  */
 export const IntegrationService = {
   /** Status semua provider (untuk Settings) — tanpa credential apa pun. */

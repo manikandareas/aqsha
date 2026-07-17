@@ -9,13 +9,7 @@ import type {
   Citation,
   NewCitation,
 } from "@aqsha/db";
-import {
-  CitationImportBatchRepo,
-  CitationRepo,
-  throwAppError,
-  WorkspaceCitationLinkRepo,
-} from "@aqsha/db";
-import { WorkspaceService } from "../workspace.service";
+import { CitationImportBatchRepo, CitationRepo, throwAppError } from "@aqsha/db";
 import {
   canonicalKeyForCsl,
   type CitationColumns,
@@ -151,7 +145,6 @@ export async function stageImportBatch(
   db: DbOrTx,
   input: {
     ownerUserId: string;
-    workspaceId: string;
     entries: StagedEntryInput[];
     parseErrors?: BibliographyParseError[];
     source: "import" | "provider_sync";
@@ -248,7 +241,6 @@ export async function stageImportBatch(
   await CitationImportBatchRepo.insert(db, {
     id: batchId,
     ownerUserId: input.ownerUserId,
-    workspaceId: input.workspaceId,
     sourceKind: input.sourceKind,
     format: input.format,
     provider: input.provider ?? null,
@@ -281,14 +273,10 @@ export const CitationImportService = {
     db: DbOrTx,
     input: {
       ownerUserId: string;
-      workspaceId: string;
       fileName: string;
       content: string;
     },
   ): Promise<ImportPreviewResult> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId, {
-      requireActive: true,
-    });
     if (Buffer.byteLength(input.content, "utf8") > MAX_IMPORT_FILE_BYTES) {
       throwAppError({
         message: "File melebihi batas 10 MB",
@@ -314,7 +302,6 @@ export const CitationImportService = {
     }
     return stageImportBatch(db, {
       ownerUserId: input.ownerUserId,
-      workspaceId: input.workspaceId,
       entries: entries.map((e) => ({ csl: e.csl })),
       parseErrors: errors,
       source: "import",
@@ -328,17 +315,13 @@ export const CitationImportService = {
     db: Db,
     input: {
       ownerUserId: string;
-      workspaceId: string;
       batchId: string;
       selectedIndexes: number[];
       duplicatePolicy: ImportDuplicatePolicy;
     },
   ): Promise<ImportCommitResult> {
-    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId, {
-      requireActive: true,
-    });
     const batch = await CitationImportBatchRepo.findById(db, input.ownerUserId, input.batchId);
-    if (!batch || batch.workspaceId !== input.workspaceId) {
+    if (!batch) {
       throwAppError({
         message: "Batch import tidak ditemukan",
         code: "citation_batch_not_found",
@@ -387,7 +370,6 @@ export const CitationImportService = {
         }
       }
       const rowsToInsert: NewCitation[] = [];
-      const linkedCitationIds = new Set<string>();
       const insertedKeys = new Set<string>();
 
       for (const record of chosen) {
@@ -409,7 +391,6 @@ export const CitationImportService = {
                   updatedAt: now,
                 });
               }
-              linkedCitationIds.add(existing.id);
               result.merged++;
             } else {
               // Duplikat antar-record batch tanpa row existing → yang pertama sudah masuk.
@@ -443,21 +424,10 @@ export const CitationImportService = {
           updatedAt: now,
         });
         insertedKeys.add(record.canonicalKey);
-        linkedCitationIds.add(newId);
         result.created++;
       }
 
       await CitationRepo.insertMany(tx, rowsToInsert);
-      // Import berjalan dalam konteks proyek → hasilnya langsung masuk koleksi proyek.
-      for (const citationId of linkedCitationIds) {
-        await WorkspaceCitationLinkRepo.insert(tx, {
-          id: crypto.randomUUID(),
-          workspaceId: input.workspaceId,
-          citationId,
-          sectionId: null,
-          createdAt: now,
-        });
-      }
       await CitationImportBatchRepo.updateById(tx, batch.id, {
         status: "committed",
         committedAt: now,

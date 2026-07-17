@@ -240,7 +240,6 @@ describe("CitationImportBatchRepo", () => {
     await CitationImportBatchRepo.insert(db, {
       id,
       ownerUserId: OWNER,
-      workspaceId: WS1,
       sourceKind: "file",
       format: "bibtex",
       originalFilename: "refs.bib",
