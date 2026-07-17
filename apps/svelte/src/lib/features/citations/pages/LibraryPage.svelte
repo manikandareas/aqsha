@@ -83,7 +83,7 @@
 						{total} referensi lintas proyek — tambahkan ke proyek kapan pun.
 					</p>
 				</div>
-				<!-- Aksi header (Tambah sumber, export, duplikat, mode pilih) — Task berikutnya -->
+				<!-- Slot aksi header: tambah sumber, export, kelola duplikat, mode pilih -->
 			</header>
 
 			<div class="flex flex-wrap items-center gap-2 px-6 py-3">
@@ -172,7 +172,7 @@
 						onAddByDoi={() => {}}
 						onAddManual={() => {}}
 					/>
-					<!-- Callback empty state diisi Task berikutnya bersama dialogs -->
+					<!-- Callback empty state menautkan ke dialog impor file, tambah DOI, dan tambah manual -->
 				{:else if items.length === 0}
 					<p class="py-16 text-center text-sm text-muted-foreground">
 						Tidak ada referensi yang cocok dengan filter.
