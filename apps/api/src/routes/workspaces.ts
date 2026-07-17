@@ -1,20 +1,31 @@
-import { FolderService, WorkspaceService } from "@aqsha/services";
+import { WORKSPACE_KINDS, WORKSPACE_STAGES, type WorkspaceKind, type WorkspaceStage } from "@aqsha/db";
+import { FolderService, SectionService, WorkspaceService } from "@aqsha/services";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
 import { rateLimitMacro } from "../plugins/rate-limit";
 
+const kindSchema = t.Union(WORKSPACE_KINDS.map((k) => t.Literal(k)));
+const stageSchema = t.Union(WORKSPACE_STAGES.map((s) => t.Literal(s)));
+const sectionStatusSchema = t.Union([
+  t.Literal("empty"),
+  t.Literal("draft"),
+  t.Literal("in_review"),
+  t.Literal("done"),
+]);
+
 /**
- * Route workspaces + folder nested (list/create). `/folders/:id` top-level ada di
- * `./folders`. Tipis: auth → validasi `t` permisif → 1 service call. Validasi
- * domain (capacity/emoji/name/dedupe) hidup di service → `appError` terstruktur,
- * di-map errorPlugin global.
+ * Route workspaces (proyek karya tulis) + kerangka bab (sections) + folder nested.
+ * `/folders/:id` top-level ada di `./folders`; `/sections/:id` top-level di sini.
+ * Tipis: auth → validasi `t` permisif → 1 service call. Validasi domain
+ * (capacity/emoji/name/kind/stage/reorder) hidup di service → `appError`
+ * terstruktur, di-map errorPlugin global.
  */
-export const workspaces = new Elysia({ prefix: "/workspaces" })
+export const workspaces = new Elysia()
   .use(authMacro)
   .use(rateLimitMacro)
   .get(
-    "/",
+    "/workspaces",
     ({ ownerUserId, query }) => {
       const { db } = getDb();
       return WorkspaceService.list(db, ownerUserId, {
@@ -33,7 +44,7 @@ export const workspaces = new Elysia({ prefix: "/workspaces" })
     },
   )
   .get(
-    "/:id",
+    "/workspaces/:id",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
       return WorkspaceService.get(db, ownerUserId, params.id);
@@ -41,19 +52,31 @@ export const workspaces = new Elysia({ prefix: "/workspaces" })
     { auth: true },
   )
   .post(
-    "/",
+    "/workspaces",
     ({ ownerUserId, email, body }) => {
       const { db } = getDb();
-      return WorkspaceService.create(db, { ownerUserId, ownerEmail: email, name: body.name });
+      return WorkspaceService.create(db, {
+        ownerUserId,
+        ownerEmail: email,
+        name: body.name,
+        kind: body.kind as WorkspaceKind,
+        topicNote: body.topicNote ?? null,
+        deadline: body.deadline ?? null,
+      });
     },
     {
       auth: true,
       rateLimit: "workspaces:create",
-      body: t.Object({ name: t.String() }),
+      body: t.Object({
+        name: t.Optional(t.String()),
+        kind: kindSchema,
+        topicNote: t.Optional(t.String()),
+        deadline: t.Optional(t.Numeric()),
+      }),
     },
   )
   .patch(
-    "/:id",
+    "/workspaces/:id",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
       return WorkspaceService.update(db, {
@@ -61,6 +84,10 @@ export const workspaces = new Elysia({ prefix: "/workspaces" })
         workspaceId: params.id,
         name: body.name,
         emoji: body.emoji,
+        description: body.description,
+        stage: body.stage as WorkspaceStage | undefined,
+        deadline: body.deadline,
+        topicNote: body.topicNote,
       });
     },
     {
@@ -68,19 +95,95 @@ export const workspaces = new Elysia({ prefix: "/workspaces" })
       body: t.Object({
         name: t.Optional(t.String()),
         emoji: t.Optional(t.String()),
+        description: t.Optional(t.Union([t.String(), t.Null()])),
+        stage: t.Optional(stageSchema),
+        deadline: t.Optional(t.Union([t.Numeric(), t.Null()])),
+        topicNote: t.Optional(t.Union([t.String(), t.Null()])),
       }),
     },
   )
   .post(
-    "/:id/archive",
+    "/workspaces/:id/archive",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
       return WorkspaceService.archive(db, { ownerUserId, workspaceId: params.id });
     },
     { auth: true },
   )
+  // ── Kerangka bab ─────────────────────────────────────────────────────────
   .get(
-    "/:id/folders",
+    "/workspaces/:id/sections",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return SectionService.list(db, ownerUserId, params.id);
+    },
+    { auth: true },
+  )
+  .post(
+    "/workspaces/:id/sections",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return SectionService.create(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        title: body.title,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ title: t.String() }),
+    },
+  )
+  .post(
+    "/workspaces/:id/sections/reorder",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return SectionService.reorder(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        orderedIds: body.orderedIds,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ orderedIds: t.Array(t.String()) }),
+    },
+  )
+  .patch(
+    "/sections/:id",
+    async ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      if (body.title !== undefined) {
+        await SectionService.rename(db, { ownerUserId, sectionId: params.id, title: body.title });
+      }
+      if (body.status !== undefined) {
+        await SectionService.setStatus(db, {
+          ownerUserId,
+          sectionId: params.id,
+          status: body.status,
+        });
+      }
+      return { ok: true as const };
+    },
+    {
+      auth: true,
+      body: t.Object({
+        title: t.Optional(t.String()),
+        status: t.Optional(sectionStatusSchema),
+      }),
+    },
+  )
+  .delete(
+    "/sections/:id",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return SectionService.remove(db, { ownerUserId, sectionId: params.id });
+    },
+    { auth: true },
+  )
+  // ── Folder nested (legacy board) ─────────────────────────────────────────
+  .get(
+    "/workspaces/:id/folders",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
       return FolderService.list(db, ownerUserId, params.id);
@@ -88,7 +191,7 @@ export const workspaces = new Elysia({ prefix: "/workspaces" })
     { auth: true },
   )
   .post(
-    "/:id/folders",
+    "/workspaces/:id/folders",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
       return FolderService.create(db, {

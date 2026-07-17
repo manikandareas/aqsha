@@ -227,14 +227,16 @@ export {
   type ExploreSearchResponse,
 } from "./explore/model";
 
-// Citation Manager (Fase 1) — Citation Library workspace-scoped + import .bib/.ris +
-// render CSL multi-style (lihat docs/features/citations/csl-engine-adr.md).
+// Citation Manager — perpustakaan referensi per akun (koleksi per proyek via
+// CitationLinkService) + import .bib/.ris + render CSL multi-style
+// (lihat docs/features/citations/csl-engine-adr.md).
 export {
   CITATION_EXPORT_FORMATS,
   CITATION_STYLES,
   type CitationDetail,
   type CitationExportFormat,
   CitationImportService,
+  CitationLinkService,
   type CitationListItem,
   CitationService,
   type CitationSettingsView,

@@ -23,7 +23,7 @@ const OWNER_NAME = `user_itest_ws_name_${suffix}`;
 
 // CRUD + rate-limit owner di-admin-kan (unlimited) supaya capacity tak mengganggu;
 // rate-limit (3/jam) tetap berlaku lintas plan.
-process.env.AQSHA_ADMIN_OWNER_USER_IDS = `${OWNER_CRUD},${OWNER_RL}`;
+process.env.AQSHA_ADMIN_OWNER_USER_IDS = `${OWNER_CRUD},${OWNER_RL},${OWNER_NAME}`;
 
 // Import app SETELAH mock.module + set env supaya authMacro/plan memakai nilai ini.
 const { app } = await import("../src/index");
@@ -81,7 +81,7 @@ describe("api workspaces — CRUD round-trip (admin owner, no capacity cap)", ()
 
   itest("POST /workspaces creates (×3 under rate cap)", async () => {
     for (const name of ["Riset A", "Riset B", "Riset C"]) {
-      const r = await req("POST", "/workspaces", tok(OWNER_CRUD), { name });
+      const r = await req("POST", "/workspaces", tok(OWNER_CRUD), { name, kind: "freeform" });
       expect(r.status).toBe(200);
       const { id } = await readJson(r);
       expect(id).toBeString();
@@ -89,12 +89,45 @@ describe("api workspaces — CRUD round-trip (admin owner, no capacity cap)", ()
     }
   });
 
-  itest("name validation: empty → name_required, >120 → name_too_long", async () => {
-    // OWNER_NAME terpisah: validasi nama throw SEBELUM capacity/insert (user tak perlu ter-sync).
-    expect((await req("POST", "/workspaces", tok(OWNER_NAME), { name: "   " })).status).toBe(400);
-    const long = await req("POST", "/workspaces", tok(OWNER_NAME), { name: "x".repeat(121) });
+  itest("name validation: >120 → name_too_long; nama kosong sah (judul menyusul)", async () => {
+    // OWNER_NAME terpisah (admin, budget rate-limit sendiri): budget OWNER_CRUD habis
+    // dipakai 3 create di test sebelumnya.
+    await req("POST", "/users/me/sync", tok(OWNER_NAME));
+    const long = await req("POST", "/workspaces", tok(OWNER_NAME), {
+      name: "x".repeat(121),
+      kind: "freeform",
+    });
     expect((await readJson(long)).code).toBe("name_too_long");
-  });
+    // Nama kosong diperbolehkan — proyek tahap exploration belum punya judul.
+    const blank = await req("POST", "/workspaces", tok(OWNER_NAME), {
+      name: "   ",
+      kind: "undergraduate_thesis",
+      topicNote: "pengaruh media sosial",
+    });
+    expect(blank.status).toBe(200);
+    const blankId = (await readJson(blank)).id;
+    const w = await readJson(await get(`/workspaces/${blankId}`, tok(OWNER_NAME)));
+    expect(w.name).toBe("");
+    expect(w.kind).toBe("undergraduate_thesis");
+    expect(w.stage).toBe("exploration");
+    expect(w.topicNote).toBe("pengaruh media sosial");
+    // Kerangka bab ter-seed dari template skripsi (5 bab + Daftar Pustaka).
+    const sections = await readJson(await get(`/workspaces/${blankId}/sections`, tok(OWNER_NAME)));
+    expect(sections.length).toBe(6);
+    expect(sections[5].role).toBe("bibliography");
+    // Status bab + stage proyek bisa diubah.
+    const sec = sections[0];
+    const st = await req("PATCH", `/sections/${sec.id}`, tok(OWNER_NAME), { status: "draft" });
+    expect(st.status).toBe(200);
+    const stg = await req("PATCH", `/workspaces/${blankId}`, tok(OWNER_NAME), { stage: "proposal" });
+    expect(stg.status).toBe(200);
+    // Reorder mismatch → 409.
+    const bad = await req("POST", `/workspaces/${blankId}/sections/reorder`, tok(OWNER_NAME), {
+      orderedIds: [sec.id],
+    });
+    expect(bad.status).toBe(409);
+    expect((await readJson(bad)).code).toBe("section_reorder_mismatch");
+  }, 20000);
 
   itest("GET /workspaces keyset pagination (limit=1) walks all 4 active", async () => {
     const ids: string[] = [];
@@ -108,7 +141,7 @@ describe("api workspaces — CRUD round-trip (admin owner, no capacity cap)", ()
       cursor = body.nextCursor;
       guard += 1;
     } while (cursor && guard < 20);
-    // 1 default + 3 created, semua unik
+    // 1 default + 3 created, semua unik (blank-name milik OWNER_NAME, bukan owner ini)
     expect(new Set(ids).size).toBe(4);
     for (const id of created) expect(ids).toContain(id);
   });
@@ -226,13 +259,13 @@ describe("api workspaces — CRUD round-trip (admin owner, no capacity cap)", ()
     const ghost = await req("PATCH", "/folders/missing-id", tok(OWNER_CRUD), { name: "X" });
     expect(ghost.status).toBe(404);
     expect((await readJson(ghost)).code).toBe("folder_not_found");
-  });
+  }, 20000);
 });
 
 describe("api workspaces — capacity (free plan)", () => {
   itest("free owner at cap (default ws) → POST 403 workspace_limit_reached", async () => {
     await req("POST", "/users/me/sync", tok(OWNER_FREE)); // idempotent: default ws = 1, free cap = 1
-    const r = await req("POST", "/workspaces", tok(OWNER_FREE), { name: "Kelebihan" });
+    const r = await req("POST", "/workspaces", tok(OWNER_FREE), { name: "Kelebihan", kind: "freeform" });
     expect(r.status).toBe(403);
     expect((await readJson(r)).code).toBe("workspace_limit_reached");
   });
@@ -242,10 +275,10 @@ describe("api workspaces — rate limit (3/jam)", () => {
   rltest("4th create within the hour → 429 rate_limited + retryAt", async () => {
     await req("POST", "/users/me/sync", tok(OWNER_RL));
     for (let i = 0; i < 3; i++) {
-      const r = await req("POST", "/workspaces", tok(OWNER_RL), { name: `RL ${i}` });
+      const r = await req("POST", "/workspaces", tok(OWNER_RL), { name: `RL ${i}`, kind: "freeform" });
       expect(r.status).toBe(200);
     }
-    const limited = await req("POST", "/workspaces", tok(OWNER_RL), { name: "RL over" });
+    const limited = await req("POST", "/workspaces", tok(OWNER_RL), { name: "RL over", kind: "freeform" });
     expect(limited.status).toBe(429);
     const body = await readJson(limited);
     expect(body.code).toBe("rate_limited");

@@ -1,8 +1,9 @@
 /**
- * Citation Manager Fase 1 — itest route /workspaces/:id/citations* (butuh Postgres
- * live via DATABASE_URL; tanpa env → skip). Fokus kontrak API:
- * owner CRUD round-trip, isolasi user lain (404), import preview→commit multipart
- * (file malformed tidak membuat record), export, settings.
+ * Citation Manager — itest route perpustakaan akun (`/citations*`) + koleksi per
+ * proyek (`/workspaces/:id/citations*`) (butuh Postgres live via DATABASE_URL;
+ * tanpa env → skip). Fokus kontrak API: owner CRUD round-trip, isolasi user lain,
+ * import preview→commit multipart (auto-link ke proyek asal), export, link
+ * perpustakaan↔proyek, settings per proyek.
  */
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { createDb } from "@aqsha/db";
@@ -71,7 +72,8 @@ const BIB = `@article{doe2020,
 async function cleanup() {
   if (!DATABASE_URL) return;
   const { client } = createDb(DATABASE_URL);
-  await client`delete from workspace_citations where owner_user_id like 'user_itest_cit_%'`;
+  await client`delete from workspace_citation_links where citation_id in (select id from citations where owner_user_id like 'user_itest_cit_%')`;
+  await client`delete from citations where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from citation_import_batches where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from workspace_citation_settings where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from artifact_paper_metadata where owner_user_id like 'user_itest_cit_%'`;
@@ -126,9 +128,9 @@ describe("api citations — setup", () => {
   });
 });
 
-describe("api citations — CRUD owner", () => {
+describe("api citations — CRUD perpustakaan owner", () => {
   itest("create manual → list → detail → patch tags → salin via render", async () => {
-    const create = await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+    const create = await req("POST", "/citations", tok(OWNER), {
       fields: {
         title: "Referensi Manual",
         authors: [{ family: "Sari", given: "Dewi" }],
@@ -143,17 +145,14 @@ describe("api citations — CRUD owner", () => {
     expect(detail.metadataStatus).toBe("verified");
     expect(detail.tags).toEqual(["metode"]);
 
-    const list = await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER));
+    const list = await req("GET", "/citations", tok(OWNER));
     const listBody = await readJson(list);
     expect(listBody.total).toBe(1);
     expect(listBody.items[0].title).toBe("Referensi Manual");
 
-    const patch = await req(
-      "PATCH",
-      `/workspaces/${workspaceId}/citations/${manualId}`,
-      tok(OWNER),
-      { tags: ["metode", "bab-2"] },
-    );
+    const patch = await req("PATCH", `/citations/${manualId}`, tok(OWNER), {
+      tags: ["metode", "bab-2"],
+    });
     expect(patch.status).toBe(200);
     expect((await readJson(patch)).tags).toEqual(["metode", "bab-2"]);
 
@@ -166,7 +165,7 @@ describe("api citations — CRUD owner", () => {
   });
 
   itest("create manual duplikat → 409 citation_duplicate", async () => {
-    const dup = await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+    const dup = await req("POST", "/citations", tok(OWNER), {
       fields: {
         title: "Referensi Manual",
         authors: [{ family: "Sari", given: "Dewi" }],
@@ -177,15 +176,56 @@ describe("api citations — CRUD owner", () => {
     expect((await readJson(dup)).code).toBe("citation_duplicate");
   });
 
-  itest("user lain: list/detail/patch → 404 workspace/citation", async () => {
-    const list = await req("GET", `/workspaces/${workspaceId}/citations`, tok(INTRUDER));
-    expect(list.status).toBe(404);
-    const detail = await req(
-      "GET",
-      `/workspaces/${workspaceId}/citations/${manualId}`,
-      tok(INTRUDER),
-    );
+  itest("user lain: perpustakaannya sendiri kosong; detail/patch item owner → 404", async () => {
+    const list = await readJson(await req("GET", "/citations", tok(INTRUDER)));
+    expect(list.total).toBe(0);
+    const detail = await req("GET", `/citations/${manualId}`, tok(INTRUDER));
     expect(detail.status).toBe(404);
+    const patch = await req("PATCH", `/citations/${manualId}`, tok(INTRUDER), { tags: ["x"] });
+    expect(patch.status).toBe(404);
+  });
+});
+
+describe("api citations — link perpustakaan ↔ proyek", () => {
+  itest("link → tampil di koleksi proyek dengan linkId; unlink → hilang", async () => {
+    const link = await req(
+      "POST",
+      `/workspaces/${workspaceId}/citations/${manualId}/link`,
+      tok(OWNER),
+      {},
+    );
+    expect(link.status).toBe(200);
+
+    const inProject = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)),
+    );
+    const linked = inProject.items.find((i: { id: string }) => i.id === manualId);
+    expect(linked).toBeDefined();
+    expect(linked.linkId).toBeString();
+    expect(linked.sectionId).toBeNull();
+
+    // Idempotent: link ulang tidak menggandakan.
+    await req("POST", `/workspaces/${workspaceId}/citations/${manualId}/link`, tok(OWNER), {});
+    const after = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)),
+    );
+    expect(after.items.filter((i: { id: string }) => i.id === manualId).length).toBe(1);
+
+    const unlink = await req(
+      "DELETE",
+      `/workspaces/${workspaceId}/citations/${manualId}/link`,
+      tok(OWNER),
+    );
+    expect(unlink.status).toBe(200);
+    const empty = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)),
+    );
+    expect(empty.items.some((i: { id: string }) => i.id === manualId)).toBe(false);
+  });
+
+  itest("intruder tidak bisa membaca koleksi proyek owner", async () => {
+    const res = await req("GET", `/workspaces/${workspaceId}/citations`, tok(INTRUDER));
+    expect(res.status).toBe(404);
   });
 });
 
@@ -206,7 +246,7 @@ describe("api citations — import preview + commit", () => {
     expect(preview.records.length).toBe(2);
     expect(preview.counts.error).toBe(0);
 
-    const list = await readJson(await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)));
+    const list = await readJson(await req("GET", "/citations", tok(OWNER)));
     expect(list.total).toBe(1); // hanya manual sebelumnya — preview tak menulis library
   });
 
@@ -221,7 +261,7 @@ describe("api citations — import preview + commit", () => {
     expect((await readJson(res)).code).toBe("citation_import_invalid");
   });
 
-  itest("commit selected → created; batch tidak bisa commit dua kali", async () => {
+  itest("commit selected → created + auto-link ke proyek; batch tak bisa commit dua kali", async () => {
     const res = await req(
       "POST",
       `/workspaces/${workspaceId}/citations/imports/${batchId}/commit`,
@@ -230,6 +270,12 @@ describe("api citations — import preview + commit", () => {
     );
     expect(res.status).toBe(200);
     expect(await readJson(res)).toEqual({ created: 2, merged: 0, skipped: 0 });
+
+    // Hasil import langsung masuk koleksi proyek asal import.
+    const inProject = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)),
+    );
+    expect(inProject.items.length).toBe(2);
 
     const again = await req(
       "POST",
@@ -254,11 +300,7 @@ describe("api citations — import preview + commit", () => {
 
 describe("api citations — export + settings + delete", () => {
   itest("export bibtex (semua) mengandung entry import", async () => {
-    const res = await req(
-      "GET",
-      `/workspaces/${workspaceId}/citations/export?format=bibtex`,
-      tok(OWNER),
-    );
+    const res = await req("GET", "/citations/export?format=bibtex", tok(OWNER));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toContain("sitasi.bib");
     // Exporter membungkus kata kapital dengan brace ({Uji}) — assert per-entry key + field stabil.
@@ -291,26 +333,20 @@ describe("api citations — export + settings + delete", () => {
   });
 
   itest("soft delete → hilang dari list, detail masih bisa dibuka (missing state)", async () => {
-    const del = await req(
-      "DELETE",
-      `/workspaces/${workspaceId}/citations/${manualId}`,
-      tok(OWNER),
-    );
+    const del = await req("DELETE", `/citations/${manualId}`, tok(OWNER));
     expect(del.status).toBe(200);
-    const list = await readJson(await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)));
+    const list = await readJson(await req("GET", "/citations", tok(OWNER)));
     expect(list.items.map((i: { id: string }) => i.id)).not.toContain(manualId);
-    const detail = await readJson(
-      await req("GET", `/workspaces/${workspaceId}/citations/${manualId}`, tok(OWNER)),
-    );
+    const detail = await readJson(await req("GET", `/citations/${manualId}`, tok(OWNER)));
     expect(detail.deletedAt).toBeNumber();
   });
 });
 
-describe("api citations — Fase 2 artifact bridge", () => {
+describe("api citations — artifact bridge", () => {
   let artifactId = "";
   let citationId = "";
 
-  itest("createFromArtifact: seed paper → tambah (source artifact, tertaut) → idempotent", async () => {
+  itest("createFromArtifact: seed paper → tambah (source artifact, tertaut + linked) → idempotent", async () => {
     artifactId = await seedPaperArtifact(OWNER, workspaceId, {
       title: "Paper Bridge Satu",
       doi: "10.5555/bridge.1",
@@ -326,6 +362,12 @@ describe("api citations — Fase 2 artifact bridge", () => {
     expect(body.citation.artifactId).toBe(artifactId);
     expect(body.citation.metadataStatus).toBe("needs_review");
     citationId = body.citation.id;
+
+    // Ikut masuk koleksi proyek.
+    const inProject = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)),
+    );
+    expect(inProject.items.some((i: { id: string }) => i.id === citationId)).toBe(true);
 
     const again = await readJson(
       await req("POST", `/workspaces/${workspaceId}/citations/from-artifact`, tok(OWNER), {
@@ -368,98 +410,77 @@ describe("api citations — duplicates + bulk", () => {
       authors: [{ family: "Kembar", given: "Satu" }],
       publishedYear: 2019,
     };
-    dupA = (
-      await readJson(
-        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), { fields }),
-      )
-    ).id;
+    dupA = (await readJson(await req("POST", "/citations", tok(OWNER), { fields }))).id;
     dupB = (
-      await readJson(
-        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
-          fields,
-          allowDuplicate: true,
-        }),
-      )
+      await readJson(await req("POST", "/citations", tok(OWNER), { fields, allowDuplicate: true }))
     ).id;
 
-    const groups = await readJson(
-      await req("GET", `/workspaces/${workspaceId}/citations/duplicates`, tok(OWNER)),
-    );
+    const groups = await readJson(await req("GET", "/citations/duplicates", tok(OWNER)));
     const group = groups.find(
       (g: { members: Array<{ id: string }> }) =>
         g.members.some((m) => m.id === dupA) && g.members.some((m) => m.id === dupB),
     );
     expect(group).toBeDefined();
 
-    const merged = await req("POST", `/workspaces/${workspaceId}/citations/merge`, tok(OWNER), {
-      ids: [dupA, dupB],
-    });
+    const merged = await req("POST", "/citations/merge", tok(OWNER), { ids: [dupA, dupB] });
     expect(merged.status).toBe(200);
     const target = await readJson(merged);
     const survivorId = target.id;
     const goneId = survivorId === dupA ? dupB : dupA;
-    const gone = await readJson(
-      await req("GET", `/workspaces/${workspaceId}/citations/${goneId}`, tok(OWNER)),
-    );
+    const gone = await readJson(await req("GET", `/citations/${goneId}`, tok(OWNER)));
     expect(gone.deletedAt).toBeNumber();
   });
 
   itest("bulk-tag menambah tag ke terpilih, bulk-delete menghapus terpilih", async () => {
     bulkA = (
       await readJson(
-        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+        await req("POST", "/citations", tok(OWNER), {
           fields: { title: "Bulk Satu", authors: [{ family: "A" }], publishedYear: 2018 },
         }),
       )
     ).id;
     bulkB = (
       await readJson(
-        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+        await req("POST", "/citations", tok(OWNER), {
           fields: { title: "Bulk Dua", authors: [{ family: "B" }], publishedYear: 2017 },
         }),
       )
     ).id;
 
     const tagged = await readJson(
-      await req("POST", `/workspaces/${workspaceId}/citations/bulk-tag`, tok(OWNER), {
+      await req("POST", "/citations/bulk-tag", tok(OWNER), {
         ids: [bulkA, bulkB],
         tags: ["batch-x"],
       }),
     );
     expect(tagged.affected).toBe(2);
-    const detailA = await readJson(
-      await req("GET", `/workspaces/${workspaceId}/citations/${bulkA}`, tok(OWNER)),
-    );
+    const detailA = await readJson(await req("GET", `/citations/${bulkA}`, tok(OWNER)));
     expect(detailA.tags).toContain("batch-x");
 
     const deleted = await readJson(
-      await req("POST", `/workspaces/${workspaceId}/citations/bulk-delete`, tok(OWNER), {
-        ids: [bulkA, bulkB],
-      }),
+      await req("POST", "/citations/bulk-delete", tok(OWNER), { ids: [bulkA, bulkB] }),
     );
     expect(deleted.affected).toBe(2);
-    const list = await readJson(await req("GET", `/workspaces/${workspaceId}/citations`, tok(OWNER)));
+    const list = await readJson(await req("GET", "/citations", tok(OWNER)));
     const ids = list.items.map((i: { id: string }) => i.id);
     expect(ids).not.toContain(bulkA);
     expect(ids).not.toContain(bulkB);
   });
 
-  itest("intruder tidak bisa merge/bulk citation owner", async () => {
-    const merge = await req("POST", `/workspaces/${workspaceId}/citations/merge`, tok(INTRUDER), {
-      ids: [dupA, dupB],
-    });
+  itest("intruder merge citation owner → 404 (item bukan miliknya)", async () => {
+    const merge = await req("POST", "/citations/merge", tok(INTRUDER), { ids: [dupA, dupB] });
     expect(merge.status).toBe(404);
   });
 });
 
-describe("api citations — Fase 3 render dokumen", () => {
+describe("api citations — render dokumen", () => {
   let cA = "";
   let cB = "";
 
   itest("render-document: in-text per cluster + bibliography used-in-doc + missingIds", async () => {
     cA = (
       await readJson(
-        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+        await req("POST", "/citations", tok(OWNER), {
           fields: {
             title: "Dokumen Referensi A",
             authors: [{ family: "Alpha", given: "A." }],
@@ -471,7 +492,7 @@ describe("api citations — Fase 3 render dokumen", () => {
     ).id;
     cB = (
       await readJson(
-        await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+        await req("POST", "/citations", tok(OWNER), {
           fields: {
             title: "Dokumen Referensi B",
             authors: [{ family: "Beta", given: "B." }],

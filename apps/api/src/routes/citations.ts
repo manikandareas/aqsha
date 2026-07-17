@@ -1,5 +1,6 @@
 import {
   CitationImportService,
+  CitationLinkService,
   CitationService,
   MAX_IMPORT_FILE_BYTES,
 } from "@aqsha/services";
@@ -36,21 +37,23 @@ const styleId = t.Union([
 ]);
 
 /**
- * Route Citation Manager (Fase 1) — Citation Library workspace-scoped.
- * Tipis: auth → validasi `t` permisif → 1 service call; otorisasi workspace +
- * aturan domain (dedupe/limits/policy) hidup di `CitationService`/`CitationImportService`.
- * Path statis (tags/export/render/imports) dideklarasikan sebelum `/:citationId`.
+ * Route Citation Manager — perpustakaan referensi per AKUN (`/citations/*`) +
+ * koleksi per proyek via link (`/workspaces/:id/citations*`). Yang tetap
+ * workspace-scoped: render/render-document (gaya sitasi per proyek), import
+ * (batch berkonteks proyek), from-artifact (artifact hidup di workspace), dan
+ * citation-settings. Tipis: auth → validasi `t` permisif → 1 service call.
+ * Path statis (tags/export/duplicates/...) dideklarasikan sebelum `/:citationId`.
  */
 export const citations = new Elysia()
   .use(authMacro)
   .use(rateLimitMacro)
+  // ── Perpustakaan akun ────────────────────────────────────────────────────
   .get(
-    "/workspaces/:id/citations",
-    ({ ownerUserId, params, query }) => {
+    "/citations",
+    ({ ownerUserId, query }) => {
       const { db } = getDb();
       return CitationService.list(db, {
         ownerUserId,
-        workspaceId: params.id,
         cursor: query.cursor ?? null,
         limit: query.limit,
         q: query.q,
@@ -82,20 +85,19 @@ export const citations = new Elysia()
     },
   )
   .get(
-    "/workspaces/:id/citations/tags",
-    ({ ownerUserId, params }) => {
+    "/citations/tags",
+    ({ ownerUserId }) => {
       const { db } = getDb();
-      return CitationService.listTags(db, { ownerUserId, workspaceId: params.id });
+      return CitationService.listTags(db, { ownerUserId });
     },
     { auth: true },
   )
   .get(
-    "/workspaces/:id/citations/export",
-    async ({ ownerUserId, params, query }) => {
+    "/citations/export",
+    async ({ ownerUserId, query }) => {
       const { db } = getDb();
       const result = await CitationService.export(db, {
         ownerUserId,
-        workspaceId: params.id,
         format: query.format,
         citationIds: query.ids ? query.ids.split(",").filter(Boolean) : undefined,
       });
@@ -114,6 +116,200 @@ export const citations = new Elysia()
       }),
     },
   )
+  .get(
+    "/citations/duplicates",
+    ({ ownerUserId }) => {
+      const { db } = getDb();
+      return CitationService.listDuplicateGroups(db, { ownerUserId });
+    },
+    { auth: true },
+  )
+  .post(
+    "/citations/duplicates/merge",
+    ({ ownerUserId, body }) => {
+      const { db } = getDb();
+      return CitationService.merge(db, {
+        ownerUserId,
+        sourceId: body.sourceId,
+        targetId: body.targetId,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ sourceId: t.String(), targetId: t.String() }),
+    },
+  )
+  .post(
+    "/citations/merge",
+    ({ ownerUserId, body }) => {
+      const { db } = getDb();
+      return CitationService.mergeMany(db, {
+        ownerUserId,
+        ids: body.ids,
+        targetId: body.targetId,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ ids: t.Array(t.String()), targetId: t.Optional(t.String()) }),
+    },
+  )
+  .post(
+    "/citations/bulk-tag",
+    ({ ownerUserId, body }) => {
+      const { db } = getDb();
+      return CitationService.bulkAddTag(db, { ownerUserId, ids: body.ids, tags: body.tags });
+    },
+    {
+      auth: true,
+      body: t.Object({ ids: t.Array(t.String()), tags: t.Array(t.String()) }),
+    },
+  )
+  .post(
+    "/citations/bulk-delete",
+    ({ ownerUserId, body }) => {
+      const { db } = getDb();
+      return CitationService.bulkSoftDelete(db, { ownerUserId, ids: body.ids });
+    },
+    {
+      auth: true,
+      body: t.Object({ ids: t.Array(t.String()) }),
+    },
+  )
+  .post(
+    "/citations",
+    ({ ownerUserId, body }) => {
+      const { db } = getDb();
+      if (body.doi) {
+        return CitationService.createByDoi(db, {
+          ownerUserId,
+          doi: body.doi,
+          tags: body.tags,
+          allowDuplicate: body.allowDuplicate,
+        });
+      }
+      return CitationService.createManual(db, {
+        ownerUserId,
+        // Body tanpa `doi` dan tanpa `fields` ditolak validasi service (judul wajib).
+        fields: body.fields ?? { title: "" },
+        tags: body.tags,
+        allowDuplicate: body.allowDuplicate,
+      });
+    },
+    {
+      auth: true,
+      rateLimit: "citations:create",
+      body: t.Object({
+        doi: t.Optional(t.String()),
+        fields: t.Optional(manualFields),
+        tags: t.Optional(t.Array(t.String())),
+        allowDuplicate: t.Optional(t.Boolean()),
+      }),
+    },
+  )
+  .get(
+    "/citations/:citationId",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationService.get(db, { ownerUserId, citationId: params.citationId });
+    },
+    { auth: true },
+  )
+  .patch(
+    "/citations/:citationId",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationService.update(db, {
+        ownerUserId,
+        citationId: params.citationId,
+        fields: body.fields,
+        tags: body.tags,
+        artifactId: body.artifactId,
+        markReviewed: body.markReviewed,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        fields: t.Optional(manualFields),
+        tags: t.Optional(t.Array(t.String())),
+        artifactId: t.Optional(t.Union([t.String(), t.Null()])),
+        markReviewed: t.Optional(t.Boolean()),
+      }),
+    },
+  )
+  .delete(
+    "/citations/:citationId",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationService.softDelete(db, { ownerUserId, citationId: params.citationId });
+    },
+    { auth: true },
+  )
+  .post(
+    "/citations/:citationId/resolve",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationService.resolveFromDoi(db, {
+        ownerUserId,
+        citationId: params.citationId,
+      });
+    },
+    { auth: true, rateLimit: "citations:create" },
+  )
+  // ── Koleksi per proyek (link perpustakaan↔proyek↔bab) ────────────────────
+  .get(
+    "/workspaces/:id/citations",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationLinkService.listForWorkspace(db, ownerUserId, params.id);
+    },
+    { auth: true },
+  )
+  .post(
+    "/workspaces/:id/citations/:citationId/link",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationLinkService.addToWorkspace(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        citationId: params.citationId,
+        sectionId: body.sectionId ?? null,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ sectionId: t.Optional(t.Union([t.String(), t.Null()])) }),
+    },
+  )
+  .delete(
+    "/workspaces/:id/citations/:citationId/link",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationLinkService.removeFromWorkspace(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        citationId: params.citationId,
+      });
+    },
+    { auth: true },
+  )
+  .patch(
+    "/citation-links/:linkId",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationLinkService.assignSection(db, {
+        ownerUserId,
+        linkId: params.linkId,
+        sectionId: body.sectionId,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ sectionId: t.Union([t.String(), t.Null()]) }),
+    },
+  )
+  // ── Tetap workspace-scoped ───────────────────────────────────────────────
   .post(
     "/workspaces/:id/citations/render",
     ({ ownerUserId, params, body }) => {
@@ -200,185 +396,28 @@ export const citations = new Elysia()
     },
   )
   .post(
-    "/workspaces/:id/citations/duplicates/merge",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return CitationService.merge(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        sourceId: body.sourceId,
-        targetId: body.targetId,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({ sourceId: t.String(), targetId: t.String() }),
-    },
-  )
-  .get(
-    "/workspaces/:id/citations/duplicates",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return CitationService.listDuplicateGroups(db, { ownerUserId, workspaceId: params.id });
-    },
-    { auth: true },
-  )
-  .post(
-    "/workspaces/:id/citations/merge",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return CitationService.mergeMany(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        ids: body.ids,
-        targetId: body.targetId,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({ ids: t.Array(t.String()), targetId: t.Optional(t.String()) }),
-    },
-  )
-  .post(
     "/workspaces/:id/citations/from-artifact",
-    ({ ownerUserId, params, body }) => {
+    async ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      return CitationService.createFromArtifact(db, {
+      const result = await CitationService.createFromArtifact(db, {
         ownerUserId,
         workspaceId: params.id,
         artifactId: body.artifactId,
         tags: body.tags,
       });
+      // Sitasi dari artifact proyek langsung masuk koleksi proyek itu.
+      await CitationLinkService.addToWorkspace(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        citationId: result.citation.id,
+      });
+      return result;
     },
     {
       auth: true,
       rateLimit: "citations:create",
       body: t.Object({ artifactId: t.String(), tags: t.Optional(t.Array(t.String())) }),
     },
-  )
-  .post(
-    "/workspaces/:id/citations/bulk-tag",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return CitationService.bulkAddTag(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        ids: body.ids,
-        tags: body.tags,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({ ids: t.Array(t.String()), tags: t.Array(t.String()) }),
-    },
-  )
-  .post(
-    "/workspaces/:id/citations/bulk-delete",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return CitationService.bulkSoftDelete(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        ids: body.ids,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({ ids: t.Array(t.String()) }),
-    },
-  )
-  .post(
-    "/workspaces/:id/citations",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      if (body.doi) {
-        return CitationService.createByDoi(db, {
-          ownerUserId,
-          workspaceId: params.id,
-          doi: body.doi,
-          tags: body.tags,
-          allowDuplicate: body.allowDuplicate,
-        });
-      }
-      return CitationService.createManual(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        // Body tanpa `doi` dan tanpa `fields` ditolak validasi service (judul wajib).
-        fields: body.fields ?? { title: "" },
-        tags: body.tags,
-        allowDuplicate: body.allowDuplicate,
-      });
-    },
-    {
-      auth: true,
-      rateLimit: "citations:create",
-      body: t.Object({
-        doi: t.Optional(t.String()),
-        fields: t.Optional(manualFields),
-        tags: t.Optional(t.Array(t.String())),
-        allowDuplicate: t.Optional(t.Boolean()),
-      }),
-    },
-  )
-  .get(
-    "/workspaces/:id/citations/:citationId",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return CitationService.get(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        citationId: params.citationId,
-      });
-    },
-    { auth: true },
-  )
-  .patch(
-    "/workspaces/:id/citations/:citationId",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return CitationService.update(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        citationId: params.citationId,
-        fields: body.fields,
-        tags: body.tags,
-        artifactId: body.artifactId,
-        markReviewed: body.markReviewed,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({
-        fields: t.Optional(manualFields),
-        tags: t.Optional(t.Array(t.String())),
-        artifactId: t.Optional(t.Union([t.String(), t.Null()])),
-        markReviewed: t.Optional(t.Boolean()),
-      }),
-    },
-  )
-  .delete(
-    "/workspaces/:id/citations/:citationId",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return CitationService.softDelete(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        citationId: params.citationId,
-      });
-    },
-    { auth: true },
-  )
-  .post(
-    "/workspaces/:id/citations/:citationId/resolve",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return CitationService.resolveFromDoi(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        citationId: params.citationId,
-      });
-    },
-    { auth: true, rateLimit: "citations:create" },
   )
   .get(
     "/workspaces/:id/citation-settings",
