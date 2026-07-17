@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { bigint, check, index, pgTable, text } from "drizzle-orm/pg-core";
 import { users } from "./users";
+import { workspaces } from "./workspaces";
 
 /**
  * chat_threads — metadata satu percakapan Astra (sidebar/billing list). Isi pesan = Mastra
@@ -16,6 +17,9 @@ import { users } from "./users";
  * - `pinnedAt` epoch-ms nullable — thread yang disematkan user (grup "Disematkan" sidebar).
  *   `null` = tak disematkan; nilai ⇒ disematkan sekaligus kunci urut (pin terbaru di atas).
  *   Proyeksi `threadProjectionProcessor` per turn TIDAK menyentuh kolom ini (pin persist).
+ * - `workspaceId` nullable — scope proyek thread; klien svelte mengirimnya via
+ *   RequestContext dan proyeksi menulisnya. Di-NOT-NULL-kan setelah frontend
+ *   selalu mengirim (thread lama/dev = null). `set null` saat proyek dihapus.
  * - timestamp epoch-ms (`bigint`) seragam dengan tabel V2 lain.
  */
 export const chatThreads = pgTable(
@@ -25,6 +29,7 @@ export const chatThreads = pgTable(
     ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => users.ownerUserId, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
     title: text("title"),
     titleStatus: text("title_status"),
     status: text("status").notNull().default("idle"),
@@ -43,6 +48,7 @@ export const chatThreads = pgTable(
     ),
     check("chat_threads_agent_kind_check", sql`${t.agentKind} in ('lite', 'pro')`),
     index("chat_threads_by_owner_activity").on(t.ownerUserId, t.lastActivityAt),
+    index("chat_threads_by_workspace_activity").on(t.workspaceId, t.lastActivityAt),
     // Grup "Disematkan": owner + pin terbaru dulu. Partial (pin-only) → indeks kecil,
     // list utama (pinned_at IS NULL) tetap pakai indeks by_owner_activity.
     index("chat_threads_pinned_by_owner")

@@ -94,6 +94,7 @@ export const threads = new Elysia({ prefix: "/threads" })
       return ThreadService.list(db, ownerUserId, {
         cursor: query.cursor ?? null,
         limit: query.limit,
+        workspaceId: query.workspaceId,
       });
     },
     {
@@ -101,6 +102,7 @@ export const threads = new Elysia({ prefix: "/threads" })
       query: t.Object({
         cursor: t.Optional(t.String()),
         limit: t.Optional(t.Numeric()),
+        workspaceId: t.Optional(t.String()),
       }),
     },
   )

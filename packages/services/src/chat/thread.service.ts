@@ -46,12 +46,14 @@ export const ThreadService = {
       ownerUserId: string;
       agentKind?: "lite" | "pro";
       preview?: string | null;
+      workspaceId?: string | null;
     },
   ): Promise<void> {
     const now = Date.now();
     const inserted = await ChatThreadRepo.insertIfAbsent(db, {
       id: input.threadId,
       ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId ?? null,
       status: "idle",
       agentKind: input.agentKind ?? "lite",
       lastMessagePreview: input.preview ?? null,
@@ -65,6 +67,8 @@ export const ThreadService = {
         lastActivityAt: now,
         updatedAt: now,
         ...(input.preview ? { lastMessagePreview: input.preview } : {}),
+        // Scope proyek menyusul (mis. baris dini tanpa context) — jangan clobber ke null.
+        ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
       });
     }
   },
@@ -102,14 +106,15 @@ export const ThreadService = {
     }
   },
 
-  /** List keyset milik owner, DESC aktivitas. Bucket recent/older dihitung di BE. */
+  /** List keyset milik owner (opsional per proyek), DESC aktivitas. Bucket recent/older di BE. */
   async list(
     db: DbOrTx,
     ownerUserId: string,
-    args: { cursor?: string | null; limit?: number },
+    args: { cursor?: string | null; limit?: number; workspaceId?: string },
   ): Promise<{ items: ThreadListItem[]; nextCursor: string | null }> {
     const { items, nextCursor } = await ChatThreadRepo.listByOwner(db, {
       ownerUserId,
+      workspaceId: args.workspaceId,
       limit: clampLimit(args.limit),
       cursor: decodeKeysetCursor(args.cursor),
     });

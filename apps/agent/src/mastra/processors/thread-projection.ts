@@ -2,8 +2,11 @@ import { messagePreview, stripMentionMarkers } from "@aqsha/chat-core";
 import { ThreadService, TitleService } from "@aqsha/services/chat";
 import type { ProcessInputArgs, ProcessOutputResultArgs } from "@mastra/core/processors";
 import { getServiceDb } from "../lib/db";
-import { resolveOwnerThread } from "../lib/owner-thread";
+import { ctxValue, resolveOwnerThread } from "../lib/owner-thread";
 import type { AgentKind } from "../lib/tool-context";
+
+/** RequestContext key scope proyek — klien svelte mengirimnya per request. */
+const WORKSPACE_ID_KEY = "aqsha-workspace-id";
 
 /**
  * Proyeksi thread — sinkronkan metadata thread app dari turn agent.
@@ -60,6 +63,7 @@ export function makeThreadProjectionProcessors(tier: AgentKind) {
             ownerUserId,
             agentKind: tier,
             preview: null,
+            workspaceId: ctxValue(requestContext, WORKSPACE_ID_KEY),
           });
         } catch (err) {
           console.error("[thread-projection-input] failed", err);
@@ -87,6 +91,7 @@ export function makeThreadProjectionProcessors(tier: AgentKind) {
             ownerUserId,
             agentKind: tier,
             preview,
+            workspaceId: ctxValue(requestContext, WORKSPACE_ID_KEY),
           });
           // Title async (GAP-c): klaim atomik turn-pertama + enqueue worker (membawa seed pesan
           // user pertama — Mastra Memory = SoT pesan); no-op turn ke-2+.

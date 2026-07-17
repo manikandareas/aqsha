@@ -1,0 +1,3 @@
+ALTER TABLE "chat_threads" ADD COLUMN "workspace_id" text;--> statement-breakpoint
+ALTER TABLE "chat_threads" ADD CONSTRAINT "chat_threads_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "chat_threads_by_workspace_activity" ON "chat_threads" USING btree ("workspace_id","last_activity_at");

@@ -67,11 +67,17 @@ export const ChatThreadRepo = {
    */
   async listByOwner(
     db: DbOrTx,
-    args: { ownerUserId: string; limit: number; cursor: KeysetCursor | null },
+    args: {
+      ownerUserId: string;
+      workspaceId?: string;
+      limit: number;
+      cursor: KeysetCursor | null;
+    },
   ): Promise<{ items: ChatThread[]; nextCursor: string | null }> {
     const ownerFilter = and(
       eq(chatThreads.ownerUserId, args.ownerUserId),
       isNull(chatThreads.pinnedAt),
+      ...(args.workspaceId ? [eq(chatThreads.workspaceId, args.workspaceId)] : []),
     );
     const keyset = args.cursor
       ? or(
@@ -101,13 +107,17 @@ export const ChatThreadRepo = {
    */
   async listPinnedByOwner(
     db: DbOrTx,
-    args: { ownerUserId: string; limit: number },
+    args: { ownerUserId: string; workspaceId?: string; limit: number },
   ): Promise<ChatThread[]> {
     return db
       .select()
       .from(chatThreads)
       .where(
-        and(eq(chatThreads.ownerUserId, args.ownerUserId), isNotNull(chatThreads.pinnedAt)),
+        and(
+          eq(chatThreads.ownerUserId, args.ownerUserId),
+          isNotNull(chatThreads.pinnedAt),
+          ...(args.workspaceId ? [eq(chatThreads.workspaceId, args.workspaceId)] : []),
+        ),
       )
       .orderBy(desc(chatThreads.pinnedAt), desc(chatThreads.id))
       .limit(args.limit);
