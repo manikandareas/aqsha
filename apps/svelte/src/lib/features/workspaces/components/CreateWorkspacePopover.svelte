@@ -83,10 +83,10 @@
 		onmouseenter={openNow}
 		onmouseleave={scheduleClose}
 		onclick={openAndFocus}
-		class="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
+		class="flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
 		aria-label="Workspace baru"
 	>
-		<Icon icon={PlusIcon} class="size-3" />
+		<Icon icon={PlusIcon} class="size-3.5" />
 	</button>
 	<Popover.Content
 		customAnchor={anchorEl}

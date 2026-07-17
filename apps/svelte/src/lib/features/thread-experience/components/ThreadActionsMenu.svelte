@@ -44,7 +44,7 @@
 				size="icon-sm"
 				class={cn(
 					isSidebarRow
-						? 'absolute top-1 right-1 size-7 shrink-0 rounded-[6px] text-muted-foreground hover:bg-muted hover:text-foreground group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100 md:opacity-0 [&_svg]:size-3.5'
+						? 'absolute top-1 right-1 size-7 shrink-0 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100 md:opacity-0 [&_svg]:size-3.5'
 						: 'size-8 shrink-0 rounded-full text-muted-foreground'
 				)}
 				onclick={isSidebarRow

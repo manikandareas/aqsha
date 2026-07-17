@@ -38,15 +38,18 @@
 	const MOBILE_THREAD_TITLE_MAX_CHARS = 42;
 	const THREADS_COLLAPSED_STORAGE_KEY = 'aqsha:sidebar:threads-collapsed';
 	const WORKSPACES_COLLAPSED_STORAGE_KEY = 'aqsha:sidebar:workspaces-collapsed';
+	// Sizing/type/radius live in the menu-button `rail` size variant; this carries the rail's
+	// state grammar. Hover icons follow the text to foreground (green icon over the muted hover
+	// fill misses 3:1); the primary icon is reserved for the active row, where it clears it.
 	const sidebarItemBaseClass =
-		'h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5';
+		'gap-2 font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5';
 
 	function sidebarItemClass(active?: boolean) {
 		return cn(
 			sidebarItemBaseClass,
 			active
 				? 'bg-primary/10 text-foreground [&_svg]:text-primary'
-				: 'text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-primary/70'
+				: 'text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground'
 		);
 	}
 
@@ -142,7 +145,7 @@
 	<span
 		aria-hidden="true"
 		class={cn(
-			'flex size-4 shrink-0 items-center justify-center rounded-[5px] text-[13px] leading-none',
+			'flex size-4 shrink-0 items-center justify-center rounded-sm text-[13px] leading-none',
 			active ? 'bg-background/70' : 'bg-muted/35'
 		)}
 	>
@@ -155,7 +158,7 @@
 	<Sidebar.MenuItem class="min-w-0 overflow-hidden">
 		<Sidebar.MenuButton
 			isActive={active}
-			size="sm"
+			size="rail"
 			class={cn(sidebarItemClass(active), 'w-full min-w-0 max-w-full overflow-hidden')}
 		>
 			{#snippet child({ props })}
@@ -180,7 +183,7 @@
 	<Sidebar.MenuItem class="min-w-0 overflow-hidden">
 		<Sidebar.MenuButton
 			isActive={active}
-			size="sm"
+			size="rail"
 			class={cn(sidebarItemClass(active), 'w-full min-w-0 max-w-full overflow-hidden pr-8')}
 		>
 			{#snippet child({ props })}
@@ -195,7 +198,7 @@
 						{truncateCharacters(thread.title, MOBILE_THREAD_TITLE_MAX_CHARS)}
 					</span>
 					{#if isPinned}
-						<Icon icon={PinIcon} class="size-3 shrink-0 text-primary/50" />
+						<Icon icon={PinIcon} class="size-3 shrink-0 text-primary" />
 					{/if}
 					{#if thread.status === 'streaming'}
 						<span class="inline-flex size-1.5 shrink-0 rounded-full bg-primary"></span>
@@ -219,7 +222,7 @@
 			<button
 				type="button"
 				onclick={closeSidebar}
-				class="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
+				class="flex size-6 items-center justify-center rounded-sm text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
 				aria-label="Tutup sidebar kiri"
 			>
 				<Icon icon={PanelLeftIcon} class="size-3.5" />
@@ -227,7 +230,7 @@
 			<button
 				type="button"
 				onclick={() => (commandOpen = true)}
-				class="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
+				class="flex size-6 items-center justify-center rounded-sm text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
 				aria-label="Cari thread"
 			>
 				<Icon icon={SearchIcon} class="size-3.5" />
@@ -238,7 +241,7 @@
 			<Sidebar.MenuItem class="min-w-0 overflow-hidden">
 				<Sidebar.MenuButton
 					isActive={isHomeActive}
-					size="sm"
+					size="rail"
 					class={sidebarItemClass(isHomeActive)}
 				>
 					{#snippet child({ props })}
@@ -252,7 +255,7 @@
 			<Sidebar.MenuItem class="min-w-0 overflow-hidden">
 				<Sidebar.MenuButton
 					isActive={isExploreActive}
-					size="sm"
+					size="rail"
 					class={sidebarItemClass(isExploreActive)}
 				>
 					{#snippet child({ props })}
@@ -285,7 +288,7 @@
 					</Sidebar.Menu>
 				{:else}
 					<div
-						class="rounded-[8px] border border-dashed border-border/70 px-2.5 py-2 text-[11px] font-medium leading-5 text-muted-foreground"
+						class="rounded-sm border border-dashed border-border/70 px-2.5 py-2 text-label font-medium leading-5 text-muted-foreground"
 					>
 						Belum ada workspace.
 					</div>
@@ -297,10 +300,10 @@
 					<button
 						type="button"
 						onclick={runCreateThread}
-						class="flex size-5 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
+						class="flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
 						aria-label="Thread baru"
 					>
-						<Icon icon={PlusIcon} class="size-3" />
+						<Icon icon={PlusIcon} class="size-3.5" />
 					</button>
 				{/snippet}
 				{#if sortedThreads.length > 0}
@@ -308,9 +311,9 @@
 						<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
 							{#if pinnedThreads.length > 0}
 								<li role="presentation" aria-hidden="true" class="flex items-center gap-1 px-1">
-									<Icon icon={PinIcon} class="size-3 shrink-0 text-primary/60" />
+									<Icon icon={PinIcon} class="size-3 shrink-0 text-primary" />
 									<span
-										class="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground"
+										class="min-w-0 flex-1 truncate text-label font-medium text-muted-foreground"
 									>
 										Disematkan
 									</span>
@@ -329,7 +332,7 @@
 					</div>
 				{:else}
 					<div
-						class="rounded-[8px] border border-dashed border-border/70 px-2.5 py-2 text-[11px] font-medium leading-5 text-muted-foreground"
+						class="rounded-sm border border-dashed border-border/70 px-2.5 py-2 text-label font-medium leading-5 text-muted-foreground"
 					>
 						Belum ada thread.
 					</div>

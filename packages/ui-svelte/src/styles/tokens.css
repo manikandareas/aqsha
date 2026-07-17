@@ -28,8 +28,9 @@
 	--destructive-foreground: oklch(1 0 0);
 	--border: oklch(0.8434 0.0231 87.1621);
 	--input: oklch(0.8434 0.0231 87.1621);
-	/* Focus = mint (same hue as --mint): state/attention color, distinct from ink. */
-	--ring: oklch(0.6863 0.1743 154);
+	/* Focus = mint hue: state/attention color, distinct from ink. Darker than --mint in
+	   light mode so the ring holds >=3:1 against both the page and the sidebar rail. */
+	--ring: oklch(0.52 0.15 154);
 	--chart-1: oklch(0.6863 0.1743 34.2614);
 	--chart-2: oklch(0.235 0 0);
 	--chart-3: oklch(0.4688 0.0136 84.5932);
@@ -38,12 +39,13 @@
 	/* Sidebar rail sits one step darker than the page. */
 	--sidebar: oklch(0.9195 0.0169 88.003);
 	--sidebar-foreground: oklch(0.235 0 0);
-	--sidebar-primary: oklch(0.55 0.14 160);
-	--sidebar-primary-foreground: oklch(0.97 0.02 160);
+	/* A step darker than --primary so white foreground text clears 4.5:1. */
+	--sidebar-primary: oklch(0.53 0.14 160);
+	--sidebar-primary-foreground: oklch(1 0 0);
 	--sidebar-accent: oklch(0.9169 0.0175 99.616);
 	--sidebar-accent-foreground: oklch(0.3012 0 0);
 	--sidebar-border: oklch(0.8434 0.0231 87.1621);
-	--sidebar-ring: oklch(0.6863 0.1743 154);
+	--sidebar-ring: oklch(0.52 0.15 154);
 	/* Base radius 16px; the @theme scale derives sm 8 / md 12 / lg 16 / xl 20. */
 	--radius: 1rem;
 	--font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;

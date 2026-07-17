@@ -36,7 +36,8 @@
 		return () => cancelAnimationFrame(frame);
 	});
 
-	const labelClass = 'text-[11px] font-medium tracking-[-0.01em] text-primary/75';
+	// Muted ink, not tinted primary: 11px primary/75 sat at ~2.6:1 on the light rail.
+	const labelClass = 'text-label font-medium text-muted-foreground';
 </script>
 
 <div class="min-w-0 overflow-hidden">
@@ -46,12 +47,12 @@
 				type="button"
 				onclick={collapse.toggle}
 				aria-expanded={!collapse.collapsed}
-				class="-ml-1 flex min-w-0 flex-1 items-center gap-1 rounded-[5px] px-1 py-0.5 text-left transition-[background-color] duration-150 ease-out hover:bg-muted/50"
+				class="-ml-1 flex min-h-6 min-w-0 flex-1 items-center gap-1 rounded-sm px-1 py-0.5 text-left transition-[background-color] duration-150 ease-out hover:bg-muted/50"
 			>
 				<Icon
 					icon={ChevronRightIcon}
 					class={cn(
-						'size-3 shrink-0 text-primary/60',
+						'size-3 shrink-0 text-muted-foreground',
 						animate ? 'transition-transform duration-200 ease-out' : null,
 						collapse.collapsed ? 'rotate-0' : 'rotate-90'
 					)}

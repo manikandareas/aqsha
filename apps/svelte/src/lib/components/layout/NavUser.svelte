@@ -26,7 +26,7 @@
 	}
 
 	const menuItemClass =
-		'h-9 gap-2 rounded-[8px] px-2 text-[13px] font-medium text-popover-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground';
+		'h-9 gap-2 rounded-sm px-2 text-[13px] font-medium text-popover-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground';
 </script>
 
 <Sidebar.Menu>
@@ -37,7 +37,7 @@
 					<Sidebar.MenuButton
 						{...props}
 						size="lg"
-						class="h-10 min-w-0 rounded-[8px] border border-sidebar-border/70 bg-muted/15 p-2.5 text-muted-foreground transition-[background-color,border-color,color] duration-150 ease-out hover:border-primary/20 hover:bg-primary/5 hover:text-foreground data-[state=open]:border-primary/25 data-[state=open]:bg-primary/8 data-[state=open]:text-foreground"
+						class="h-10 min-w-0 rounded-sm border border-sidebar-border/70 bg-muted/15 p-2.5 text-muted-foreground transition-[background-color,border-color,color] duration-150 ease-out hover:border-primary/20 hover:bg-primary/5 hover:text-foreground data-[state=open]:border-primary/25 data-[state=open]:bg-primary/8 data-[state=open]:text-foreground"
 					>
 						<Avatar.Root class="size-6 shrink-0 rounded-full ring-1 ring-sky-soft-border">
 							{#if display.image}
@@ -57,7 +57,7 @@
 				{/snippet}
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content
-				class="w-(--bits-floating-anchor-width) min-w-64 rounded-[12px] p-1.5"
+				class="w-(--bits-floating-anchor-width) min-w-64 rounded-md p-1.5"
 				side={sidebar.isMobile ? 'bottom' : 'right'}
 				align="end"
 				sideOffset={4}
@@ -78,7 +78,7 @@
 							<span class="truncate text-[13px] font-semibold text-popover-foreground">
 								{display.name}
 							</span>
-							<span class="truncate text-[11px] font-medium text-muted-foreground">
+							<span class="truncate text-label font-medium text-muted-foreground">
 								{display.email}
 							</span>
 						</div>

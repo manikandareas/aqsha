@@ -12,7 +12,9 @@
 			size: {
 				default: 'h-8 text-sm',
 				sm: 'h-7 text-xs',
-				lg: 'h-12 text-sm group-data-[collapsible=icon]:p-0!'
+				lg: 'h-12 text-sm group-data-[collapsible=icon]:p-0!',
+				// Dense nav-rail rows: 32px height (>=24px target size), label-step type, radius token.
+				rail: 'h-8 rounded-sm px-2 py-0 text-label'
 			}
 		},
 		defaultVariants: {
