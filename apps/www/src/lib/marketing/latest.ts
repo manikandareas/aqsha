@@ -31,11 +31,13 @@ export function mapLandingLatest(
 
   return {
     latestUpdate: {
-      title: entry.title,
+      title: entry.heroTitle ?? entry.title,
       href: entry.url,
-      tag: entry.categories[0]
-        ? CATEGORY_META[entry.categories[0]].label
-        : "Update",
+      tag:
+        entry.heroTag ??
+        (entry.categories[0]
+          ? CATEGORY_META[entry.categories[0]].label
+          : "Update"),
     },
     teaserLatest: {
       href: entry.url,

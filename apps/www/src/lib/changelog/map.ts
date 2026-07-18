@@ -34,6 +34,8 @@ export function mapChangelogEntry(
     summary: entry.data.summary,
     preview: entry.data.preview,
     draft: entry.data.draft,
+    heroTag: entry.data.heroTag,
+    heroTitle: entry.data.heroTitle,
     excerpt:
       entry.data.summary ??
       deriveExcerpt(rawBody || entry.data.summary || entry.data.title),

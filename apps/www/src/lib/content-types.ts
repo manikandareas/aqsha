@@ -12,6 +12,8 @@ export type ChangelogEntry = {
   preview?: string;
   draft: boolean;
   excerpt: string;
+  heroTag?: string;
+  heroTitle?: string;
 };
 
 export type BlogPost = {

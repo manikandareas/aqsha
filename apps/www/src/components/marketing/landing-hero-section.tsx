@@ -253,9 +253,7 @@ export function LandingHeroSection({
     if (index !== null) setLastActiveFrame(index);
   };
 
-  // Badge "latest update" disembunyikan sementara (2026-07-18, permintaan user).
-  // Set ke true untuk memunculkannya lagi.
-  const showLatestBadge = false;
+  const showLatestBadge = true;
 
   return (
     <section
@@ -266,8 +264,11 @@ export function LandingHeroSection({
       <div aria-hidden className="hero-grid pointer-events-none absolute inset-0" />
       <HeroDoodles />
 
-      <div className="relative z-20 mx-auto flex min-h-svh w-full max-w-7xl flex-col">
-        <div className="flex flex-1 flex-col items-center justify-center px-4 pb-10 pt-28 text-center sm:px-6 sm:pt-32">
+      {/* Mobile: sedikit lebih pendek dari viewport (88svh) supaya frame stack
+          utuh dan marquee di bawahnya ikut mengintip, tapi konten tetap
+          seimbang di tengah; desktop tetap full viewport. */}
+      <div className="relative z-20 mx-auto flex min-h-[88svh] w-full max-w-7xl flex-col sm:min-h-svh">
+        <div className="flex flex-1 flex-col items-center justify-center px-4 pb-8 pt-24 text-center sm:px-6 sm:pb-10 sm:pt-40">
           {showLatestBadge && latestUpdate && (
             <m.a
               href={latestUpdate.href}
@@ -276,7 +277,7 @@ export function LandingHeroSection({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
             >
-              <span className="shrink-0 rounded-full bg-mint px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-black">
+              <span className="shrink-0 rounded-full border-2 border-coral-soft-border bg-coral-soft px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-coral-foreground">
                 {latestUpdate.tag}
               </span>
               <span className="min-w-0 truncate">{latestUpdate.title}</span>

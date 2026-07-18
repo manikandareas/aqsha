@@ -27,6 +27,10 @@ const changelog = defineCollection({
     summary: z.string().optional(),
     preview: z.string().optional(),
     draft: z.boolean().default(false),
+    /** Label pendek buat pill chip hero, mis. "Sitasi". */
+    heroTag: z.string().optional(),
+    /** Teks singkat buat chip hero; fallback ke title. */
+    heroTitle: z.string().optional(),
   }),
 });
 
