@@ -70,7 +70,8 @@ export const queryKeys = {
 			['citations', 'render', workspaceId, params] as const,
 		renderDocument: (workspaceId: string, signature: string) =>
 			['citations', 'render-document', workspaceId, signature] as const,
-		settings: (workspaceId: string) => ['citations', 'settings', workspaceId] as const
+		settings: (workspaceId: string) => ['citations', 'settings', workspaceId] as const,
+		bibliography: (workspaceId: string) => ['citations', 'bibliography', workspaceId] as const
 	},
 	integrations: {
 		all: ['integrations'] as const,
