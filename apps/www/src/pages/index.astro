@@ -1,0 +1,33 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { LandingPage } from "@/components/marketing/landing-page";
+import { StructuredData } from "@/components/marketing/structured-data";
+import { mapChangelogEntry } from "@/lib/changelog/map";
+import { mapLandingLatest } from "@/lib/marketing/latest";
+import { getCollection } from "astro:content";
+
+const entries = (await getCollection("changelog"))
+  .filter((e) => !e.data.draft)
+  .sort(
+    (a, b) =>
+      b.data.publishedAt.valueOf() - a.data.publishedAt.valueOf(),
+  )
+  .map((e) => mapChangelogEntry(e));
+
+const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
+---
+
+<BaseLayout
+  title="Asisten AI buat skripsi, tesis & paper"
+  description="Aqsha ngecek tiap sumber ke paper aslinya — jadi kamu nggak ketahuan pas sidang atau direview dosen. Cari jurnal, nulis bareng Astra, semua di satu tempat."
+  path="/"
+>
+  <main class="min-h-svh bg-background text-foreground">
+    <StructuredData />
+    <LandingPage
+      client:load
+      latestUpdate={latestUpdate}
+      teaserLatest={teaserLatest}
+    />
+  </main>
+</BaseLayout>

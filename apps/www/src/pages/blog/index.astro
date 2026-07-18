@@ -1,0 +1,22 @@
+---
+import MarketingLayout from "@/layouts/MarketingLayout.astro";
+import { BlogList } from "@/components/blog/blog-list";
+import { mapBlogEntry } from "@/lib/blog/map";
+import { getCollection } from "astro:content";
+
+const posts = (await getCollection("blog"))
+  .filter((p) => !p.data.draft)
+  .sort(
+    (a, b) =>
+      b.data.publishedAt.valueOf() - a.data.publishedAt.valueOf(),
+  )
+  .map((p) => mapBlogEntry(p, p.body ?? ""));
+---
+
+<MarketingLayout
+  title="Blog"
+  description="Catatan tim Aqsha soal riset, verifikasi sumber, dan cara nulis ilmiah yang sumbernya beneran ada."
+  path="/blog"
+>
+  <BlogList posts={posts} />
+</MarketingLayout>

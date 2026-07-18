@@ -1,0 +1,46 @@
+---
+import "@/styles/globals.css";
+import { Agentation } from "agentation";
+import { htmlLang, siteName, defaultDescription, siteUrl } from "@/lib/seo-config";
+
+type Props = {
+  title?: string;
+  description?: string;
+  path?: string;
+  ogType?: string;
+};
+
+const { title, description = defaultDescription, path = "/", ogType = "website" } =
+  Astro.props as Props;
+
+const pageTitle = title ? `${title} | ${siteName}` : siteName;
+const canonical = `${siteUrl}${path === "/" ? "" : path}`;
+---
+
+<!doctype html>
+<html lang={htmlLang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={title ?? siteName} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:image" content={`${siteUrl}/web-app-manifest-512x512.png`} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title ?? siteName} />
+    <meta name="twitter:description" content={description} />
+    <link rel="icon" href="/web-app-manifest-192x192.png" type="image/png" />
+    <slot name="head" />
+  </head>
+  <body class="min-h-svh bg-background text-foreground antialiased">
+    <slot />
+    {import.meta.env.DEV && <Agentation client:only="react" />}
+  </body>
+</html>

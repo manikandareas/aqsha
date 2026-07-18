@@ -1,0 +1,5 @@
+# build
+dist/
+.astro/
+.env
+.env.local
