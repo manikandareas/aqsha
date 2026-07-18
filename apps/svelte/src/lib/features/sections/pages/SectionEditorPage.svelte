@@ -1,32 +1,177 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { toast } from 'svelte-sonner';
 	import { Badge } from '@aqsha/ui-svelte/components/badge';
 	import { Button } from '@aqsha/ui-svelte/components/button';
+	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
+	import { SvelteSet } from 'svelte/reactivity';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
-	import { Icon, ArrowLeftIcon } from '$lib/icons';
+	import { Icon, ArrowLeftIcon, ChevronDownIcon, SparklesIcon } from '$lib/icons';
+	import { readableApiErrorMessage } from '$lib/errors/api-error';
 	import ProjectSidePanel from '$lib/features/workspaces/components/ProjectSidePanel.svelte';
+	import {
+		ComposerMentions,
+		setComposerMentions
+	} from '$lib/features/threads/state/composer-mentions.svelte';
 	import { useSections, useWorkspace } from '$lib/features/workspaces/api';
 	import { projectDisplayTitle } from '$lib/features/workspaces/types';
-	import { useSectionDocument } from '../api';
+	import {
+		useSectionDocument,
+		useSectionBuild,
+		useCompileSection,
+		useSectionAnnotations,
+		useCreateAnnotation,
+		useUpdateAnnotation,
+		useDeleteAnnotation,
+		type AnnotationRect
+	} from '../api';
 	import BibliographyView from '../components/BibliographyView.svelte';
+	import SectionPdfViewer from '../components/SectionPdfViewer.svelte';
+	import AnnotationQueuePanel from '../components/AnnotationQueuePanel.svelte';
+	import AnnotationComposerDialog from '../components/AnnotationComposerDialog.svelte';
+	import SectionBuildErrorPanel from '../components/SectionBuildErrorPanel.svelte';
 
 	/**
-	 * Halaman bab (stub read-only): tampilkan status sumber LaTeX bab + panel proyek.
-	 * Penyuntingan LaTeX dan viewer PDF menyusul di fase editor berikutnya; bab
-	 * bibliography tetap merender daftar pustaka.
+	 * Halaman bab agen-first: PDF ter-compile + lapisan anotasi (seleksi teks / pin) yang
+	 * di-antrikan ke Astra lewat panel chat. Build tersimpan langsung tampil; sumber yang
+	 * lebih baru dari build (basi) memicu compile ulang sekali. Bab bibliography tetap
+	 * merender daftar pustaka (tanpa viewer/anotasi).
 	 */
 	let { projectId, sectionId }: { projectId: string; sectionId: string } = $props();
+
+	// Channel mention per-halaman (pohon yang sama dengan composer panel chat): dipakai
+	// draft-prefill "Tulis dengan Astra" dan quick-action perbaiki build.
+	const mentions = new ComposerMentions();
+	setComposerMentions(mentions);
 
 	const workspace = useWorkspace(() => projectId);
 	const sections = useSections(() => projectId);
 	const document = useSectionDocument(() => sectionId);
+	const build = useSectionBuild(() => sectionId);
+	const annotations = useSectionAnnotations(() => sectionId);
+	const createAnnotation = useCreateAnnotation(() => sectionId);
+	const updateAnnotation = useUpdateAnnotation(() => sectionId);
+	const deleteAnnotation = useDeleteAnnotation(() => sectionId);
+	const compile = useCompileSection(() => sectionId);
 
 	const section = $derived(sections.data?.find((s) => s.id === sectionId) ?? null);
 	const isBibliography = $derived(section?.role === 'bibliography');
+	const currentVersion = $derived(document.data?.contentVersion ?? 0);
+	const openAnnotationCount = $derived(
+		(annotations.data ?? []).filter((a) => a.status === 'open').length
+	);
 
 	let panelTab = $state<'chat' | 'sources'>('sources');
+	let pinMode = $state(false);
+	let activeAnnotationId = $state<string | null>(null);
+	let queueOpen = $state(false);
+	const selectedAnnotationIds = new SvelteSet<string>();
+	let pendingAnchor = $state<
+		| { kind: 'highlight'; page: number; rects: AnnotationRect[]; selectedText: string }
+		| { kind: 'pin'; page: number; rects: AnnotationRect[] }
+		| null
+	>(null);
+
+	// Build basi = sumber bab lebih baru dari yang ter-render build tersimpan.
+	const stale = $derived.by(() => {
+		const b = build.data;
+		const d = document.data;
+		if (!b || !d) return false;
+		return b.sourceVersions[sectionId] !== d.contentVersion;
+	});
+
+	// Satu compile in-flight; trigger beruntun coalesce — yang terakhir menang.
+	let compileQueued = false;
+	function requestCompile(): void {
+		if (compile.isPending) {
+			compileQueued = true;
+			return;
+		}
+		compile.mutate(undefined, {
+			onSettled: () => {
+				if (compileQueued) {
+					compileQueued = false;
+					requestCompile();
+				}
+			}
+		});
+	}
+
+	// Buka halaman: build tersimpan langsung tampil; basi/belum ada (padahal sumber ada) →
+	// auto-compile sekali.
+	let autoCompiled = false;
+	$effect(() => {
+		if (autoCompiled || build.isPending || document.isPending) return;
+		if (!document.data) return;
+		if (!build.data || stale) {
+			autoCompiled = true;
+			requestCompile();
+		}
+	});
+
+	function handleCreateHighlight(a: {
+		page: number;
+		rects: AnnotationRect[];
+		selectedText: string;
+	}): void {
+		pendingAnchor = { kind: 'highlight', ...a };
+	}
+
+	function handleCreatePin(a: { page: number; x: number; y: number }): void {
+		pendingAnchor = { kind: 'pin', page: a.page, rects: [{ x: a.x, y: a.y, w: 0, h: 0 }] };
+	}
+
+	function submitAnnotation(note: string): void {
+		const anchor = pendingAnchor;
+		if (!anchor) return;
+		pendingAnchor = null;
+		createAnnotation.mutate(
+			{
+				kind: anchor.kind,
+				page: anchor.page,
+				rects: anchor.rects,
+				selectedText: anchor.kind === 'highlight' ? anchor.selectedText : undefined,
+				note: note || undefined
+			},
+			{ onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menyimpan anotasi.')) }
+		);
+		if (anchor.kind === 'pin') pinMode = false;
+	}
+
+	function toggleSelected(id: string): void {
+		if (selectedAnnotationIds.has(id)) selectedAnnotationIds.delete(id);
+		else selectedAnnotationIds.add(id);
+	}
+
+	function dismissAnnotation(id: string): void {
+		selectedAnnotationIds.delete(id);
+		updateAnnotation.mutate({ annotationId: id, status: 'dismissed' });
+	}
+
+	function removeAnnotation(id: string): void {
+		selectedAnnotationIds.delete(id);
+		deleteAnnotation.mutate(id);
+	}
+
+	function focusAnnotation(id: string): void {
+		activeAnnotationId = id;
+		const target = (annotations.data ?? []).find((a) => a.id === id);
+		if (target) {
+			window.document
+				.getElementById(`pdf-page-${target.page}`)
+				?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		}
+	}
+
+	function writeWithAstra(): void {
+		if (!section) return;
+		mentions.setComposerDraft(
+			`Tuliskan draf awal bab "${section.title}". Susun kerangka dan poin utama berdasarkan sumber yang sudah ada di proyek ini.`
+		);
+		panelTab = 'chat';
+	}
 </script>
 
 <PageTitle title={section?.title ?? 'Bab'} />
@@ -34,16 +179,16 @@
 <div class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
 	<DetailSplitLayout sideOpen={true} onSideOpenChange={() => {}}>
 		{#snippet main()}
-			<div class="flex min-h-0 flex-1 flex-col gap-3 p-4">
+			<div class="flex min-h-0 flex-1 flex-col">
 				{#if sections.isPending}
 					<div class="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
 						<Spinner class="size-4" />
 						<span class="text-sm">Memuat bab…</span>
 					</div>
 				{:else if !section}
-					<p class="text-muted-foreground">Bab tidak ditemukan.</p>
+					<p class="p-4 text-muted-foreground">Bab tidak ditemukan.</p>
 				{:else}
-					<header class="flex flex-wrap items-center gap-3">
+					<header class="flex shrink-0 flex-wrap items-center gap-3 px-4 pt-4 pb-3">
 						<Button
 							href={resolve('/app/(product)/projects/[projectId]', { projectId })}
 							variant="ghost"
@@ -60,29 +205,117 @@
 						</div>
 						{#if isBibliography}
 							<Badge variant="outline">otomatis</Badge>
-						{:else if document.data}
-							<Badge variant="outline">Sumber v{document.data.contentVersion}</Badge>
+						{:else}
+							{#if stale}
+								<Badge variant="outline">perlu compile ulang</Badge>
+							{/if}
+							{#if document.data}
+								<Button
+									type="button"
+									variant="secondary"
+									size="sm"
+									disabled={compile.isPending}
+									onclick={requestCompile}
+								>
+									{#if compile.isPending}
+										<Spinner class="size-4" />
+									{/if}
+									Compile ulang
+								</Button>
+								<Badge variant="outline">Sumber v{currentVersion}</Badge>
+							{/if}
 						{/if}
 					</header>
 
 					{#if isBibliography}
-						<BibliographyView workspaceId={projectId} />
-					{:else if document.isPending}
-						<div class="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
-							<Spinner class="size-4" />
-							<span class="text-sm">Memuat bab…</span>
+						<div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+							<BibliographyView workspaceId={projectId} />
 						</div>
 					{:else}
-						<div
-							class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border-2 border-border bg-card p-8 text-center"
-						>
-							<p class="text-sm text-muted-foreground">
-								{document.data ? 'Sumber LaTeX bab tersimpan.' : 'Bab ini belum ditulis.'}
-							</p>
-							<p class="text-label text-muted-foreground">
-								Viewer PDF dan penyuntingan hadir di fase berikutnya.
-							</p>
-						</div>
+						{#if build.data?.pdfUrl}
+							<div class="shrink-0 px-4">
+								<Collapsible.Root open={queueOpen} onOpenChange={(next) => (queueOpen = next)}>
+									<Collapsible.Trigger
+										class="flex w-full items-center gap-2 rounded-md py-1.5 text-label text-muted-foreground transition-colors hover:text-foreground"
+									>
+										<Icon
+											icon={ChevronDownIcon}
+											class="size-3.5 transition-transform {queueOpen ? 'rotate-180' : ''}"
+										/>
+										<span class="font-medium">Anotasi ({openAnnotationCount})</span>
+										{#if selectedAnnotationIds.size > 0}
+											<span class="text-micro"
+												>· {selectedAnnotationIds.size} terpilih akan dikirim bersama pesan berikutnya</span
+											>
+										{/if}
+									</Collapsible.Trigger>
+									<Collapsible.Content>
+										<div class="pb-2">
+											<AnnotationQueuePanel
+												annotations={annotations.data ?? []}
+												selectedIds={selectedAnnotationIds}
+												{currentVersion}
+												onToggle={toggleSelected}
+												onDismiss={dismissAnnotation}
+												onDelete={removeAnnotation}
+												onFocus={focusAnnotation}
+											/>
+										</div>
+									</Collapsible.Content>
+								</Collapsible.Root>
+							</div>
+						{/if}
+
+						{#if build.data?.status === 'error'}
+							<div class="shrink-0 px-4 pb-2">
+								<SectionBuildErrorPanel
+									errors={build.data.errors ?? []}
+									logTail={build.data.logTail}
+								/>
+							</div>
+						{/if}
+
+						{#if build.data?.pdfUrl}
+							<SectionPdfViewer
+								url={build.data.pdfUrl}
+								annotations={annotations.data ?? []}
+								bind:pinMode
+								{activeAnnotationId}
+								{stale}
+								onCreateHighlight={handleCreateHighlight}
+								onCreatePin={handleCreatePin}
+								onSelectAnnotation={(id) => (activeAnnotationId = id)}
+							/>
+						{:else if document.data}
+							<div
+								class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4 pb-4 text-center text-muted-foreground"
+							>
+								<Spinner class="size-4" />
+								<span class="text-sm">Menyiapkan PDF…</span>
+							</div>
+						{:else if document.isPending}
+							<div
+								class="flex min-h-0 flex-1 items-center justify-center gap-2 text-muted-foreground"
+							>
+								<Spinner class="size-4" />
+								<span class="text-sm">Memuat bab…</span>
+							</div>
+						{:else}
+							<div class="flex min-h-0 flex-1 items-center justify-center p-4">
+								<div
+									class="flex max-w-sm flex-col items-center gap-3 rounded-lg border-2 border-border bg-card p-8 text-center"
+								>
+									<p class="text-sm font-medium text-foreground">Bab ini belum ditulis.</p>
+									<p class="text-label text-muted-foreground">
+										Minta Astra menyusun draf awal dari sumber yang sudah ada di proyek.
+									</p>
+									<Button type="button" onclick={writeWithAstra}>
+										<Icon icon={SparklesIcon} class="size-4" />
+										Tulis dengan Astra
+									</Button>
+								</div>
+							</div>
+						{/if}
 					{/if}
 				{/if}
 			</div>
@@ -101,3 +334,11 @@
 		{/snippet}
 	</DetailSplitLayout>
 </div>
+
+<AnnotationComposerDialog
+	open={pendingAnchor !== null}
+	kind={pendingAnchor?.kind ?? 'highlight'}
+	excerpt={pendingAnchor?.kind === 'highlight' ? pendingAnchor.selectedText : null}
+	onSubmit={submitAnnotation}
+	onCancel={() => (pendingAnchor = null)}
+/>
