@@ -27,7 +27,10 @@
 		sections,
 		activeTab,
 		onTabChange,
-		onClose
+		onClose,
+		getExtraClientContext,
+		onTurnSent,
+		onAgentSettled
 	}: {
 		workspaceId: string;
 		workspaceName: string;
@@ -35,6 +38,9 @@
 		activeTab: 'chat' | 'sources';
 		onTabChange: (tab: 'chat' | 'sources') => void;
 		onClose: () => void;
+		getExtraClientContext?: () => string[];
+		onTurnSent?: (threadId: string) => void;
+		onAgentSettled?: (threadId: string) => void;
 	} = $props();
 
 	const clerk = useClerkContext();
@@ -121,7 +127,13 @@
 
 		<div class="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden bg-background">
 			{#key activeThreadId ?? 'new'}
-				<ExploreThreadChat {activeThreadId} {workspaceId} />
+				<ExploreThreadChat
+					{activeThreadId}
+					{workspaceId}
+					{getExtraClientContext}
+					{onTurnSent}
+					{onAgentSettled}
+				/>
 			{/key}
 		</div>
 	{/if}

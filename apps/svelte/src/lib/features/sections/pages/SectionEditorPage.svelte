@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
+	import { useQueryClient } from '@tanstack/svelte-query';
+	import { queryKeys } from '$lib/query';
 	import { Badge } from '@aqsha/ui-svelte/components/badge';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
@@ -25,8 +27,10 @@
 		useCreateAnnotation,
 		useUpdateAnnotation,
 		useDeleteAnnotation,
+		useMarkAnnotationsSent,
 		type AnnotationRect
 	} from '../api';
+	import { buildAnnotationClientContext } from '../lib/annotation-context';
 	import BibliographyView from '../components/BibliographyView.svelte';
 	import SectionPdfViewer from '../components/SectionPdfViewer.svelte';
 	import AnnotationQueuePanel from '../components/AnnotationQueuePanel.svelte';
@@ -54,7 +58,9 @@
 	const createAnnotation = useCreateAnnotation(() => sectionId);
 	const updateAnnotation = useUpdateAnnotation(() => sectionId);
 	const deleteAnnotation = useDeleteAnnotation(() => sectionId);
+	const markSent = useMarkAnnotationsSent(() => sectionId);
 	const compile = useCompileSection(() => sectionId);
+	const qc = useQueryClient();
 
 	const section = $derived(sections.data?.find((s) => s.id === sectionId) ?? null);
 	const isBibliography = $derived(section?.role === 'bibliography');
@@ -171,6 +177,35 @@
 			`Tuliskan draf awal bab "${section.title}". Susun kerangka dan poin utama berdasarkan sumber yang sudah ada di proyek ini.`
 		);
 		panelTab = 'chat';
+	}
+
+	// Antrian anotasi terpilih → satu context message untuk turn chat berikutnya.
+	function annotationContextParts(): string[] {
+		const chosen = (annotations.data ?? []).filter(
+			(a) => a.status === 'open' && selectedAnnotationIds.has(a.id)
+		);
+		if (chosen.length === 0 || !section) return [];
+		return [
+			buildAnnotationClientContext({
+				sectionId,
+				sectionTitle: section.title,
+				annotations: chosen
+			})
+		];
+	}
+
+	// Turn berangkat → tandai anotasi terpilih "terkirim" (ikut turn ini apa pun hasil stream).
+	function handleTurnSent(threadId: string): void {
+		const ids = [...selectedAnnotationIds];
+		if (ids.length === 0) return;
+		selectedAnnotationIds.clear();
+		markSent.mutate({ ids, threadId });
+	}
+
+	// Turn selesai → segarkan proposal (mungkin baru dibuat agen) + status anotasi.
+	function handleAgentSettled(): void {
+		void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionProposal(sectionId) });
+		void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionAnnotations(sectionId) });
 	}
 </script>
 
@@ -329,6 +364,9 @@
 					activeTab={panelTab}
 					onTabChange={(t) => (panelTab = t)}
 					onClose={() => {}}
+					getExtraClientContext={annotationContextParts}
+					onTurnSent={handleTurnSent}
+					onAgentSettled={handleAgentSettled}
 				/>
 			{/if}
 		{/snippet}

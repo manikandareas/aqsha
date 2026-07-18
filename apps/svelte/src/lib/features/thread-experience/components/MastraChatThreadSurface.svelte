@@ -42,7 +42,9 @@
 		initialContent,
 		bindUrlOnSend = true,
 		threadUrlFor,
-		ambientWorkspaceId = null
+		ambientWorkspaceId = null,
+		getExtraClientContext,
+		onTurnSent
 	}: {
 		agent: ThreadAgent;
 		threadId: string;
@@ -62,6 +64,10 @@
 		threadUrlFor?: (threadId: string) => string;
 		/** Current project's workspace id — prioritized in the composer's @mention picker. */
 		ambientWorkspaceId?: string | null;
+		/** Konteks tambahan yang digabung ke tiap kirim (mis. antrian anotasi bab). */
+		getExtraClientContext?: () => string[];
+		/** Dipanggil segera setelah turn berangkat — antrian ikut turn ini, lepas dari hasil stream. */
+		onTurnSent?: (threadId: string) => void;
 	} = $props();
 
 	const qc = useQueryClient();
@@ -168,8 +174,11 @@
 			}
 		}
 		bumpUrl();
+		// Merge extra context BEFORE enqueue so a queued-while-busy turn still carries it.
+		const extra = getExtraClientContext?.() ?? [];
+		const mergedContext = [...(payload.clientContext ?? []), ...extra];
 		const opts = {
-			clientContext: payload.clientContext,
+			clientContext: mergedContext.length > 0 ? mergedContext : undefined,
 			richText: payload.richText,
 			attachmentIds: payload.attachmentIds,
 			agentKind: payload.agentKind
@@ -178,6 +187,8 @@
 			payload.command === 'deep'
 				? agent.sendDeep(payload.text, opts)
 				: agent.send(payload.text, opts);
+		// Fired immediately: the queue rides this turn; stream success/failure doesn't change "sent".
+		onTurnSent?.(threadId);
 		void run.then(() => {
 			void qc.invalidateQueries({ queryKey: queryKeys.threads.sendStatus('normal_chat') });
 			void qc.invalidateQueries({ queryKey: queryKeys.threads.sendStatus('deep_research') });
@@ -230,7 +241,7 @@
 		{statsGroupsByToolCallId}
 		{attachmentsByMessage}
 		{busy}
-		blocked={blocked}
+		{blocked}
 		{notice}
 		{threadId}
 		{threadAgentKind}

@@ -20,8 +20,17 @@
 	 */
 	let {
 		activeThreadId,
-		workspaceId = null
-	}: { activeThreadId: string | null; workspaceId?: string | null } = $props();
+		workspaceId = null,
+		getExtraClientContext,
+		onTurnSent,
+		onAgentSettled
+	}: {
+		activeThreadId: string | null;
+		workspaceId?: string | null;
+		getExtraClientContext?: () => string[];
+		onTurnSent?: (threadId: string) => void;
+		onAgentSettled?: (threadId: string) => void;
+	} = $props();
 
 	const clerk = useClerkContext();
 	const qc = useQueryClient();
@@ -94,6 +103,17 @@
 			agent = null;
 		};
 	});
+
+	// Beri tahu saat agen transisi busy→ready (satu turn selesai) supaya halaman menyegarkan
+	// state turunan server (proposal/anotasi).
+	let prevBusy = false;
+	$effect(() => {
+		const a = agent;
+		if (!a) return;
+		const busy = a.status !== 'ready';
+		if (prevBusy && !busy) onAgentSettled?.(threadId);
+		prevBusy = busy;
+	});
 </script>
 
 {#if loading || !agent}
@@ -108,5 +128,7 @@
 		{threadAgentKind}
 		compact
 		bindUrlOnSend={false}
+		{getExtraClientContext}
+		{onTurnSent}
 	/>
 {/if}
