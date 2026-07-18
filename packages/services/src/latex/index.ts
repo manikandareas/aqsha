@@ -33,4 +33,13 @@ export {
   LatexBuildService,
   type LatexBuildOutcome,
   type LatexBuildView,
+  loadSectionCompileContext,
 } from "./build.service";
+export {
+  applyProposalEdits,
+  type AcceptProposalResult,
+  type PendingProposalView,
+  type ProposalEdit,
+  type ProposeSectionEditResult,
+  SectionProposalService,
+} from "./section-proposal.service";

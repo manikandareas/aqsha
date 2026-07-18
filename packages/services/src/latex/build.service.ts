@@ -69,6 +69,31 @@ async function projectInput(
   };
 }
 
+/** Konteks compile satu bab (section+doc+preamble-input+bib) — dipakai build resmi & dry-run
+ * proposal. `doc` bisa null (bab kosong): pemanggil memutuskan (compile menolak, proposal
+ * boleh menulis via fullSource). */
+export async function loadSectionCompileContext(
+  db: Db,
+  input: { ownerUserId: string; sectionId: string },
+) {
+  const section = await SectionService.assertSectionOwner(db, input.ownerUserId, input.sectionId);
+  if (section.role === "bibliography") {
+    throwAppError({
+      message: "Daftar pustaka dirender saat compile dokumen penuh",
+      code: "bibliography_not_editable",
+      severity: "warning",
+      status: 422,
+    });
+  }
+  const doc = await SectionLatexService.getDocument(db, {
+    ownerUserId: input.ownerUserId,
+    sectionId: input.sectionId,
+  });
+  const project = await projectInput(db, input.ownerUserId, section.workspaceId);
+  const bib = await projectBib(db, input.ownerUserId, section.workspaceId);
+  return { section, doc, project, bib };
+}
+
 async function deleteStaleKeys(keys: Array<string | null | undefined>): Promise<void> {
   for (const key of keys) {
     if (!key) continue;
@@ -205,19 +230,7 @@ export const LatexBuildService = {
     db: Db,
     input: { ownerUserId: string; sectionId: string },
   ): Promise<LatexBuildOutcome> {
-    const section = await SectionService.assertSectionOwner(db, input.ownerUserId, input.sectionId);
-    if (section.role === "bibliography") {
-      throwAppError({
-        message: "Daftar pustaka dirender saat compile dokumen penuh",
-        code: "bibliography_not_editable",
-        severity: "warning",
-        status: 422,
-      });
-    }
-    const doc = await SectionLatexService.getDocument(db, {
-      ownerUserId: input.ownerUserId,
-      sectionId: input.sectionId,
-    });
+    const { section, doc, project, bib } = await loadSectionCompileContext(db, input);
     if (!doc) {
       throwAppError({
         message: "Bab belum punya sumber untuk di-compile",
@@ -226,8 +239,6 @@ export const LatexBuildService = {
         status: 404,
       });
     }
-    const project = await projectInput(db, input.ownerUserId, section.workspaceId);
-    const bib = await projectBib(db, input.ownerUserId, section.workspaceId);
     const assembled: AssembledDocument = assembleSection(project, {
       id: section.id,
       title: section.title,
