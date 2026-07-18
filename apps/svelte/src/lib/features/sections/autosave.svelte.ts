@@ -82,6 +82,11 @@ export class SectionAutosave {
 			this.#baseVersion = result.contentVersion;
 			this.#onSaved(result);
 			this.#oldestDirtyAt = null;
+			// Clear in-flight before the re-arm check below: markDirty()'s guard
+			// treats #inFlight as "already saving" and would otherwise swallow the
+			// edit that arrived while this save was running, silently dropping it.
+			// (The finally still clears it again for the catch path — harmless.)
+			this.#inFlight = false;
 			if (this.#dirtyDuringFlight) {
 				this.#dirtyDuringFlight = false;
 				this.state = 'idle';
