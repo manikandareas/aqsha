@@ -17,6 +17,35 @@ export type RunOptions = {
   maxMemoryKb?: number;
 };
 
+/**
+ * Single Bun boundary for LaTeX compilation. This file runs only under Bun (API + agent),
+ * but apps/web transitively typechecks it while deriving the Eden `App` type and ships no
+ * bun-types — so reach `Bun` through `globalThis` with a local typed surface instead of the
+ * ambient global. Keeps the web type-graph free of the missing `Bun` global without weakening
+ * the subprocess types used here.
+ */
+type BunSpawnedProcess = {
+  stdout: ReadableStream<Uint8Array>;
+  stderr: ReadableStream<Uint8Array>;
+  exited: Promise<number>;
+  signalCode: string | null;
+  kill(signal?: number | string): void;
+};
+const bun = (
+  globalThis as unknown as {
+    Bun: {
+      spawn(options: {
+        cmd: string[];
+        cwd?: string;
+        env?: Record<string, string | undefined>;
+        stdin?: "ignore";
+        stdout?: "pipe";
+        stderr?: "pipe";
+      }): BunSpawnedProcess;
+    };
+  }
+).Bun;
+
 const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 // Jeda flush setelah proses mati. Drain normal selesai jauh di bawah ini; batas
 // ini hanya menjaga dari gantung saat proses yang dibunuh meninggalkan anak yatim
@@ -47,7 +76,7 @@ function withMemoryLimit(cmd: string[], maxMemoryKb?: number): string[] {
 }
 
 export async function runSandboxed(cmd: string[], opts: RunOptions): Promise<RunResult> {
-  const proc = Bun.spawn({
+  const proc = bun.spawn({
     cmd: withMemoryLimit(cmd, opts.maxMemoryKb),
     cwd: opts.cwd,
     env: opts.env ?? {},
