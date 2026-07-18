@@ -268,7 +268,15 @@ export {
 export {
   type CompileError,
   type CompileErrorSeverity,
+  LatexCompileService,
+  type LatexCompileInput,
+  type LatexCompileOptions,
+  type LatexCompileResult,
+  parseSynctex,
   parseTexLog,
+  runSandboxed,
+  type SynctexData,
+  synctexInverseLookup,
 } from "./latex";
 
 // Waitlist publik — double opt-in via Resend (marketing site → API).

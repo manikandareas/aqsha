@@ -1,3 +1,9 @@
+export {
+  LatexCompileService,
+  type LatexCompileInput,
+  type LatexCompileOptions,
+  type LatexCompileResult,
+} from "./compile.service";
 export { parseTexLog } from "./log-parser";
 export { type RunOptions, type RunResult, runSandboxed } from "./runner";
 export {
