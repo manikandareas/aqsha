@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import {
-  useMotionValue,
-  useSpring,
-  useScroll,
-  useTransform,
-  useReducedMotion,
-  type MotionValue,
-} from "motion/react";
+import { useMotionValue, useSpring, useReducedMotion } from "motion/react";
 
 type MagneticOptions = {
   /** Radius (px) within which the element reacts to the cursor. Default 120. */
@@ -80,43 +73,4 @@ export function useMagneticButton<T extends HTMLElement = HTMLDivElement>(
   }, [radius, strength, mx, my, reduceMotion]);
 
   return { ref, x, y };
-}
-
-type ScrollOffset =
-  | "start end"
-  | "end start"
-  | "start start"
-  | "end end"
-  | "center center";
-
-type ScrollProgressOptions = {
-  offset?: [ScrollOffset, ScrollOffset];
-};
-
-/**
- * useScrollProgress — wraps `useScroll` for a target ref so callers don't have
- * to repeat the `target`/`offset` boilerplate. Returns the ref + the
- * `scrollYProgress` MotionValue (0–1 across the element's scroll journey).
- */
-export function useScrollProgress<T extends HTMLElement = HTMLDivElement>(
-  options: ScrollProgressOptions = {},
-) {
-  const ref = useRef<T>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: options.offset ?? ["start end", "end start"],
-  });
-  return { ref, scrollYProgress };
-}
-
-/**
- * useScrollTransform — maps a `scrollYProgress` MotionValue to an output range.
- * Thin wrapper over `useTransform` so the import surface stays small.
- */
-export function useScrollTransform<TOutput extends number | string>(
-  scrollYProgress: MotionValue<number>,
-  input: [number, number],
-  output: [TOutput, TOutput],
-) {
-  return useTransform(scrollYProgress, input, output);
 }

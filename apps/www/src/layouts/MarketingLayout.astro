@@ -1,7 +1,7 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
+import LandingFooter from "@/components/marketing/landing-footer.astro";
 import { LandingHeader } from "@/components/marketing/landing-header";
-import { LandingFooter } from "@/components/marketing/landing-footer";
 
 type Props = {
   title?: string;
@@ -14,11 +14,12 @@ const props = Astro.props as Props;
 ---
 
 <!--
-  Header/footer sebagai sibling island — jangan bungkus <slot /> di React island.
-  Astro slot + nested client components di satu parent sering gagal hydrate.
+  Header as a sibling island — don't wrap <slot /> in a React island.
+  Astro slot + nested client components in one parent often fail to hydrate.
+  Footer is static Astro (no JS).
 -->
 <BaseLayout {...props}>
   <LandingHeader client:load />
   <slot />
-  <LandingFooter client:load />
+  <LandingFooter />
 </BaseLayout>

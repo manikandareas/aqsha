@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { animate, useInView, useReducedMotion } from "motion/react";
 
+import { MotionProvider } from "@/components/motion-provider";
 import {
   STUDENT_COUNT,
   UNIVERSITY_MARKS,
@@ -86,6 +87,7 @@ export function UniversityMarqueeSection() {
   const formattedCount = countFormatter.format(STUDENT_COUNT);
 
   return (
+    <MotionProvider>
     <section
       aria-label={`Dipakai lebih dari ${formattedCount} mahasiswa dari berbagai kampus di Indonesia`}
       className="pt-16 sm:pt-24"
@@ -104,5 +106,6 @@ export function UniversityMarqueeSection() {
         </div>
       </div>
     </section>
+    </MotionProvider>
   );
 }

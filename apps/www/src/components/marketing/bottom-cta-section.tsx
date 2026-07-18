@@ -9,9 +9,10 @@ import {
 } from "motion/react";
 import { useRef } from "react";
 
-import { appUrl } from "@/lib/app-url";
-import { Button } from "@/components/ui/button";
 import { MagneticButton } from "@/components/marketing/magnetic-button";
+import { MotionProvider } from "@/components/motion-provider";
+import { Button } from "@/components/ui/button";
+import { appUrl } from "@/lib/app-url";
 
 const HEADLINE = "Nulis riset yang bisa kamu pertahanin.";
 
@@ -57,6 +58,7 @@ export function BottomCtaSection() {
   const words = HEADLINE.split(" ");
 
   return (
+    <MotionProvider>
     <section className="dark w-full bg-background py-32 text-foreground sm:py-40 lg:py-48">
       <div className="mx-auto w-full max-w-4xl px-4 text-center sm:px-6 lg:px-8">
         <m.p
@@ -147,5 +149,6 @@ export function BottomCtaSection() {
         </m.div>
       </div>
     </section>
+    </MotionProvider>
   );
 }

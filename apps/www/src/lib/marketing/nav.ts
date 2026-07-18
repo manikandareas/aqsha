@@ -1,8 +1,15 @@
 /**
  * Marketing nav tree — single source of truth for desktop mega-menu and
- * mobile accordion. Href masih menunjuk anchor landing; saat halaman
- * dedicated (/fitur/<slug>, /untuk/<slug>) jadi, cukup ganti href di sini.
+ * mobile accordion. Feature items derive identity from `data/features.ts`;
+ * persona / pricing / content links stay here. Dedicated pages
+ * (`/fitur/<slug>`, `/untuk/<slug>`) only need href edits.
  */
+
+import {
+  FEATURE_NAV_KEYS,
+  FEATURES,
+  type FeatureKey,
+} from "@/data/features";
 
 /** Icon keys — dipetakan ke komponen di `mega-nav.tsx`. */
 export type NavIconKey =
@@ -39,37 +46,22 @@ export type NavTopItem = NavMenu | NavLink;
 /** Desktop capsule + mobile sheet share this breakpoint (`lg` = 1024px). */
 export const NAV_DESKTOP_MQ = "(min-width: 1024px)";
 
+function featureNavItem(key: FeatureKey): NavItem {
+  const feature = FEATURES[key];
+  return {
+    href: `/${feature.href}`,
+    label: feature.navLabel,
+    description: feature.navDescription,
+    icon: feature.navIcon,
+  };
+}
+
 /** Urutan = prioritas: fitur dulu, lalu persona, harga, baru konten. */
 export const navTree: NavTopItem[] = [
   {
     type: "menu",
     label: "Fitur Aqsha",
-    items: [
-      {
-        href: "/#fitur-astra",
-        label: "Astra AI",
-        description: "Chat riset + deep research yang nunjukin prosesnya.",
-        icon: "sparkles",
-      },
-      {
-        href: "/#fitur-provenance",
-        label: "Verifikasi sumber",
-        description: "Tiap klaim dicek balik ke paper aslinya.",
-        icon: "shield-check",
-      },
-      {
-        href: "/#fitur-citations",
-        label: "Manajer sitasi",
-        description: "Sitasi rapi otomatis, sinkron Mendeley & Zotero.",
-        icon: "quote",
-      },
-      {
-        href: "/#fitur-workspace",
-        label: "Workspace penulisan",
-        description: "Nulis dan kelola karya tulis di satu tempat.",
-        icon: "pen",
-      },
-    ],
+    items: FEATURE_NAV_KEYS.map(featureNavItem),
     footerLinks: [
       { href: "/#cara-kerja", label: "Cara kerja" },
       { href: "/#bandingin", label: "Bandingin Aqsha" },

@@ -1,9 +1,11 @@
 # @aqsha/www — Marketing site (Astro)
 
-Standalone marketing surface for Aqsha: landing `/`, `/blog`, `/changelog`.
+**Canonical marketing surface for Aqsha** — landing `/`, `/blog`, `/changelog`.
 **No dependency on other `@aqsha/*` packages.** Deploy to Cloudflare Pages at `aqshara.com`.
 
 Product app stays on VPS at `app.aqshara.com` (Next.js). Auth CTAs link there via `PUBLIC_APP_URL`.
+
+`apps/web/features/marketing` is frozen leftover — do not edit it. Web `/` redirects here.
 
 ## Design system
 
@@ -44,18 +46,32 @@ PUBLIC_APP_URL=https://app.aqshara.com
 
 If building from monorepo root: `bun install && bun run --filter '@aqsha/www' build` and set output to `apps/www/dist`.
 
-## Cutover ops (does NOT modify `apps/web`)
+## Cutover ops
 
 1. DNS: apex / `www` → Cloudflare Pages (`@aqsha/www`); `app` → VPS
 2. Dokploy/Traefik: point Next web service at `app.aqshara.com` only
 3. Clerk Dashboard: allowed origins + redirect URLs for `https://app.aqshara.com` (and marketing origin if needed for deep links)
 4. Uptime / health check for landing → `https://aqshara.com`
-5. Leave marketing routes in `apps/web` untouched until a separate cleanup decision
+5. `apps/web` `/` already redirects to `NEXT_PUBLIC_SITE_URL` (default `https://aqshara.com`)
+6. Delete `apps/web/features/marketing` once legacy blog/changelog chrome is gone
 
 ## Pricing snapshot
 
-`src/data/plan-catalog.ts` is a **manual copy** of public plan fields from product catalog. Update it when prices/limits change.
+`src/data/plan-catalog.ts` is a zero-dep copy of public plan fields from `packages/services/src/plan.ts`.
+`bun run check:plans` (part of www typecheck) fails the build if prices/limits drift.
+
+## Feature identity
+
+`src/data/features.ts` is the SSOT for feature keys, images, titles, and `#fitur-*` anchors used by hero collage, feature blocks, and mega-nav.
 
 ## Content
 
-MDX lives in `src/content/blog` and `src/content/changelog` (Astro Content Collections). Copied from web at creation time — edit here for the marketing site going forward.
+MDX lives in `src/content/blog` and `src/content/changelog` (Astro Content Collections). Edit here for the marketing site going forward.
+
+## Hydration model
+
+`src/pages/index.astro` owns the page graph:
+
+- `client:load` — hero chrome + hero
+- `client:visible` — marquee, compare, features, pricing, FAQ, bottom CTA
+- static Astro — teaser + footer

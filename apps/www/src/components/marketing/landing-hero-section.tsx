@@ -7,6 +7,7 @@ import { ArrowDownIcon } from "@/components/icons";
 import { HeroDoodles } from "@/components/marketing/hero-doodles";
 import { MagneticButton } from "@/components/marketing/magnetic-button";
 import { Button } from "@/components/ui/button";
+import { FEATURES, type FeatureKey } from "@/data/features";
 import { appUrl } from "@/lib/app-url";
 import { cn } from "@/lib/utils";
 import type { LatestUpdate } from "@/lib/marketing/latest";
@@ -31,31 +32,27 @@ const buttonItem = (reduce: boolean | null) =>
       };
 
 /**
- * HERO_FRAMES — the frame stack at the hero's base: the four feature frames
- * from FeatureBlocksSection restaged as overlapping app windows, fully
- * visible (no bottom clipping). Each is a link that scrolls to its feature
- * block. Positions are % of the collage container per breakpoint; rotation
- * is animated by motion so it composes with the hover transform.
+ * Collage-only layout for the hero frame stack. Identity (image, title, href)
+ * comes from `data/features.ts`.
  */
-const HERO_FRAMES = [
+const HERO_FRAME_LAYOUT: Record<
+  FeatureKey,
   {
-    key: "workspace",
-    image: "/landing/frame-workspace.webp",
-    label: "Workspace",
-    title: "Semua sumber di satu tempat",
-    href: "#fitur-workspace",
+    dotClass: string;
+    aspectClass: string;
+    positionClass: string;
+    rotate: number;
+    zBase: number;
+  }
+> = {
+  workspace: {
     dotClass: "bg-mint",
     aspectClass: "aspect-[4/3]",
     positionClass: "left-[-4%] bottom-0 w-[40%] sm:left-[1%] sm:w-[27%]",
     rotate: -2,
     zBase: 20,
   },
-  {
-    key: "astra",
-    image: "/landing/frame-astra.webp",
-    label: "Nulis bareng Astra",
-    title: "Nulis bareng Astra",
-    href: "#fitur-astra",
+  astra: {
     dotClass: "bg-lavender",
     aspectClass: "aspect-[16/11]",
     positionClass:
@@ -63,12 +60,7 @@ const HERO_FRAMES = [
     rotate: 0.8,
     zBase: 10,
   },
-  {
-    key: "citations",
-    image: "/landing/frame-citations.webp",
-    label: "Cek sitasi",
-    title: "Tiap sumber dicek ke aslinya",
-    href: "#fitur-citations",
+  citations: {
     dotClass: "bg-coral",
     aspectClass: "aspect-[4/3]",
     positionClass:
@@ -76,19 +68,26 @@ const HERO_FRAMES = [
     rotate: 1.6,
     zBase: 30,
   },
-  {
-    key: "provenance",
-    image: "/landing/frame-provenance.webp",
-    label: "Jejak proses",
-    title: "Jejak prosesmu tersimpan",
-    href: "#fitur-provenance",
+  provenance: {
     dotClass: "bg-lemon",
     aspectClass: "aspect-[4/3]",
     positionClass: "hidden sm:block sm:left-[73%] sm:bottom-0 sm:w-[27%]",
     rotate: -1.6,
     zBase: 20,
   },
-] as const;
+};
+
+const HERO_FRAME_ORDER = [
+  "workspace",
+  "astra",
+  "citations",
+  "provenance",
+] as const satisfies readonly FeatureKey[];
+
+const HERO_FRAMES = HERO_FRAME_ORDER.map((key) => ({
+  ...FEATURES[key],
+  ...HERO_FRAME_LAYOUT[key],
+}));
 
 type HeroFrame = (typeof HERO_FRAMES)[number];
 
@@ -253,8 +252,6 @@ export function LandingHeroSection({
     if (index !== null) setLastActiveFrame(index);
   };
 
-  const showLatestBadge = true;
-
   return (
     <section
       data-hero
@@ -269,7 +266,7 @@ export function LandingHeroSection({
           seimbang di tengah; desktop tetap full viewport. */}
       <div className="relative z-20 mx-auto flex min-h-[88svh] w-full max-w-7xl flex-col sm:min-h-svh">
         <div className="flex flex-1 flex-col items-center justify-center px-4 pb-8 pt-24 text-center sm:px-6 sm:pb-10 sm:pt-40">
-          {showLatestBadge && latestUpdate && (
+          {latestUpdate ? (
             <m.a
               href={latestUpdate.href}
               className="lip-static mb-6 inline-flex max-w-full items-center gap-2 rounded-full border-2 border-border bg-card py-1 pl-1.5 pr-3.5 text-sm text-foreground transition-colors hover:bg-muted"
@@ -282,7 +279,7 @@ export function LandingHeroSection({
               </span>
               <span className="min-w-0 truncate">{latestUpdate.title}</span>
             </m.a>
-          )}
+          ) : null}
 
           <m.h1
             className="font-heading max-w-3xl text-balance text-[2.6rem] font-medium leading-[1.08] tracking-normal text-foreground sm:text-6xl sm:leading-[1.05] lg:text-[4.25rem]"

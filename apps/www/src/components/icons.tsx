@@ -1,10 +1,23 @@
+/**
+ * Local Hugeicons adapter for `@aqsha/www`.
+ *
+ * Intentional fork of `packages/ui/src/icons.tsx` for Cloudflare Pages deploy
+ * isolation — this app must not import `@aqsha/ui` or any other `@aqsha/*`
+ * package. Do not add a third adapter; extend this file when www needs icons.
+ */
 import {
+  Archive02Icon,
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowUpRight01Icon,
+  BookOpen01Icon,
   Cancel01Icon,
   ChartUpIcon,
+  CheckmarkCircle02Icon,
   DocumentValidationIcon,
+  FileExportIcon,
+  FileSearchIcon as HugeFileSearchIcon,
+  Flag02Icon,
   Idea01Icon,
   Menu01Icon,
   Mortarboard02Icon,
@@ -12,7 +25,9 @@ import {
   Pen01Icon,
   PlayIcon as HugePlayIcon,
   QuoteDownIcon,
+  Search01Icon,
   SparklesIcon as HugeSparklesIcon,
+  WorkHistoryIcon,
   Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -38,7 +53,15 @@ const createIcon = (icon: IconSvgElement) =>
     );
   };
 
+export const ArchiveIcon = createIcon(Archive02Icon);
 export const ArrowDownIcon = createIcon(ArrowDown01Icon);
+export const BookOpenIcon = createIcon(BookOpen01Icon);
+export const CheckCircleIcon = createIcon(CheckmarkCircle02Icon);
+export const FileExportedIcon = createIcon(FileExportIcon);
+export const FileSearchIcon = createIcon(HugeFileSearchIcon);
+export const FlagIcon = createIcon(Flag02Icon);
+export const HistoryIcon = createIcon(WorkHistoryIcon);
+export const SearchIcon = createIcon(Search01Icon);
 export const ArrowLeftIcon = createIcon(ArrowLeft01Icon);
 export const ArrowUpRightIcon = createIcon(ArrowUpRight01Icon);
 export const GraduationCapIcon = createIcon(Mortarboard02Icon);

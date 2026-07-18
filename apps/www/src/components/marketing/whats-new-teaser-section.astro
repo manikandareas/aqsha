@@ -1,0 +1,51 @@
+---
+import { formatDateId } from "@/lib/dates";
+import type { TeaserLatest } from "@/lib/marketing/latest";
+
+type Props = {
+  latest: TeaserLatest | null;
+};
+
+const { latest } = Astro.props as Props;
+---
+
+{
+  latest && (
+    <section class="w-full bg-background py-14 sm:py-16">
+      <div class="mx-auto w-full max-w-2xl px-4 text-center sm:px-6">
+        <p class="text-sm font-medium text-chart-1">
+          <time datetime={latest.publishedAt}>
+            {formatDateId(latest.publishedAt)}
+          </time>{" "}
+          · Rilis terbaru
+        </p>
+
+        <h2 class="mt-2 text-xl font-semibold leading-snug text-balance text-foreground sm:text-2xl">
+          <a
+            href={latest.href}
+            class="transition-colors hover:text-foreground/70"
+          >
+            {latest.title}
+          </a>
+        </h2>
+
+        {
+          latest.summary && (
+            <p class="mx-auto mt-2 max-w-xl text-pretty text-sm leading-6 text-muted-foreground">
+              {latest.summary}
+            </p>
+          )
+        }
+
+        <div class="mt-4">
+          <a
+            href="/changelog"
+            class="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+          >
+            Lihat semua pembaruan
+          </a>
+        </div>
+      </div>
+    </section>
+  )
+}

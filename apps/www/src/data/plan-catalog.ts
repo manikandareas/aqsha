@@ -1,6 +1,7 @@
 /**
  * Snapshot of public plan catalog for marketing pricing + JSON-LD.
- * Source of truth in product: packages/services/src/plan.ts — sync manually when prices/limits change.
+ * Product SSOT: packages/services/src/plan.ts.
+ * Drift is blocked by `bun run check:plans` (wired into www typecheck).
  */
 
 export type PublicPlanKey = "free" | "starter" | "plus" | "ultra";

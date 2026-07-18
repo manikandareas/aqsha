@@ -4,6 +4,7 @@ import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
 import { faqItems } from "@/components/marketing/faq-data";
+import { MotionProvider } from "@/components/motion-provider";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,6 +25,7 @@ export function FaqSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
+    <MotionProvider>
     <section
       id="faq"
       className="w-full scroll-mt-[72px] bg-background py-28 sm:py-36 lg:py-44"
@@ -130,5 +132,6 @@ export function FaqSection() {
         </div>
       </div>
     </section>
+    </MotionProvider>
   );
 }

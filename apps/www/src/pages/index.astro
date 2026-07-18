@@ -1,7 +1,15 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { LandingPage } from "@/components/marketing/landing-page";
+import LandingFooter from "@/components/marketing/landing-footer.astro";
+import WhatsNewTeaserSection from "@/components/marketing/whats-new-teaser-section.astro";
+import { BottomCtaSection } from "@/components/marketing/bottom-cta-section";
+import { FaqSection } from "@/components/marketing/faq-section";
+import { FeatureBlocksSection } from "@/components/marketing/feature-blocks-section";
+import { ForYouSection } from "@/components/marketing/for-you-section";
+import { LandingHeroZone } from "@/components/marketing/landing-hero-zone";
 import { StructuredData } from "@/components/marketing/structured-data";
+import { UniversityMarqueeSection } from "@/components/marketing/university-marquee-section";
+import { WhyAqshaSection } from "@/components/marketing/why-aqsha-section";
 import { mapChangelogEntry } from "@/lib/changelog/map";
 import { mapLandingLatest } from "@/lib/marketing/latest";
 import { getCollection } from "astro:content";
@@ -17,6 +25,12 @@ const entries = (await getCollection("changelog"))
 const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
 ---
 
+<!--
+  Astro owns the page graph; React owns interactive widgets only.
+  client:load  — above-the-fold chrome + hero
+  client:visible — below-fold motion / pricing / FAQ
+  static Astro — teaser + footer (no JS)
+-->
 <BaseLayout
   title="Asisten AI buat skripsi, tesis & paper"
   description="Aqsha ngecek tiap sumber ke paper aslinya — jadi kamu nggak ketahuan pas sidang atau direview dosen. Cari jurnal, nulis bareng Astra, semua di satu tempat."
@@ -24,10 +38,14 @@ const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
 >
   <main class="min-h-svh bg-background text-foreground">
     <StructuredData />
-    <LandingPage
-      client:load
-      latestUpdate={latestUpdate}
-      teaserLatest={teaserLatest}
-    />
+    <LandingHeroZone client:load latestUpdate={latestUpdate} />
+    <UniversityMarqueeSection client:visible />
+    <WhyAqshaSection client:visible />
+    <FeatureBlocksSection client:visible />
+    <ForYouSection client:visible />
+    <FaqSection client:visible />
+    <WhatsNewTeaserSection latest={teaserLatest} />
+    <BottomCtaSection client:visible />
+    <LandingFooter />
   </main>
 </BaseLayout>

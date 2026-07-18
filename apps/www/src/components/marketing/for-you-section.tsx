@@ -9,8 +9,9 @@ import {
   UNLIMITED,
 } from "@/data/plan-catalog";
 
-import { appUrl } from "@/lib/app-url";
+import { MotionProvider } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
+import { appUrl } from "@/lib/app-url";
 import { cn } from "@/lib/utils";
 
 const personas = [
@@ -354,6 +355,7 @@ export function ForYouSection() {
   const [billing, setBilling] = useState<Billing>("monthly");
 
   return (
+    <MotionProvider>
     <section
       id="buat-siapa"
       className="w-full scroll-mt-[72px] bg-background py-24 sm:py-32 lg:py-40"
@@ -488,5 +490,6 @@ export function ForYouSection() {
         </div>
       </div>
     </section>
+    </MotionProvider>
   );
 }
