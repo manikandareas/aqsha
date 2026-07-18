@@ -13,3 +13,14 @@ export {
   synctexInverseLookup,
 } from "./synctex";
 export type { CompileError, CompileErrorSeverity } from "./types";
+export {
+  type AssembledDocument,
+  type AssemblyProjectInput,
+  type AssemblySectionInput,
+  assembleSection,
+  assembleWorkspace,
+  buildPreamble,
+  escapeLatex,
+  sectionFilePath,
+} from "./assembly.service";
+export { scanCiteKeys, stripTexComments } from "./cite-scan";
