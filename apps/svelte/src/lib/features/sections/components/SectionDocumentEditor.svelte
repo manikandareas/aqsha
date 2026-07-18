@@ -34,6 +34,9 @@
 		const file = (event.target as HTMLInputElement).files?.[0];
 		if (!file) return;
 		mountError = null;
+		// Swapping test files repeatedly must not accumulate blob URLs — the previous one is
+		// already fully read by the mounted editor by the time it's replaced.
+		if (devDocumentUrl) URL.revokeObjectURL(devDocumentUrl);
 		devDocumentUrl = URL.createObjectURL(file);
 	}
 
@@ -42,39 +45,57 @@
 	// ditampung terpisah karena `onReady` bisa menembak sebelum `mountSectionEditor` resolve.
 	async function devRoundTrip() {
 		if (!handle) return;
-		const nodeId = generateStructuredContentId();
-		handle.insertCitation(nodeId, { citationIds: ['dev-citation'] }, '(Uji, 2026)');
-		const blob = await handle.exportDocx();
+		let probeUrl: string | null = null;
+		const releaseProbeUrl = () => {
+			if (probeUrl) {
+				URL.revokeObjectURL(probeUrl);
+				probeUrl = null;
+			}
+		};
+		try {
+			const nodeId = generateStructuredContentId();
+			handle.insertCitation(nodeId, { citationIds: ['dev-citation'] }, '(Uji, 2026)');
+			const blob = await handle.exportDocx();
 
-		const probeEl = document.createElement('div');
-		probeEl.style.display = 'none';
-		document.body.appendChild(probeEl);
+			const probeEl = document.createElement('div');
+			probeEl.style.display = 'none';
+			document.body.appendChild(probeEl);
 
-		let probe: SectionEditorHandle | null = null;
-		let probeReady = false;
+			probeUrl = URL.createObjectURL(blob);
+			let probe: SectionEditorHandle | null = null;
+			let probeReady = false;
 
-		function checkRoundTrip() {
-			if (!probe || !probeReady) return;
-			const found = probe.listCitations().some((c) => c.nodeId === nodeId);
-			toast[found ? 'success' : 'error'](
-				found ? 'Round-trip SDT utuh' : 'Round-trip SDT GAGAL — attrs hilang'
-			);
-			probe.destroy();
-			probeEl.remove();
+			function checkRoundTrip() {
+				if (!probe || !probeReady) return;
+				const found = probe.listCitations().some((c) => c.nodeId === nodeId);
+				toast[found ? 'success' : 'error'](
+					found ? 'Round-trip SDT utuh' : 'Round-trip SDT gagal — atribut hilang'
+				);
+				probe.destroy();
+				probeEl.remove();
+				// Safe only now — SuperDoc has read the blob by the time `onReady` fires, and
+				// `onReady` can land before the `await mountSectionEditor` below settles.
+				releaseProbeUrl();
+			}
+
+			probe = await mountSectionEditor({
+				editorEl: probeEl,
+				toolbarEl: null,
+				documentUrl: probeUrl,
+				fileName: 'roundtrip.docx',
+				onReady: () => {
+					probeReady = true;
+					checkRoundTrip();
+				},
+				onUpdate: () => {}
+			});
+			checkRoundTrip();
+		} catch {
+			// Report probe-mount failures instead of letting them vanish as an unhandled
+			// rejection — a diagnostic that fails silently defeats its own purpose.
+			toast.error('Round-trip SDT gagal — editor uji tidak dapat dimuat');
+			releaseProbeUrl();
 		}
-
-		probe = await mountSectionEditor({
-			editorEl: probeEl,
-			toolbarEl: null,
-			documentUrl: URL.createObjectURL(blob),
-			fileName: 'roundtrip.docx',
-			onReady: () => {
-				probeReady = true;
-				checkRoundTrip();
-			},
-			onUpdate: () => {}
-		});
-		checkRoundTrip();
 	}
 
 	function attachEditor(el: HTMLElement) {
