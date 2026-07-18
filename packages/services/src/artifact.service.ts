@@ -61,6 +61,9 @@ export type ArtifactListItem = {
   indexingFailureReason: string | null;
   detectedDocumentKind: DetectedDocumentKind | null;
   plainTextPreview: string | null;
+  // Authored-document (bab DOCX) save counter — null for non-authored artifacts (upload/url/markdown).
+  // Frontend autosave sends it back as `baseVersion` to detect concurrent writes from another tab.
+  contentVersion: number | null;
   status: "active" | "deleted";
   createdAt: number;
   updatedAt: number;
@@ -125,6 +128,7 @@ function toArtifactListItem(a: Artifact): ArtifactListItem {
     indexingFailureReason: a.indexingFailureReason,
     detectedDocumentKind: a.detectedDocumentKind as DetectedDocumentKind | null,
     plainTextPreview: a.plainTextPreview,
+    contentVersion: a.contentVersion,
     status: a.status as "active" | "deleted",
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
