@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { faqItems } from "@/components/marketing/faq-data";
 import { MotionProvider } from "@/components/motion-provider";
+import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,7 +41,7 @@ export function FaqSection() {
             }
             whileInView={{ opacity: 1, clipPath: "inset(0% 0 0 0)", y: 0 }}
             viewport={{ once: true, amount: 0.5 }}
-            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.55, ease: EASE_OUT }}
           >
             Masih ada yang ganjel?
           </m.p>
@@ -49,7 +50,7 @@ export function FaqSection() {
             initial={reduce ? false : { opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.5 }}
-            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.6, ease: EASE_OUT }}
           >
             Pertanyaan yang sering muncul.
           </m.h2>
@@ -72,7 +73,7 @@ export function FaqSection() {
                   initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={reduce ? { opacity: 0 } : { opacity: 0, y: -12 }}
-                  transition={{ duration: reduce ? 0.1 : 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: reduce ? 0.1 : 0.3, ease: EASE_OUT }}
                 >
                   {String(openIndex + 1).padStart(2, "0")}
                 </m.span>
@@ -119,7 +120,7 @@ export function FaqSection() {
                     height: isOpen ? "auto" : 0,
                     opacity: isOpen ? 1 : 0,
                   }}
-                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: 0.3, ease: EASE_OUT }}
                   className="overflow-hidden"
                 >
                   <p className="pb-5 pr-0 text-[15px] leading-relaxed text-muted-foreground sm:pb-6 sm:pr-8 sm:text-base">

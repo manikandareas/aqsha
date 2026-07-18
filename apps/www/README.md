@@ -64,6 +64,10 @@ If building from monorepo root: `bun install && bun run --filter '@aqsha/www' bu
 
 `src/data/features.ts` is the SSOT for feature keys, images, titles, and `#fitur-*` anchors used by hero collage, feature blocks, and mega-nav.
 
+`src/data/compare-rows.ts` is the SSOT for the Why Aqsha comparison table copy.
+
+Shared doodle primitives live in `src/components/marketing/doodles.tsx` (starburst, spark, hand note, drawn arrow). Editorial motion tokens (`EASE_OUT`, `FRAME_SPRING`, `IN_VIEW_ONCE`) live in `src/lib/motion.ts`.
+
 ## Content
 
 MDX lives in `src/content/blog` and `src/content/changelog` (Astro Content Collections). Edit here for the marketing site going forward.
@@ -74,4 +78,4 @@ MDX lives in `src/content/blog` and `src/content/changelog` (Astro Content Colle
 
 - `client:load` — hero chrome + hero
 - `client:visible` — marquee, compare, features, pricing, FAQ, bottom CTA
-- static Astro — teaser + footer
+- static Astro — teaser (CSS entrance motion) + footer

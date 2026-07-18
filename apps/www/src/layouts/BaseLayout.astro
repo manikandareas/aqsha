@@ -37,6 +37,21 @@ const canonical = `${siteUrl}${path === "/" ? "" : path}`;
     <meta name="twitter:title" content={title ?? siteName} />
     <meta name="twitter:description" content={description} />
     <link rel="icon" href="/web-app-manifest-192x192.png" type="image/png" />
+    <script is:inline>
+      // Anti-flash theme init — key must match components/theme-toggle.tsx.
+      (() => {
+        try {
+          const stored = localStorage.getItem("aqsha-www-theme");
+          const dark = stored
+            ? stored === "dark"
+            : matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch {
+          /* no-op */
+        }
+      })();
+    </script>
     <slot name="head" />
   </head>
   <body class="min-h-svh bg-background text-foreground antialiased">

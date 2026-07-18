@@ -15,31 +15,19 @@ import {
   SearchIcon,
   SparklesIcon,
 } from "@/components/icons";
+import { Starburst } from "@/components/marketing/doodles";
 import { MotionProvider } from "@/components/motion-provider";
+import {
+  COMPARE_ROWS,
+  type CompareRow,
+  type CompareStepIconKey,
+} from "@/data/compare-rows";
+import { EASE_OUT, IN_VIEW_ONCE } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
-type StepIconKey =
-  | "search"
-  | "file-search"
-  | "archive"
-  | "book-open"
-  | "check-circle"
-  | "flag"
-  | "history"
-  | "pen"
-  | "file-exported";
-
-type CompareRowData = {
-  prompt: string;
-  competitor: string;
-  competitorReply: string;
-  competitorNote: string;
-  steps: { icon: StepIconKey; text: string }[];
-  result: string;
-};
-
-const STEP_ICONS: Record<StepIconKey, IconComponent> = {
+const STEP_ICONS: Record<CompareStepIconKey, IconComponent> = {
   search: SearchIcon,
   "file-search": FileSearchIcon,
   archive: ArchiveIcon,
@@ -51,56 +39,7 @@ const STEP_ICONS: Record<StepIconKey, IconComponent> = {
   "file-exported": FileExportedIcon,
 };
 
-const rows: CompareRowData[] = [
-  {
-    prompt: "Cariin aku jurnal buat bab 2 skripsiku tentang stunting",
-    competitor: "ChatGPT",
-    competitorReply:
-      "Tentu! Berikut 10 jurnal yang relevan: “Determinan Stunting di Indonesia” (2021), “Analisis Faktor Gizi Balita” (2019)…",
-    competitorNote: "judulnya meyakinkan — sebagian nggak pernah ada",
-    steps: [
-      { icon: "search", text: "Nyari di OpenAlex, arXiv, dan Crossref" },
-      { icon: "file-search", text: "Ngecek tiap judul dan DOI ke paper aslinya" },
-      { icon: "archive", text: "Nyimpen PDF dan metadata ke workspace-mu" },
-    ],
-    result:
-      "Beres. 10 paper masuk workspace — semuanya beneran ada dan siap dikutip.",
-  },
-  {
-    prompt: "Cek kutipan di draf ini masih nyambung sama sumbernya nggak",
-    competitor: "Perplexity",
-    competitorReply:
-      "Kutipan Anda tampak sudah sesuai dengan sumber yang dirujuk.",
-    competitorNote: "padahal paper aslinya nggak pernah dibuka",
-    steps: [
-      { icon: "book-open", text: "Buka isi asli tiap paper yang kamu kutip" },
-      { icon: "check-circle", text: "Cocokin kalimatmu ke bagian yang dirujuk" },
-      { icon: "flag", text: "Nandain kutipan yang meragukan" },
-    ],
-    result:
-      "12 kutipan aman, 2 diflag — lengkap sama letak halamannya biar kamu cek sendiri.",
-  },
-  {
-    prompt: "Tulisan jujurku dicap buatan AI — gimana cara buktiinnya?",
-    competitor: "ChatGPT",
-    competitorReply:
-      "Maaf, saya tidak dapat memverifikasi siapa yang menulis teks tersebut.",
-    competitorNote: "nggak ada jejak, nggak ada yang bisa dibuktiin",
-    steps: [
-      { icon: "history", text: "Ngerekam tiap langkah nulismu dari awal" },
-      {
-        icon: "pen",
-        text: "Nyatet kapan kamu nulis, kapan pakai AI, kapan nyitasi",
-      },
-      { icon: "file-exported", text: "Nyiapin jejak proses buat ditunjukkin" },
-    ],
-    result:
-      "Kamu pegang bukti proses dari draf pertama sampai final — bukan cuma hasil akhir.",
-  },
-];
-
-const inView = { once: true as const, amount: 0.25 as const };
-const ease = [0.22, 1, 0.36, 1] as const;
+const inView = { ...IN_VIEW_ONCE, amount: 0.25 as const };
 
 function ToolChip({
   name,
@@ -111,11 +50,12 @@ function ToolChip({
 }) {
   return (
     <span
-      className={
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border-2 px-3.5 py-1 text-xs font-medium lg:absolute lg:-top-[15px] lg:left-1/2 lg:-translate-x-1/2",
         variant === "aqsha"
-          ? "inline-flex items-center gap-1.5 rounded-full border-2 bg-[var(--mint-soft)] px-3.5 py-1 text-xs font-medium text-[var(--mint-foreground)] [border-color:var(--mint-soft-border)] lg:absolute lg:-top-[15px] lg:left-1/2 lg:-translate-x-1/2"
-          : "inline-flex items-center gap-1.5 rounded-full border-2 border-border bg-background px-3.5 py-1 text-xs font-medium text-muted-foreground lg:absolute lg:-top-[15px] lg:left-1/2 lg:-translate-x-1/2"
-      }
+          ? "bg-[var(--mint-soft)] text-[var(--mint-foreground)] [border-color:var(--mint-soft-border)]"
+          : "border-border bg-background text-muted-foreground",
+      )}
     >
       {variant === "aqsha" && <SparklesIcon size={13} aria-hidden />}
       {name}
@@ -127,7 +67,10 @@ function VsBadge({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
-      className={`h-10 w-10 rotate-[-8deg] items-center justify-center rounded-full border-2 border-border bg-background font-hand text-xl leading-none text-[var(--coral)] ${className ?? ""}`}
+      className={cn(
+        "h-10 w-10 rotate-[-8deg] items-center justify-center rounded-full border-2 border-border bg-background font-hand text-xl leading-none text-[var(--coral)]",
+        className,
+      )}
     >
       vs
     </span>
@@ -141,7 +84,7 @@ function VsBadge({ className }: { className?: string }) {
  * akhirnya. Kolom dipisah rule dashed; chip nama tool duduk di atas rule
  * horizontal, badge "vs" duduk di rule vertikal pemisah kedua jawaban.
  */
-function CompareRow({ row, index }: { row: CompareRowData; index: number }) {
+function CompareRowView({ row, index }: { row: CompareRow; index: number }) {
   const reduce = useReducedMotion();
 
   return (
@@ -150,7 +93,7 @@ function CompareRow({ row, index }: { row: CompareRowData; index: number }) {
       initial={reduce ? false : { opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={inView}
-      transition={{ duration: 0.55, ease }}
+      transition={{ duration: 0.55, ease: EASE_OUT }}
     >
       {/* Prompt */}
       <div className="lg:py-12 lg:pr-10">
@@ -199,7 +142,7 @@ function CompareRow({ row, index }: { row: CompareRowData; index: number }) {
                   viewport={inView}
                   transition={{
                     duration: 0.4,
-                    ease,
+                    ease: EASE_OUT,
                     delay: 0.15 + index * 0.05 + stepIndex * 0.12,
                   }}
                 >
@@ -242,10 +185,14 @@ export function WhyAqshaSection() {
             initial={reduce ? false : { opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={inView}
-            transition={{ duration: 0.6, ease }}
+            transition={{ duration: 0.6, ease: EASE_OUT }}
           >
             <h2 className="font-heading max-w-[min(100%,40rem)] text-balance text-[2.5rem] font-medium leading-[1.08] tracking-normal text-foreground sm:text-[2.75rem] sm:leading-[1.06] lg:text-[3.25rem] lg:leading-[1.05]">
               Apa bedanya Aqsha?
+              <Starburst
+                className="ml-3 inline-block size-7 -translate-y-2 rotate-12 sm:size-8"
+                delay={0.45}
+              />
             </h2>
             <p className="mt-4 max-w-xl text-pretty text-base leading-snug text-muted-foreground sm:text-lg sm:leading-snug">
               Kebanyakan AI cuma ngasih jawaban yang kedengeran benar. Aqsha
@@ -254,8 +201,8 @@ export function WhyAqshaSection() {
           </m.div>
 
           <div className="mt-12 sm:mt-16">
-            {rows.map((row, index) => (
-              <CompareRow key={row.prompt} row={row} index={index} />
+            {COMPARE_ROWS.map((row, index) => (
+              <CompareRowView key={row.prompt} row={row} index={index} />
             ))}
             <div
               aria-hidden
@@ -268,7 +215,7 @@ export function WhyAqshaSection() {
             initial={reduce ? false : { opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={inView}
-            transition={{ delay: 0.1, duration: 0.5 }}
+            transition={{ delay: 0.1, duration: 0.5, ease: EASE_OUT }}
           >
             Data didapat dari hasil riset kami di komunitas Reddit (2025–2026)
             — ratusan cerita pengguna yang keburu percaya referensi karangan AI.

@@ -2,7 +2,16 @@
 
 import { m, useReducedMotion } from "motion/react";
 
-const EASE = [0.22, 1, 0.36, 1] as const;
+import {
+  DrawnArrow,
+  HandNote,
+  Spark,
+  Starburst,
+  drawAnimate,
+  drawInitial,
+  drawTransition,
+} from "@/components/marketing/doodles";
+import { EASE_OUT } from "@/lib/motion";
 
 /**
  * HeroDoodles — margin doodles around the centered hero, mirroring the
@@ -16,15 +25,6 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 export function HeroDoodles() {
   const reduce = useReducedMotion();
 
-  const drawInitial = (reduce: boolean | null) =>
-    reduce ? false : { pathLength: 0, opacity: 0 };
-  const drawAnimate = { pathLength: 1, opacity: 1 };
-  const drawTransition = (delay: number) => ({
-    delay,
-    duration: 0.62,
-    ease: EASE,
-  });
-
   return (
     <div
       className="pointer-events-none absolute inset-0 z-10 hidden select-none lg:block"
@@ -32,36 +32,14 @@ export function HeroDoodles() {
     >
       {/* Top-left: starburst + hand note beside the headline. */}
       <div className="absolute left-[4%] top-[26%] w-48 xl:left-[7%]">
-        <m.svg
-          viewBox="0 0 40 40"
-          fill="none"
-          className="ml-8 size-9 rotate-6 text-coral"
-          initial={reduce ? false : { opacity: 0, scale: 0.6 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.75, duration: 0.4, ease: EASE }}
-        >
-          <g stroke="currentColor" strokeWidth={3} strokeLinecap="round">
-            <path d="M20 3.5 L20 12.5" />
-            <path d="M31.5 8.5 L26.4 14.6" />
-            <path d="M36.5 20.5 L28 20.2" />
-            <path d="M31 31.5 L25.8 26" />
-            <path d="M19.6 36.5 L20 28" />
-            <path d="M8.6 31.6 L14.2 26.4" />
-            <path d="M3.5 19.6 L12 20" />
-            <path d="M8.2 8.8 L14 14.4" />
-          </g>
-        </m.svg>
-        <m.p
-          className="font-hand mt-2 -rotate-3 text-2xl leading-tight text-muted-foreground"
-          initial={reduce ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.85, duration: 0.45, ease: EASE }}
-        >
+        <Starburst className="ml-8 rotate-6" delay={0.75} mode="animate" />
+        <HandNote className="mt-2 -rotate-3" delay={0.85} mode="animate">
           tiap klaim ada sumbernya
-        </m.p>
+        </HandNote>
       </div>
 
-      {/* Top-right: tangle-to-spark — the messy idea resolving into a direction. */}
+      {/* Top-right: tangle-to-spark — the messy idea resolving into a direction.
+          Spark path stays in-viewBox so it sits at the tip of the tangle. */}
       <div className="absolute right-[3%] top-[22%] w-40 xl:right-[6%]">
         <svg viewBox="0 0 130 96" fill="none" className="h-24 w-32 text-lavender">
           <m.path
@@ -81,7 +59,7 @@ export function HeroDoodles() {
             strokeLinejoin="round"
             initial={drawInitial(reduce)}
             animate={drawAnimate}
-            transition={{ delay: 1.35, duration: 0.2, ease: EASE }}
+            transition={drawTransition(1.35, 0.2)}
           />
           <m.path
             d="M14 4 L16.8 12.2 L25 15 L16.8 17.8 L14 26 L11.2 17.8 L3 15 L11.2 12.2 Z"
@@ -89,37 +67,21 @@ export function HeroDoodles() {
             strokeLinejoin="round"
             initial={reduce ? false : { opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 1.45, duration: 0.3, ease: EASE }}
+            transition={{ delay: 1.45, duration: 0.3, ease: EASE_OUT }}
           />
         </svg>
       </div>
 
       {/* Mid-left: swoosh diving toward the frame stack below. */}
-      <svg
-        viewBox="0 0 160 90"
-        fill="none"
+      <DrawnArrow
         className="absolute bottom-[40%] left-[3%] h-20 w-40 text-mint xl:left-[5%]"
-      >
-        <m.path
-          d="M8 12 C 40 10, 104 24, 138 66"
-          stroke="currentColor"
-          strokeWidth={3}
-          strokeLinecap="round"
-          initial={drawInitial(reduce)}
-          animate={drawAnimate}
-          transition={drawTransition(1.0)}
-        />
-        <m.path
-          d="M118 62 L140 68 L136 46"
-          stroke="currentColor"
-          strokeWidth={3}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          initial={drawInitial(reduce)}
-          animate={drawAnimate}
-          transition={{ delay: 1.55, duration: 0.2, ease: EASE }}
-        />
-      </svg>
+        viewBox="0 0 160 90"
+        curve="M8 12 C 40 10, 104 24, 138 66"
+        head="M118 62 L140 68 L136 46"
+        delay={1.0}
+        headDelay={1.55}
+        mode="animate"
+      />
 
       {/* Mid-right: pencil cloud + tiny spark, echoing the reference's sky props. */}
       <div className="absolute bottom-[32%] right-[4%] xl:right-[7%]">
@@ -129,7 +91,7 @@ export function HeroDoodles() {
           className="h-11 w-16 -rotate-2 text-muted-foreground/70"
           initial={reduce ? false : { opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.2, duration: 0.45, ease: EASE }}
+          transition={{ delay: 1.2, duration: 0.45, ease: EASE_OUT }}
         >
           <path
             d="M12 32 C 6 30, 6 21, 13 20 C 13 12, 24 9, 29 14 C 32 8, 43 8, 45 15 C 53 14, 57 22, 52 27 C 56 32, 51 37, 46 36 L 16 36 C 13 36, 11 34, 12 32 Z"
@@ -139,20 +101,7 @@ export function HeroDoodles() {
             strokeLinejoin="round"
           />
         </m.svg>
-        <m.svg
-          viewBox="0 0 32 32"
-          fill="none"
-          className="ml-[-14px] mt-1 size-6 text-lemon"
-          initial={reduce ? false : { opacity: 0, scale: 0.5 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 1.35, duration: 0.3, ease: EASE }}
-        >
-          <path
-            d="M16 4 L18.4 13.6 L28 16 L18.4 18.4 L16 28 L13.6 18.4 L4 16 L13.6 13.6 Z"
-            fill="currentColor"
-            strokeLinejoin="round"
-          />
-        </m.svg>
+        <Spark className="ml-[-14px] mt-1" delay={1.35} mode="animate" />
       </div>
     </div>
   );

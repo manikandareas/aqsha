@@ -1,4 +1,5 @@
 ---
+import { ThemeToggle } from "@/components/theme-toggle";
 import { appUrl } from "@/lib/app-url";
 
 const footerColumns = [
@@ -42,6 +43,9 @@ const footerColumns = [
         <p class="font-hand mt-4 text-lg text-foreground/60 sm:text-xl">
           dicek, baru dipercaya
         </p>
+        <div class="mt-6">
+          <ThemeToggle client:visible variant="labeled" />
+        </div>
       </div>
 
       {

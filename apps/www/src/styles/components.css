@@ -187,6 +187,47 @@
 		transform-origin: left center;
 		background-color: var(--border);
 	}
+
+	/* Whats-new teaser — CSS one-shot entrances (no React island). Uses the
+	   shared editorial cubic-bezier matching EASE_OUT in lib/motion.ts. */
+	.teaser-rule {
+		transform: scaleX(0);
+		animation: aq-teaser-rule 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	.teaser-rule--late {
+		animation-delay: 0.12s;
+	}
+
+	.teaser-hand-note {
+		opacity: 0;
+		transform: translateY(6px);
+		animation: aq-teaser-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.55s both;
+	}
+
+	.teaser-spark {
+		opacity: 0;
+		transform: scale(0.5) rotate(-6deg);
+		animation: aq-teaser-pop 0.3s cubic-bezier(0.22, 1, 0.36, 1) 0.75s both;
+	}
+
+	.teaser-squiggle {
+		stroke-dasharray: 1;
+		stroke-dashoffset: 1;
+		animation: aq-teaser-draw 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.35s both;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.teaser-rule,
+		.teaser-hand-note,
+		.teaser-spark,
+		.teaser-squiggle {
+			animation: none;
+			opacity: 1;
+			transform: none;
+			stroke-dashoffset: 0;
+		}
+	}
 }
 
 @keyframes aq-shimmer {
@@ -198,5 +239,31 @@
 @keyframes aq-marquee {
 	to {
 		transform: translateX(-50%);
+	}
+}
+
+@keyframes aq-teaser-rule {
+	to {
+		transform: scaleX(1);
+	}
+}
+
+@keyframes aq-teaser-rise {
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes aq-teaser-pop {
+	to {
+		opacity: 1;
+		transform: scale(1) rotate(-6deg);
+	}
+}
+
+@keyframes aq-teaser-draw {
+	to {
+		stroke-dashoffset: 0;
 	}
 }

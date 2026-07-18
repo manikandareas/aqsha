@@ -13,6 +13,7 @@ import { MagneticButton } from "@/components/marketing/magnetic-button";
 import { MotionProvider } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
 import { appUrl } from "@/lib/app-url";
+import { EASE_OUT } from "@/lib/motion";
 
 const HEADLINE = "Nulis riset yang bisa kamu pertahanin.";
 
@@ -66,7 +67,7 @@ export function BottomCtaSection() {
           initial={reduce ? false : { opacity: 0, y: 10 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.85 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.5, ease: EASE_OUT }}
         >
           Mulai sekarang
         </m.p>

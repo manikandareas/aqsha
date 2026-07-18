@@ -6,6 +6,7 @@ import { ArrowDownIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { appUrl } from "@/lib/app-url";
 import { navTree } from "@/lib/marketing/nav";
+import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 type MobileNavTreeProps = {
@@ -81,7 +82,7 @@ export function MobileNavTree({
                     }
                     transition={{
                       duration: 0.24,
-                      ease: [0.22, 1, 0.36, 1],
+                      ease: EASE_OUT,
                     }}
                   >
                     <ul className="pb-1">

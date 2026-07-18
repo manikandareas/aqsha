@@ -6,6 +6,9 @@ import { useMotionValue, useSpring, useReducedMotion } from "motion/react";
 /** Shared editorial ease — hero, steps, section reveals. */
 export const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
+/** Default scroll-reveal viewport — override `amount` per section when needed. */
+export const IN_VIEW_ONCE = { once: true, amount: 0.4 } as const;
+
 /** Shared spring for hero shelf + feature-block frame expand/lean. */
 export const FRAME_SPRING = {
   type: "spring",

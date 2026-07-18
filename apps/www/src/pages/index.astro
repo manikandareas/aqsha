@@ -30,7 +30,7 @@ const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
   Astro owns the page graph; React owns interactive widgets only.
   client:load  — above-the-fold chrome + hero
   client:visible — below-fold motion / pricing / FAQ
-  static Astro — teaser + footer (no JS)
+  static Astro — teaser (CSS motion) + footer (no JS)
 -->
 <BaseLayout
   title="Asisten AI buat skripsi, tesis & paper"
@@ -42,11 +42,11 @@ const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
     <LandingHeroZone client:load latestUpdate={latestUpdate} />
     <UniversityMarqueeSection client:visible />
     <WhyAqshaSection client:visible />
+    <WhatsNewTeaserSection latest={teaserLatest} />
     <FeatureBlocksSection client:visible />
     <AudienceSection client:visible />
     <PricingSection client:visible />
     <FaqSection client:visible />
-    <WhatsNewTeaserSection latest={teaserLatest} />
     <BottomCtaSection client:visible />
     <LandingFooter />
   </main>

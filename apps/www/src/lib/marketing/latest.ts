@@ -1,5 +1,6 @@
 import { CATEGORY_META } from "@/lib/changelog/categories";
 import type { ChangelogEntry } from "@/lib/content-types";
+import { formatDateId } from "@/lib/dates";
 
 /** Hero announcement pill (serializable — no MDX). */
 export type LatestUpdate = {
@@ -8,11 +9,15 @@ export type LatestUpdate = {
   tag: string;
 };
 
-/** Compact “rilis terbaru” teaser before bottom CTA. */
+/**
+ * Compact “rilis terbaru” teaser — fully serializable for Astro.
+ * `dateLabel` is always set when this object exists (formatted on the server).
+ */
 export type TeaserLatest = {
   href: string;
   title: string;
   publishedAt: string;
+  dateLabel: string;
   summary?: string;
 };
 
@@ -29,6 +34,8 @@ export function mapLandingLatest(
     return { latestUpdate: null, teaserLatest: null };
   }
 
+  const summary = entry.excerpt?.trim();
+
   return {
     latestUpdate: {
       title: entry.heroTitle ?? entry.title,
@@ -43,7 +50,8 @@ export function mapLandingLatest(
       href: entry.url,
       title: entry.title,
       publishedAt: entry.publishedAt,
-      summary: entry.excerpt,
+      dateLabel: formatDateId(entry.publishedAt),
+      ...(summary ? { summary } : {}),
     },
   };
 }

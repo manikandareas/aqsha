@@ -3,6 +3,7 @@
 import { m, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
+import { CtaHandArrow } from "@/components/marketing/doodles";
 import {
   ExpandableFeatureFrame,
   useCanExpand,
@@ -252,13 +253,16 @@ export function FeatureBlocksSection() {
                 Coba langsung — gratis, tanpa kartu.
               </span>
             </h3>
-            <div className="mt-7 flex flex-col items-start gap-3">
-              <Button asChild variant="outline" className="h-11 px-5">
-                <a href="#faq">Tanya-tanya dulu</a>
-              </Button>
-              <Button asChild className="h-11 px-5">
-                <a href={appUrl("/sign-up")}>Coba gratis →</a>
-              </Button>
+            <div className="mt-7 flex items-start gap-4">
+              <div className="flex flex-col items-start gap-3">
+                <Button asChild variant="outline" className="h-11 px-5">
+                  <a href="#faq">Tanya-tanya dulu</a>
+                </Button>
+                <Button asChild className="h-11 px-5">
+                  <a href={appUrl("/sign-up")}>Coba gratis →</a>
+                </Button>
+              </div>
+              <CtaHandArrow className="pt-1" />
             </div>
           </m.div>
         </div>

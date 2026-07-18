@@ -12,9 +12,11 @@ import {
 import { MenuIcon, XIcon } from "@/components/icons";
 import { MegaNav } from "@/components/marketing/mega-nav";
 import { MobileNavTree } from "@/components/marketing/mobile-nav-tree";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { appUrl } from "@/lib/app-url";
 import { NAV_DESKTOP_MQ } from "@/lib/marketing/nav";
+import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 export type MarketingChromeVariant = "hero" | "solid";
@@ -89,7 +91,7 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
       )}
       initial={reduce ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: reduce ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: reduce ? 0 : 0.4, ease: EASE_OUT }}
     >
       {/* 3 zona ala Tines: logo kiri — kapsul nav persis di tengah — aksi kanan. */}
       <div
@@ -122,6 +124,7 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
         </nav>
 
         <div className="col-start-3 flex items-center justify-self-end gap-2 sm:gap-3">
+          <ThemeToggle />
           <a
             href={appUrl("/sign-in")}
             className="hidden rounded-full px-2 py-1.5 text-sm font-medium text-foreground/75 transition-colors hover:text-foreground sm:inline-block"
@@ -153,7 +156,7 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
               initial={reduce ? { opacity: 1 } : { opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, transition: { duration: 0.18 } }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.25, ease: EASE_OUT }}
               onClick={() => setMenuOpen(false)}
               aria-hidden
             />
@@ -168,7 +171,7 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
                   ? { opacity: 0 }
                   : { opacity: 0, y: -8, transition: { duration: 0.18 } }
               }
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.28, ease: EASE_OUT }}
             >
               <MobileNavTree
                 openGroup={openGroup}

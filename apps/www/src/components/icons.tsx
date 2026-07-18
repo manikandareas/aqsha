@@ -20,6 +20,7 @@ import {
   Flag02Icon,
   Idea01Icon,
   Menu01Icon,
+  Moon02Icon,
   Mortarboard02Icon,
   PauseIcon as HugePauseIcon,
   Pen01Icon,
@@ -27,6 +28,7 @@ import {
   QuoteDownIcon,
   Search01Icon,
   SparklesIcon as HugeSparklesIcon,
+  Sun02Icon,
   WorkHistoryIcon,
   Wrench01Icon,
 } from "@hugeicons/core-free-icons";
@@ -67,6 +69,8 @@ export const ArrowUpRightIcon = createIcon(ArrowUpRight01Icon);
 export const GraduationCapIcon = createIcon(Mortarboard02Icon);
 export const IdeaIcon = createIcon(Idea01Icon);
 export const MenuIcon = createIcon(Menu01Icon);
+export const MoonIcon = createIcon(Moon02Icon);
+export const SunIcon = createIcon(Sun02Icon);
 export const PenIcon = createIcon(Pen01Icon);
 export const QuoteIcon = createIcon(QuoteDownIcon);
 export const ShieldCheckIcon = createIcon(DocumentValidationIcon);
