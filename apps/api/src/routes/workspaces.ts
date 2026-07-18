@@ -1,5 +1,6 @@
 import type { WorkspaceKind, WorkspaceStage } from "@aqsha/db";
 import {
+  AnnotationService,
   FolderService,
   SectionLatexService,
   SectionService,
@@ -37,6 +38,13 @@ const sectionStatusSchema = t.Union([
   t.Literal("in_review"),
   t.Literal("done"),
 ]);
+const annotationKindSchema = t.Union([t.Literal("highlight"), t.Literal("pin")]);
+const annotationRectSchema = t.Object({
+  x: t.Number(),
+  y: t.Number(),
+  w: t.Number(),
+  h: t.Number(),
+});
 
 /**
  * Route workspaces (proyek karya tulis) + kerangka bab (sections) + folder nested.
@@ -265,6 +273,93 @@ export const workspaces = new Elysia()
       return LatexBuildService.getWorkspaceBuild(db, { ownerUserId, workspaceId: params.id });
     },
     { auth: true },
+  )
+  // ── Anotasi PDF bab ──────────────────────────────────────────────────────
+  .get(
+    "/sections/:id/annotations",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return AnnotationService.list(db, { ownerUserId, sectionId: params.id });
+    },
+    { auth: true },
+  )
+  .post(
+    "/sections/:id/annotations",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return AnnotationService.create(db, {
+        ownerUserId,
+        sectionId: params.id,
+        kind: body.kind,
+        page: body.page,
+        rects: body.rects,
+        selectedText: body.selectedText ?? null,
+        note: body.note ?? null,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        kind: annotationKindSchema,
+        page: t.Numeric(),
+        rects: t.Array(annotationRectSchema, { minItems: 1, maxItems: 32 }),
+        selectedText: t.Optional(t.String()),
+        note: t.Optional(t.String()),
+      }),
+    },
+  )
+  .patch(
+    "/sections/:id/annotations/:aid",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return AnnotationService.update(db, {
+        ownerUserId,
+        sectionId: params.id,
+        annotationId: params.aid,
+        note: body.note,
+        status: body.status,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        note: t.Optional(t.Union([t.String(), t.Null()])),
+        status: t.Optional(t.Union([t.Literal("open"), t.Literal("dismissed")])),
+      }),
+    },
+  )
+  .delete(
+    "/sections/:id/annotations/:aid",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return AnnotationService.remove(db, {
+        ownerUserId,
+        sectionId: params.id,
+        annotationId: params.aid,
+      });
+    },
+    { auth: true },
+  )
+  .post(
+    "/sections/:id/annotations/mark-sent",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return AnnotationService.markSent(db, {
+        ownerUserId,
+        sectionId: params.id,
+        ids: body.ids,
+        threadId: body.threadId,
+        messageId: body.messageId ?? null,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        ids: t.Array(t.String(), { minItems: 1, maxItems: 64 }),
+        threadId: t.String(),
+        messageId: t.Optional(t.String()),
+      }),
+    },
   )
   // ── Folder nested (legacy board) ─────────────────────────────────────────
   .get(
