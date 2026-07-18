@@ -111,6 +111,22 @@
 		}
 	}
 
+	/* Logo marquee — the track holds two identical copies, so sliding -50%
+	   loops seamlessly. Pauses on hover; reduced motion stops it entirely. */
+	.marquee-track {
+		animation: aq-marquee var(--marquee-duration, 44s) linear infinite;
+	}
+
+	.marquee-group:hover .marquee-track {
+		animation-play-state: paused;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.marquee-track {
+			animation: none;
+		}
+	}
+
 	/* Single-line control inset: subtle top shadow inside inputs/selects/OTP cells.
 	   Uses the inset slot of the shadow chain so focus rings still compose. */
 	.ctl-inset {
@@ -134,5 +150,11 @@
 @keyframes aq-shimmer {
 	100% {
 		transform: translateX(100%);
+	}
+}
+
+@keyframes aq-marquee {
+	to {
+		transform: translateX(-50%);
 	}
 }

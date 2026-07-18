@@ -7,6 +7,7 @@ import { ForYouSection } from "@/components/marketing/for-you-section";
 import { LandingFooter } from "@/components/marketing/landing-footer";
 import { LandingHeroHeader } from "@/components/marketing/landing-hero-header";
 import { LandingHeroSection } from "@/components/marketing/landing-hero-section";
+import { UniversityMarqueeSection } from "@/components/marketing/university-marquee-section";
 import { WhatsNewTeaserSection } from "@/components/marketing/whats-new-teaser-section";
 import { WhyAqshaSection } from "@/components/marketing/why-aqsha-section";
 import { MotionProvider } from "@/components/motion-provider";
@@ -21,10 +22,9 @@ export function LandingPage({
 }) {
   return (
     <MotionProvider>
-      {/* Hero baru terang (bg-background) — chrome glass gelap default tidak
-          terbaca, jadi header dipaksa solid dari awal. */}
-      <LandingHeroHeader forceSolid />
+      <LandingHeroHeader />
       <LandingHeroSection latestUpdate={latestUpdate} />
+      <UniversityMarqueeSection />
       <WhyAqshaSection />
       <FeatureBlocksSection />
       <ForYouSection />
