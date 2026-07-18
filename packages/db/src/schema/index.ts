@@ -16,6 +16,8 @@ export * from "./workspaceCitationLinks";
 export * from "./workspaceCitationSettings";
 export * from "./citationImportBatches";
 export * from "./documentCitationUsages";
+export * from "./documentRevisions";
+export * from "./latexBuilds";
 export * from "./integrationConnections";
 export * from "./analysisSandboxes";
 export * from "./analysisResultBlocks";

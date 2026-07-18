@@ -50,6 +50,9 @@ export const citations = pgTable(
     tags: text("tags").array().notNull(),
     cslJson: jsonb("csl_json").notNull(),
     canonicalKey: text("canonical_key").notNull(),
+    // Kunci \cite{} persisten: di-assign sekali (lazy) lalu beku — kunci yang tertanam
+    // di sumber LaTeX tidak boleh bergeser saat himpunan perpustakaan berubah.
+    bibKey: text("bib_key"),
     metadataStatus: text("metadata_status").notNull(),
     reviewedAt: bigint("reviewed_at", { mode: "number" }),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
@@ -73,6 +76,9 @@ export const citations = pgTable(
     index("citations_by_owner_doi").on(t.ownerUserId, t.doi),
     index("citations_by_owner_canonical").on(t.ownerUserId, t.canonicalKey),
     index("citations_by_owner_artifact").on(t.ownerUserId, t.artifactId),
+    uniqueIndex("citations_by_owner_bib_key")
+      .on(t.ownerUserId, t.bibKey)
+      .where(sql`${t.bibKey} is not null`),
     uniqueIndex("citations_by_owner_external")
       .on(t.ownerUserId, t.provider, t.externalId)
       .where(sql`${t.externalId} is not null`),

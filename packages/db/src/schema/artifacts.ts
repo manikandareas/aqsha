@@ -37,7 +37,7 @@ export const artifacts = pgTable(
     indexingFailureReason: text("indexing_failure_reason"),
     detectedDocumentKind: text("detected_document_kind"),
     storageR2Key: text("storage_r2_key"),
-    // Versi konten dokumen authored (DOCX bab): +1 tiap save, guard stale_write.
+    // Versi konten dokumen authored (sumber LaTeX bab): +1 tiap save, guard stale_write.
     // Null untuk artifact non-authored (upload/url/markdown lama).
     contentVersion: integer("content_version"),
     ragEntryId: text("rag_entry_id"),
@@ -53,7 +53,7 @@ export const artifacts = pgTable(
     // tertinggal dari CHECK) + 'spreadsheet' (upload .xlsx untuk analisis statistik).
     check(
       "artifacts_artifact_type_check",
-      sql`${t.artifactType} in ('markdown', 'plain_text', 'pdf', 'docx', 'image', 'spreadsheet', 'html', 'svg', 'mermaid', 'json', 'csv', 'code', 'url')`,
+      sql`${t.artifactType} in ('markdown', 'plain_text', 'pdf', 'docx', 'image', 'spreadsheet', 'html', 'svg', 'mermaid', 'json', 'csv', 'code', 'url', 'latex')`,
     ),
     check(
       "artifacts_artifact_family_check",

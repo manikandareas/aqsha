@@ -302,6 +302,13 @@
       "when": 1784343826769,
       "tag": "0042_tidy_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1784382017479,
+      "tag": "0043_even_white_queen",
+      "breakpoints": true
     }
   ]
 }

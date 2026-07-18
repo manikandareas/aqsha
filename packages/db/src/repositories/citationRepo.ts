@@ -1,4 +1,16 @@
-import { and, arrayContains, desc, eq, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  arrayContains,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import { encodeKeysetCursor, type KeysetCursor } from "../cursor";
 import {
   type Citation,
@@ -96,6 +108,26 @@ export const CitationRepo = {
       .from(citations)
       .where(and(eq(citations.ownerUserId, ownerUserId), isNull(citations.deletedAt)))
       .orderBy(desc(citations.updatedAt), desc(citations.id));
+  },
+
+  /**
+   * Semua bib_key terpakai owner — TERMASUK citation soft-deleted: kunci direservasi
+   * selamanya supaya \cite{} lama di sumber tak pernah menunjuk entri berbeda.
+   */
+  async listTakenBibKeys(db: DbOrTx, ownerUserId: string): Promise<string[]> {
+    const rows = await db
+      .select({ bibKey: citations.bibKey })
+      .from(citations)
+      .where(and(eq(citations.ownerUserId, ownerUserId), isNotNull(citations.bibKey)));
+    return rows.flatMap((r) => (r.bibKey ? [r.bibKey] : []));
+  },
+
+  async findByBibKeys(db: DbOrTx, ownerUserId: string, keys: string[]): Promise<Citation[]> {
+    if (keys.length === 0) return [];
+    return db
+      .select()
+      .from(citations)
+      .where(and(eq(citations.ownerUserId, ownerUserId), inArray(citations.bibKey, keys)));
   },
 
   /** Kandidat duplikat: cocokkan `canonical_key` pada citation aktif owner. */

@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   type NewWorkspaceSection,
   type WorkspaceSection,
@@ -38,6 +38,21 @@ export const WorkspaceSectionRepo = {
     >,
   ): Promise<void> {
     await db.update(workspaceSections).set(patch).where(eq(workspaceSections.id, id));
+  },
+
+  /** Klaim pointer dokumen HANYA bila masih kosong — guard race lazy-create dua penulis. */
+  async setDocumentArtifactIfNull(
+    db: DbOrTx,
+    id: string,
+    artifactId: string,
+    now: number,
+  ): Promise<boolean> {
+    const rows = await db
+      .update(workspaceSections)
+      .set({ documentArtifactId: artifactId, updatedAt: now })
+      .where(and(eq(workspaceSections.id, id), isNull(workspaceSections.documentArtifactId)))
+      .returning({ id: workspaceSections.id });
+    return rows.length > 0;
   },
 
   async deleteById(db: DbOrTx, id: string): Promise<void> {

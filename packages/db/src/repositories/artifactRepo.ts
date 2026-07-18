@@ -173,6 +173,21 @@ export const ArtifactRepo = {
     await db.update(artifacts).set(patch).where(eq(artifacts.id, id));
   },
 
+  /** CAS: patch hanya bila content_version masih = expected; false = penulis lain menang. */
+  async updateIfVersion(
+    db: DbOrTx,
+    id: string,
+    expectedVersion: number,
+    patch: Partial<NewArtifact>,
+  ): Promise<boolean> {
+    const rows = await db
+      .update(artifacts)
+      .set(patch)
+      .where(and(eq(artifacts.id, id), eq(artifacts.contentVersion, expectedVersion)))
+      .returning({ id: artifacts.id });
+    return rows.length > 0;
+  },
+
   /** Hard-delete parent (dipakai worker artifact-cleanup setelah child rows). */
   async deleteById(db: DbOrTx, id: string): Promise<void> {
     await db.delete(artifacts).where(eq(artifacts.id, id));
