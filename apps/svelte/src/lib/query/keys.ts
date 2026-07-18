@@ -14,7 +14,12 @@ export const queryKeys = {
 		list: (params: { includeArchived: boolean }) => ['workspaces', 'list', params] as const,
 		detail: (id: string) => ['workspaces', 'detail', id] as const,
 		sections: (id: string) => ['workspaces', 'sections', id] as const,
-		sectionDocument: (sectionId: string) => ['workspaces', 'sectionDocument', sectionId] as const
+		sectionDocument: (sectionId: string) => ['workspaces', 'sectionDocument', sectionId] as const,
+		sectionBuild: (sectionId: string) => ['workspaces', 'sectionBuild', sectionId] as const,
+		workspaceBuild: (id: string) => ['workspaces', 'workspaceBuild', id] as const,
+		sectionAnnotations: (sectionId: string) =>
+			['workspaces', 'sectionAnnotations', sectionId] as const,
+		sectionProposal: (sectionId: string) => ['workspaces', 'sectionProposal', sectionId] as const
 	},
 	folders: {
 		list: (workspaceId: string) => ['folders', 'list', workspaceId] as const
