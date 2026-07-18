@@ -1,13 +1,8 @@
 /**
- * Blank-document authoring (creating an empty BlockNote document to write into) is DEFERRED to
- * the post-cutover editor redesign. Until an editor exists, a created document opens in a READ-ONLY reader,
- * so surfacing a "create document" affordance would trap the user in an un-editable blank
- * artifact. This flag hides those affordances so nothing promises editing then no-ops.
- *
- * Scope: this gates ONLY authored blank documents. Uploads and "save URL" create artifacts that
- * are read-only by design (papers, PDFs, links) and stay enabled.
- *
- * Redesign flips this to `true` once the editor is wired (and, if the engine changes, once the
- * create flow targets the new editor).
+ * Blank-document authoring at the LIBRARY (loose markdown documents) stays OFF: a document
+ * created from the library opens in a read-only reader — the affordance would trap the user.
+ * Document writing now lives in the CHAPTER EDITOR (sections/[sectionId], DOCX via SuperDoc)
+ * and is not gated by this flag. This flag only gates the "create document" CTA in the library;
+ * remove it if library authoring is decided dead for good.
  */
 export const DOCUMENT_AUTHORING_ENABLED = false;
