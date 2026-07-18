@@ -1,0 +1,8 @@
+**/node_modules
+**/.git
+**/dist
+**/.svelte-kit
+**/.next
+**/.turbo
+**/build
+**/*.log
