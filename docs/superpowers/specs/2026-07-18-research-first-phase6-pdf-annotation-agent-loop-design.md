@@ -2,8 +2,9 @@
 
 Status: brainstorm disepakati 2026-07-18.
 Scope: `apps/svelte` + `packages/db` + `packages/services` + `apps/api` + `apps/agent`.
-Satu spec, **dua plan implementasi**: **6a** (viewer PDF + anotasi + compile UX) lalu **6b**
-(loop editing agen). 6a shippable sendiri.
+Satu spec, **satu plan implementasi menyeluruh** yang dieksekusi menerus dalam dua tahap
+internal: **6a** (viewer PDF + anotasi + compile UX) lalu **6b** (loop editing agen).
+Milestone akhir tahap 6a tetap verifiable sendiri.
 Rujukan: master spec `2026-07-17-research-first-repositioning-design.md`, pivot
 `2026-07-18-research-first-phase4-latex-foundation-design.md`, gate report
 `2026-07-18-research-first-phase4-latex-gate-report.md`, Fase 5
@@ -19,8 +20,9 @@ Terima/Tolak, compile resmi menyusul. Ditambah preview full-document minimal.
 
 ## Keputusan desain (hasil brainstorm)
 
-1. **Satu spec, dua plan (6a/6b).** Kontrak anotasi↔agen didesain utuh di sini; implementasi
-   dipecah supaya tiap plan shippable dan reviewable.
+1. **Satu spec, satu plan menyeluruh bertahap 6a→6b** (revisi user saat review: implementasi
+   Fase 6 dijalankan langsung keseluruhan). Kontrak anotasi↔agen didesain utuh di sini; tahap
+   6a punya milestone verifikasi sendiri sebelum masuk 6b.
 2. **Anchor anotasi = seleksi teks + pin titik.** Highlight seleksi (butuh text layer PDF.js;
    presisi frasa — konteks terbaik untuk Astra) dan pin bebas untuk area non-teks
    (gambar/persamaan). Tanpa region/kotak.
