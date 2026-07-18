@@ -209,6 +209,7 @@ Pivot LaTeX (2026-07-18) memperluas 5 → 8 fase: Fase 1–3 tetap; Fase 4 Super
    GO/NO-GO. ✅ **GO** (`…-phase4-latex-gate-report.md`).
 5. **Model dokumen LaTeX kanonik + assembly + storage** — preamble/thesis-class + body per-bab +
    komposisi `.bib`; autosave/versioning teks LaTeX. Menggantikan storage DOCX-artifact per section.
+   ✅ **selesai** (`…-phase5-latex-document-model-design.md` + plan).
 6. **Viewer PDF + lapisan anotasi + loop editing agen** — PDF.js + SyncTeX klik-ke-sumber; anotasi
    pinned + antrian; Astra sunting → diff → apply; loop compile-validate + self-repair. UX inti;
    mungkin dipecah 6a (viewer/anotasi) + 6b (loop agen).

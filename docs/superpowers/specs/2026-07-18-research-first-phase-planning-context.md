@@ -3,7 +3,7 @@
 Tanggal: 2026-07-18
 Tujuan: daftar dokumen + kode + skill yang **di-load sebagai konteks** sebelum brainstorm/plan
 tiap fase repositioning research-first (arah LaTeX/PDF agen-first). Bukan spec fase itu sendiri —
-ini indeks konteks. Roadmap: **8 fase**; Fase 1–4 selesai, 5–8 belum.
+ini indeks konteks. Roadmap: **8 fase**; Fase 1–5 selesai, 6–8 belum.
 
 Konvensi: spec/plan fase baru WAJIB lanjut penomoran `YYYY-MM-DD-research-first-phaseN-<slug>`
 (spec dulu → plan → implement). Brainstorm & planning **bahasa Indonesia**; istilah teknis Inggris.
@@ -27,10 +27,15 @@ Baca hanya bila perlu memahami keputusan lama.
 
 ---
 
-## Fase 5 — Model dokumen LaTeX kanonik + assembly + storage
+## Fase 5 — Model dokumen LaTeX kanonik + assembly + storage ✅ selesai
 
 Ganti storage byte-DOCX per bab → sumber LaTeX teks; rakit preamble/thesis-class + body per-bab +
 komposisi `.bib`; autosave/versioning teks.
+
+> ✅ **selesai** — impl di `2026-07-18-research-first-phase5-latex-document-model-design.md` (spec)
+> + `docs/superpowers/plans/2026-07-18-research-first-phase5-latex-document-model.md` (plan). Sumber
+> LaTeX inline ber-CAS + `document_revisions` + `latex_builds` (latest-only), `bib_key` persisten,
+> assembly per-bab/full, endpoint compile/build. Backend-only; UI viewer/editor = Fase 6/7.
 
 - **Definisi**: latex-foundation-design §"Peta fase" baris 5 + §"Ditunda" (model kanonik & storage).
 - **Data model**: master spec §"`workspace_sections`" (`document_artifact_id`, `role='bibliography'`)
