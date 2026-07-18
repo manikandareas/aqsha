@@ -238,6 +238,16 @@
 			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menolak usulan.'))
 		});
 	}
+
+	// Prefill draft dengan ringkasan error compile → user tinggal kirim (tetap HITL).
+	function askAstraFixBuild(): void {
+		const list = (build.data?.errors ?? [])
+			.slice(0, 10)
+			.map((e) => `- ${e.line != null ? `baris ${e.line}: ` : ''}${e.message}`)
+			.join('\n');
+		mentions.setComposerDraft(`Compile bab ini gagal. Perbaiki sumbernya.\n\nError:\n${list}`);
+		panelTab = 'chat';
+	}
 </script>
 
 <PageTitle title={section?.title ?? 'Bab'} />
@@ -347,6 +357,7 @@
 								<SectionBuildErrorPanel
 									errors={build.data.errors ?? []}
 									logTail={build.data.logTail}
+									onAskAstra={askAstraFixBuild}
 								/>
 							</div>
 						{/if}
