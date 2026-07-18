@@ -8,7 +8,7 @@
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
-	import { Icon, ArrowLeftIcon, DownloadIcon } from '$lib/icons';
+	import { Icon, ArrowLeftIcon, BookOpenIcon, DownloadIcon } from '$lib/icons';
 	import ProjectSidePanel from '$lib/features/workspaces/components/ProjectSidePanel.svelte';
 	import { useSections, useUpdateSection, useWorkspace } from '$lib/features/workspaces/api';
 	import { SECTION_STATUS_LABELS } from '$lib/features/workspaces/labels';
@@ -18,11 +18,14 @@
 		type SectionStatus
 	} from '$lib/features/workspaces/types';
 	import { useArtifact, useArtifactRender } from '$lib/features/artifacts/api';
+	import { useCitationSettings, useRenderDocumentCitations } from '$lib/features/citations/api';
+	import type { CitationStyleId, DocumentCitationCluster } from '$lib/features/citations/types';
 	import { useSaveSectionDocument } from '../api';
 	import { SectionAutosave } from '../autosave.svelte';
 	import BibliographyView from '../components/BibliographyView.svelte';
+	import SectionCitationPicker from '../components/SectionCitationPicker.svelte';
 	import SectionDocumentEditor from '../components/SectionDocumentEditor.svelte';
-	import type { SectionEditorHandle } from '../superdoc-client';
+	import { generateStructuredContentId, type SectionEditorHandle } from '../superdoc-client';
 
 	/**
 	 * Halaman bab: editor DOCX di kiri, panel proyek (sumber/chat) di kanan.
@@ -62,6 +65,57 @@
 
 	let editorHandle = $state<SectionEditorHandle | null>(null);
 	let panelTab = $state<'chat' | 'sources'>('sources');
+
+	let pickerOpen = $state(false);
+	// Snapshot pill sitasi dari dokumen — di-refresh tiap insert dan tiap editor update
+	// tersimpan; kunci render citeproc reaktif (ganti gaya proyek → refetch → sinkron pill).
+	let clusters = $state<DocumentCitationCluster[]>([]);
+
+	function refreshClusters() {
+		clusters = (editorHandle?.listCitations() ?? []).map((c) => ({
+			nodeId: c.nodeId,
+			citationIds: c.payload.citationIds,
+			...(c.payload.locator ? { locator: c.payload.locator } : {}),
+			...(c.payload.label ? { label: c.payload.label } : {}),
+			...(c.payload.prefix ? { prefix: c.payload.prefix } : {}),
+			...(c.payload.suffix ? { suffix: c.payload.suffix } : {})
+		}));
+	}
+
+	const citationSettings = useCitationSettings(() => projectId);
+	const styleId = $derived(
+		(citationSettings.data?.defaultStyleId ?? null) as CitationStyleId | null
+	);
+	// Query key is a stable `{ styleId, clusters }` signature, so a `refreshClusters()` triggered
+	// by an unrelated keystroke (same citation set, same nodeIds) doesn't refetch — only an actual
+	// style change or citation-set change does.
+	const documentRender = useRenderDocumentCitations(
+		() => projectId,
+		() => clusters,
+		() => styleId,
+		() => clusters.length > 0
+	);
+
+	// Sinkronkan teks pill di dokumen dari hasil render terbaru (ganti gaya, edit referensi, dst).
+	// Aman dari loop: `updateCitationText` memicu editor `onUpdate` → `refreshClusters()`, tapi
+	// nodeId/citationIds/locator pill tak berubah oleh sinkron teks, jadi signature query di atas
+	// tetap sama dan tidak memicu render ulang.
+	$effect(() => {
+		const result = documentRender.data;
+		if (!result || !editorHandle) return;
+		for (const rendered of result.clusters) {
+			editorHandle.updateCitationText(rendered.nodeId, rendered.text);
+		}
+	});
+
+	function insertCitation(citation: { id: string; title: string }) {
+		if (!editorHandle) return;
+		const nodeId = generateStructuredContentId();
+		// Teks sementara sampai render citeproc datang — pill langsung terlihat saat disisipkan.
+		editorHandle.insertCitation(nodeId, { citationIds: [citation.id] }, `(${citation.title})`);
+		refreshClusters();
+		autosave?.markDirty();
+	}
 
 	async function downloadDocx() {
 		if (!editorHandle || !section) return;
@@ -123,6 +177,9 @@
 			documentArtifactId ? (artifact.data?.artifact.contentVersion ?? undefined) : undefined
 		);
 		autosave = instance;
+		// Bab existing membawa pill dari save sebelumnya — sinkronkan snapshot begitu editor siap,
+		// jangan tunggu ketikan pertama.
+		refreshClusters();
 		return () => {
 			instance.dispose();
 			autosave = null;
@@ -188,6 +245,16 @@
 						{#if isBibliography}
 							<Badge variant="outline">otomatis</Badge>
 						{:else}
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								class="gap-1.5"
+								disabled={!editorHandle}
+								onclick={() => (pickerOpen = true)}
+							>
+								<Icon icon={BookOpenIcon} class="size-3.5" /> Sisipkan sitasi
+							</Button>
 							<Select.Root
 								type="single"
 								value={section.status}
@@ -251,7 +318,10 @@
 									documentUrl={renderUrl}
 									fileName={`${section.title}.docx`}
 									onHandle={(h) => (editorHandle = h)}
-									onUpdate={() => autosave?.markDirty()}
+									onUpdate={() => {
+										autosave?.markDirty();
+										refreshClusters();
+									}}
 								/>
 							{/key}
 						</div>
@@ -291,4 +361,13 @@
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
 	</AlertDialog.Root>
+{/if}
+
+{#if section && !isBibliography}
+	<SectionCitationPicker
+		open={pickerOpen}
+		onOpenChange={(o) => (pickerOpen = o)}
+		workspaceId={projectId}
+		onPick={insertCitation}
+	/>
 {/if}
