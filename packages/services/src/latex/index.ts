@@ -24,3 +24,8 @@ export {
   sectionFilePath,
 } from "./assembly.service";
 export { scanCiteKeys, stripTexComments } from "./cite-scan";
+export {
+  LatexBuildService,
+  type LatexBuildOutcome,
+  type LatexBuildView,
+} from "./build.service";
