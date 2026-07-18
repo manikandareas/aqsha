@@ -28,6 +28,9 @@
 		useUpdateAnnotation,
 		useDeleteAnnotation,
 		useMarkAnnotationsSent,
+		usePendingProposal,
+		useAcceptProposal,
+		useRejectProposal,
 		type AnnotationRect
 	} from '../api';
 	import { buildAnnotationClientContext } from '../lib/annotation-context';
@@ -36,6 +39,7 @@
 	import AnnotationQueuePanel from '../components/AnnotationQueuePanel.svelte';
 	import AnnotationComposerDialog from '../components/AnnotationComposerDialog.svelte';
 	import SectionBuildErrorPanel from '../components/SectionBuildErrorPanel.svelte';
+	import ProposalReviewCard from '../components/ProposalReviewCard.svelte';
 
 	/**
 	 * Halaman bab agen-first: PDF ter-compile + lapisan anotasi (seleksi teks / pin) yang
@@ -60,6 +64,9 @@
 	const deleteAnnotation = useDeleteAnnotation(() => sectionId);
 	const markSent = useMarkAnnotationsSent(() => sectionId);
 	const compile = useCompileSection(() => sectionId);
+	const proposal = usePendingProposal(() => sectionId);
+	const acceptProposal = useAcceptProposal(() => sectionId);
+	const rejectProposal = useRejectProposal(() => sectionId);
 	const qc = useQueryClient();
 
 	const section = $derived(sections.data?.find((s) => s.id === sectionId) ?? null);
@@ -207,6 +214,30 @@
 		void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionProposal(sectionId) });
 		void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionAnnotations(sectionId) });
 	}
+
+	function handleAcceptProposal(): void {
+		const p = proposal.data;
+		if (!p) return;
+		acceptProposal.mutate(p.id, {
+			onSuccess: (res) => {
+				if (res.status === 'accepted') {
+					toast.success('Suntingan diterapkan. Menyusun ulang PDF…');
+					requestCompile();
+				} else {
+					toast.warning('Sumber sudah berubah — usulan dibatalkan. Minta Astra menyusun ulang.');
+				}
+			},
+			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menerapkan usulan.'))
+		});
+	}
+
+	function handleRejectProposal(): void {
+		const p = proposal.data;
+		if (!p) return;
+		rejectProposal.mutate(p.id, {
+			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menolak usulan.'))
+		});
+	}
 </script>
 
 <PageTitle title={section?.title ?? 'Bab'} />
@@ -267,6 +298,16 @@
 							<BibliographyView workspaceId={projectId} />
 						</div>
 					{:else}
+						{#if proposal.data}
+							<div class="shrink-0 px-4 pt-1 pb-2">
+								<ProposalReviewCard
+									proposal={proposal.data}
+									accepting={acceptProposal.isPending}
+									onAccept={handleAcceptProposal}
+									onReject={handleRejectProposal}
+								/>
+							</div>
+						{/if}
 						{#if build.data?.pdfUrl}
 							<div class="shrink-0 px-4">
 								<Collapsible.Root open={queueOpen} onOpenChange={(next) => (queueOpen = next)}>

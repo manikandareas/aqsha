@@ -88,8 +88,7 @@ export type LatexBuildView = {
 } | null;
 
 export type LatexCompileOutcome =
-	| { status: 'ok'; buildId: string }
-	| { status: 'error'; errors: LatexCompileError[] };
+	{ status: 'ok'; buildId: string } | { status: 'error'; errors: LatexCompileError[] };
 
 export type AnnotationRect = { x: number; y: number; w: number; h: number };
 
@@ -232,10 +231,72 @@ export function useMarkAnnotationsSent(sectionId: () => string) {
 	const qc = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: async (input: { ids: string[]; threadId: string; messageId?: string }) =>
+			unwrap(await api.sections({ id: sectionId() }).annotations['mark-sent'].post(input)) as {
+				ok: true;
+			},
+		onSuccess: () => {
+			void qc.invalidateQueries({
+				queryKey: queryKeys.workspaces.sectionAnnotations(sectionId())
+			});
+		}
+	}));
+}
+
+export type PendingProposalView = {
+	id: string;
+	sectionId: string;
+	baseVersion: number;
+	proposedSource: string;
+	summary: string;
+	annotationIds: string[];
+	threadId: string | null;
+	createdAt: number;
+	currentSource: string;
+	currentVersion: number;
+	isStale: boolean;
+} | null;
+
+export type AcceptProposalResult =
+	{ status: 'accepted'; contentVersion: number } | { status: 'stale'; currentVersion: number };
+
+export function usePendingProposal(sectionId: () => string, enabled: () => boolean = alwaysTrue) {
+	const api = getApiClient();
+	return createQuery(() => ({
+		queryKey: queryKeys.workspaces.sectionProposal(sectionId()),
+		enabled: enabled() && Boolean(sectionId()),
+		queryFn: async () =>
+			unwrap(await api.sections({ id: sectionId() }).proposals.get()) as PendingProposalView
+	}));
+}
+
+export function useAcceptProposal(sectionId: () => string) {
+	const api = getApiClient();
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (proposalId: string) =>
 			unwrap(
-				await api.sections({ id: sectionId() }).annotations['mark-sent'].post(input)
+				await api.sections({ id: sectionId() }).proposals({ pid: proposalId }).accept.post()
+			) as AcceptProposalResult,
+		onSuccess: () => {
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionProposal(sectionId()) });
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionDocument(sectionId()) });
+			void qc.invalidateQueries({
+				queryKey: queryKeys.workspaces.sectionAnnotations(sectionId())
+			});
+		}
+	}));
+}
+
+export function useRejectProposal(sectionId: () => string) {
+	const api = getApiClient();
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (proposalId: string) =>
+			unwrap(
+				await api.sections({ id: sectionId() }).proposals({ pid: proposalId }).reject.post()
 			) as { ok: true },
 		onSuccess: () => {
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionProposal(sectionId()) });
 			void qc.invalidateQueries({
 				queryKey: queryKeys.workspaces.sectionAnnotations(sectionId())
 			});
