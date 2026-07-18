@@ -19,19 +19,15 @@ membuka Fase 5.
 | 6 | Error LaTeX → `errors[]` terstruktur (line+pesan) | PASS | PASS |
 
 Bukti otomatis: `packages/services/test/latex-gate.test.ts` (5 test, 6 kriteria)
-— lokal `bun test` = 5 pass. Docker: pada build `--network=none` (cache-only, di
-`infra/latex-compile/Dockerfile`), **keenam kriteria gate + keempat test
-compile-service LULUS di Ubuntu 22.04 arm64**; runner 5/6 — satu test timeout
-(`sh`+`sleep`, kasus anak yatim menahan pipe) gagal dan sudah diperbaiki
-(deviasi #6, terverifikasi 6/6 di macOS).
+— lokal `bun test` = 5 pass. Docker: image `aqsha-latex-gate` build **exit-0**; langkah
+`RUN --network=none … bun test test/latex-gate.test.ts test/latex-compile-service.test.ts
+test/latex-runner.test.ts` = **15 pass, 0 fail** di Ubuntu 22.04 arm64 (cache-only, tanpa
+jaringan). Termasuk `runSandboxed > timeout → kill` yang kini **513 ms** — sebelum fix runner
+menggantung 5002 ms → gagal (lihat deviasi #6). Keenam kriteria gate lulus di kedua platform.
 
-Status build image: rebuild final (dengan fix runner) TIDAK tuntas karena disk
-host penuh 100% saat rebuild (Docker builder cache membengkak lintas iterasi →
-content-store I/O error). Ini kendala infrastruktur host, BUKAN kegagalan test:
-keenam kriteria sudah terbukti LULUS offline di Linux pada build sebelum-fix, dan
-fix runner terverifikasi di macOS + secara logika hanya membatasi tunggu drain
-(mustahil meregresi 5 runner-test Linux yang sudah lulus). Rebuild bersih exit-0
-tertunda pembersihan disk host. Keputusan gate tidak bergantung padanya.
+Catatan proses: rebuild pertama-dengan-fix sempat terhalang disk host penuh 100% (Docker
+builder cache membengkak lintas iterasi → content-store I/O error). Diselesaikan dengan reset
+store Docker (hapus `Docker.raw` korup, reclaim ~18 GB), lalu build bersih lulus exit-0 di atas.
 
 ## Versi terpasang
 
