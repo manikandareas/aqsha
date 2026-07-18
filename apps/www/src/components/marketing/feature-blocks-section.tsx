@@ -1,187 +1,266 @@
 "use client";
 
 import { m, useReducedMotion } from "motion/react";
+import { useState } from "react";
 
+import {
+  ExpandableFeatureFrame,
+  useCanExpand,
+} from "@/components/marketing/expandable-feature-frame";
 import { FeatureFrame } from "@/components/marketing/feature-frame";
 import { MotionProvider } from "@/components/motion-provider";
-import { FEATURES } from "@/data/features";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  FEATURE_KEYS,
+  FEATURES,
+  featurePartnerIndex,
+} from "@/data/features";
+import { appUrl } from "@/lib/app-url";
+import { EASE_OUT } from "@/lib/motion";
 
-type BlockCopy = (typeof FEATURES)[keyof typeof FEATURES];
+type Feature = (typeof FEATURES)[keyof typeof FEATURES];
 
-function BlockNumber({ num, className }: { num: string; className?: string }) {
+/**
+ * StepBadge — keycap-style number chip. Steps alternate: even steps ink
+ * themselves in with the secondary (Deep Pine) face once in view, odd steps
+ * stay as outlined chips.
+ */
+function StepBadge({
+  num,
+  filled,
+  reduce,
+  delay,
+}: {
+  num: string;
+  filled: boolean;
+  reduce: boolean | null;
+  delay: number;
+}) {
+  if (!filled) {
+    return (
+      <span className="relative grid size-11 shrink-0 place-items-center rounded-md border-2 border-border bg-card font-mono text-sm font-bold text-foreground">
+        {num}
+      </span>
+    );
+  }
   return (
-    <span
-      aria-hidden
-      className={cn(
-        "font-heading block text-7xl leading-none text-foreground/15 lg:text-8xl",
-        className,
-      )}
-    >
+    <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-md border-2 border-secondary bg-card font-mono text-sm font-bold text-foreground">
       {num}
+      <m.span
+        aria-hidden
+        className="absolute inset-0 grid place-items-center bg-secondary text-secondary-foreground"
+        initial={reduce ? false : { opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        viewport={{ once: true, amount: 1 }}
+        transition={{ delay, duration: 0.45, ease: "easeOut" }}
+      >
+        {num}
+      </m.span>
     </span>
   );
 }
 
-function BlockCopyContent({
-  block,
-  align = "left",
+/**
+ * StepBlock — one cell of the steps grid: number badge over a full-bleed rail,
+ * then title, body, points, and a portrait FeatureFrame rising as one block.
+ * Even cells own the row's rail, which draws once across the viewport and runs
+ * behind the neighboring badge so the rows read as one continuous thread.
+ */
+function StepBlock({
+  feature,
+  index,
+  active,
+  partnerActive,
+  canExpand,
+  onHoverChange,
 }: {
-  block: BlockCopy;
-  align?: "left" | "center";
+  feature: Feature;
+  index: number;
+  active: boolean;
+  partnerActive: boolean;
+  canExpand: boolean;
+  onHoverChange: (index: number | null) => void;
 }) {
   const reduce = useReducedMotion();
+  const colDelay = (index % 2) * 0.18;
+  const ownsRail = index % 2 === 0;
+  const anchorLeft = index % 2 === 0;
+  const grow = canExpand && active;
+  const lean = canExpand && partnerActive;
+
   return (
     <m.div
-      className={align === "center" ? "text-center" : undefined}
+      id={feature.id}
+      className="relative scroll-mt-24"
+      style={{ zIndex: grow ? 30 : lean ? 5 : undefined }}
       initial={reduce ? false : { opacity: 0 }}
       whileInView={{ opacity: 1 }}
-      viewport={{ once: true, amount: 0.5 }}
-      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      viewport={{ once: true, amount: 0.3 }}
+      transition={{ duration: 0.6, ease: EASE_OUT, delay: colDelay }}
     >
-      <p className="text-sm font-medium text-muted-foreground sm:text-[15px]">
-        {block.phase}
-      </p>
-      <h3 className="font-heading mt-3 text-3xl font-medium leading-[1.08] tracking-normal text-foreground sm:text-4xl sm:leading-[1.06] lg:text-[2.75rem]">
-        {block.title}
-      </h3>
-      <p
-        className={cn(
-          "mt-4 max-w-xl text-pretty text-base leading-snug text-muted-foreground sm:mt-5 sm:text-lg sm:leading-snug",
-          align === "center" && "mx-auto",
-        )}
+      {/* In-view on the stable badge row — not the rail (scaleX 0 collapses IO). */}
+      <m.div
+        className="relative flex h-11 items-center"
+        initial={reduce ? false : "hidden"}
+        whileInView="show"
+        viewport={{ once: true, amount: "all" }}
       >
-        {block.body}
-      </p>
-      <p className="mt-4 text-sm leading-snug text-foreground/70 sm:text-[15px]">
-        {block.points.join(" · ")}
-      </p>
+        {ownsRail && (
+          <span
+            aria-hidden
+            className={
+              index === 0
+                ? "feature-step-rail feature-step-rail--first"
+                : "feature-step-rail feature-step-rail--pair"
+            }
+          >
+            <m.span
+              className="feature-step-rail-line"
+              variants={{
+                hidden: { scaleX: 0 },
+                show: {
+                  scaleX: 1,
+                  transition: { duration: 0.9, ease: EASE_OUT },
+                },
+              }}
+            />
+          </span>
+        )}
+        <StepBadge
+          num={feature.num}
+          filled={index % 2 === 0}
+          reduce={reduce}
+          delay={colDelay + 0.4}
+        />
+        <span aria-hidden className="ml-4 h-px flex-1 bg-border sm:hidden" />
+      </m.div>
+      <m.div
+        initial={reduce ? false : { y: 24 }}
+        whileInView={{ y: 0 }}
+        viewport={{ once: true, amount: 0.3 }}
+        transition={{ duration: 0.6, ease: EASE_OUT, delay: colDelay }}
+      >
+        <h3 className="font-heading mt-5 text-2xl font-medium leading-[1.15] text-foreground sm:text-[1.65rem]">
+          {feature.title}
+        </h3>
+        <p className="mt-2.5 max-w-md text-pretty text-[15px] leading-snug text-muted-foreground">
+          {feature.body}
+        </p>
+        <p className="mt-3 text-sm leading-snug text-foreground/70">
+          {feature.points.join(" · ")}
+        </p>
+        {/* Hover on the stable footprint, not the expanding overlay — avoids enter/leave flicker. */}
+        <div
+          className="relative mt-7 aspect-[4/3] sm:aspect-[4/5]"
+          onPointerEnter={(e) => {
+            if (canExpand && e.pointerType !== "touch") onHoverChange(index);
+          }}
+          onPointerLeave={(e) => {
+            if (canExpand && e.pointerType !== "touch") onHoverChange(null);
+          }}
+        >
+          {canExpand ? (
+            <ExpandableFeatureFrame
+              grow={grow}
+              lean={lean}
+              anchorLeft={anchorLeft}
+            >
+              <FeatureFrame
+                image={feature.image}
+                alt={feature.alt}
+                aspectClassName="h-full w-full"
+                initialRotate={index % 2 === 0 ? -1.1 : 1.1}
+              />
+            </ExpandableFeatureFrame>
+          ) : (
+            <div className="absolute inset-0">
+              <FeatureFrame
+                image={feature.image}
+                alt={feature.alt}
+                aspectClassName="h-full w-full"
+                initialRotate={index % 2 === 0 ? -1.1 : 1.1}
+              />
+            </div>
+          )}
+        </div>
+      </m.div>
     </m.div>
   );
 }
 
 /**
- * FeatureBlocksSection — replaces the old 300vh scroll theatre. Every flagship
- * feature is its own editorial block: copy on top, one BIG image frame below,
- * separated by very generous space. Each block gets a different layout (left,
- * shifted-right, full-bleed, portrait split) so the section never repeats
- * itself. Giant serif numbers replace icons.
- *
- * Signature micro-interaction lives in FeatureFrame: frames enter slightly
- * tilted and straighten as they scroll in, like photos being squared on a desk.
+ * FeatureBlocksSection — Backyard-style numbered-steps grid. A two-tone
+ * headline holds the first column while the four features flow as timeline
+ * cells (01–02 beside it, 03–04 on the next row), each with a badge that inks
+ * itself in on scroll, a connector hairline, and a portrait frame. The last
+ * cell closes the sequence with the "want details?" CTA pair.
  */
 export function FeatureBlocksSection() {
   const reduce = useReducedMotion();
-  const workspace = FEATURES.workspace;
-  const astra = FEATURES.astra;
-  const citations = FEATURES.citations;
-  const provenance = FEATURES.provenance;
+  const [activeFrame, setActiveFrame] = useState<number | null>(null);
+  const canExpand = useCanExpand();
 
   return (
     <MotionProvider>
-      <section id="cara-kerja" className="w-full scroll-mt-[72px] py-24 sm:py-32 lg:py-40">
-        {/* Header */}
-        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+      <section
+        id="cara-kerja"
+        className="w-full scroll-mt-[72px] overflow-x-clip py-24 sm:py-32 lg:py-40"
+      >
+        <div
+          id="fitur"
+          className="mx-auto grid w-full max-w-6xl scroll-mt-[72px] grid-cols-1 gap-x-8 gap-y-16 px-4 sm:grid-cols-2 sm:gap-y-20 sm:px-6 lg:grid-cols-3 lg:gap-x-12 lg:gap-y-24 lg:px-8"
+        >
           <m.div
-            className="mb-20 sm:mb-28 lg:mb-36"
+            className="sm:col-span-2 lg:col-span-1 lg:pr-4"
             initial={reduce ? false : { opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.5 }}
-            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.6, ease: EASE_OUT }}
           >
-            <p className="text-[15px] leading-snug text-muted-foreground sm:text-base">
-              Gimana cara pakainya
-            </p>
-            <h2 className="font-heading mt-3 max-w-[min(100%,44rem)] text-[2.5rem] font-medium leading-[1.08] tracking-normal text-foreground sm:mt-4 sm:text-[2.75rem] sm:leading-[1.06] lg:text-[3.25rem] lg:leading-[1.05]">
-              Dari nyari jurnal sampai siap dikirim.
+            <h2 className="font-heading text-balance text-4xl font-medium leading-[1.1] tracking-normal sm:text-[2.75rem] sm:leading-[1.08] lg:text-[2.9rem]">
+              <span className="block text-foreground">
+                Dari nyari jurnal sampai siap dikirim.
+              </span>
+              <span className="mt-2 block text-muted-foreground">
+                Empat langkah, ngikutin cara kamu riset beneran.
+              </span>
             </h2>
-            <p className="mt-5 max-w-xl text-pretty text-base leading-snug text-foreground/85 sm:text-lg sm:leading-snug">
-              Ngikutin cara kamu riset beneran — dari kumpulin bahan sampai bukti
-              proses.
-            </p>
           </m.div>
-        </div>
 
-        <div id="fitur" className="scroll-mt-[72px] space-y-28 sm:space-y-40 lg:space-y-52">
-          {/* 01 — copy kiri, frame contained */}
-          <div
-            id="fitur-workspace"
-            className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 sm:px-6 lg:px-8"
-          >
-            <div className="flex items-start gap-6 sm:gap-10">
-              <BlockNumber num={workspace.num} className="mt-1 shrink-0" />
-              <div className="max-w-2xl">
-                <BlockCopyContent block={workspace} />
-              </div>
-            </div>
-            <FeatureFrame
-              className="mt-10 sm:mt-12 lg:mt-14"
-              image={workspace.image}
-              alt={workspace.alt}
-              aspectClassName="aspect-[4/3] sm:aspect-[16/10]"
-              initialRotate={-1.2}
+          {FEATURE_KEYS.map((key, index) => (
+            <StepBlock
+              key={key}
+              feature={FEATURES[key]}
+              index={index}
+              active={activeFrame === index}
+              partnerActive={activeFrame === featurePartnerIndex(index)}
+              canExpand={canExpand}
+              onHoverChange={setActiveFrame}
             />
-          </div>
+          ))}
 
-          {/* 02 — copy digeser kanan, frame menjorok kanan */}
-          <div
-            id="fitur-astra"
-            className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 sm:px-6 lg:px-8"
+          <m.div
+            className="self-start sm:col-span-2 lg:col-span-1 lg:pt-16"
+            initial={reduce ? false : { opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.6, ease: EASE_OUT }}
           >
-            <div className="grid gap-6 lg:grid-cols-12 lg:gap-10">
-              <div className="lg:col-span-5">
-                <BlockNumber num={astra.num} />
-              </div>
-              <div className="max-w-2xl lg:col-span-7">
-                <BlockCopyContent block={astra} />
-              </div>
+            <h3 className="font-heading text-2xl font-medium leading-[1.15] sm:text-[1.65rem]">
+              <span className="block text-foreground">Mau lihat detailnya?</span>
+              <span className="mt-1 block text-muted-foreground">
+                Coba langsung — gratis, tanpa kartu.
+              </span>
+            </h3>
+            <div className="mt-7 flex flex-col items-start gap-3">
+              <Button asChild variant="outline" className="h-11 px-5">
+                <a href="#faq">Tanya-tanya dulu</a>
+              </Button>
+              <Button asChild className="h-11 px-5">
+                <a href={appUrl("/sign-up")}>Coba gratis →</a>
+              </Button>
             </div>
-            <FeatureFrame
-              className="mt-10 sm:mt-12 lg:-mr-10 lg:mt-14 lg:w-[calc(100%+2.5rem)]"
-              image={astra.image}
-              alt={astra.alt}
-              aspectClassName="aspect-[4/3] sm:aspect-[16/10]"
-              initialRotate={1.2}
-            />
-          </div>
-
-          {/* 03 — flagship: copy centered, frame full-bleed */}
-          <div id="fitur-citations" className="w-full scroll-mt-24">
-            <div className="mx-auto w-full max-w-2xl px-4 sm:px-6">
-              <BlockNumber num={citations.num} className="mx-auto w-fit" />
-              <div className="mt-6">
-                <BlockCopyContent block={citations} align="center" />
-              </div>
-            </div>
-            <FeatureFrame
-              className="mt-10 rounded-none border-x-0 sm:mt-12 lg:mt-16"
-              image={citations.image}
-              alt={citations.alt}
-              aspectClassName="aspect-[4/3] sm:aspect-[16/9] lg:aspect-[21/9]"
-              initialRotate={0}
-            />
-          </div>
-
-          {/* 04 — split: copy kiri sticky ringan, frame portrait kanan */}
-          <div
-            id="fitur-provenance"
-            className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 sm:px-6 lg:px-8"
-          >
-            <div className="grid gap-10 lg:grid-cols-2 lg:gap-x-16">
-              <div className="lg:sticky lg:top-28 lg:self-start">
-                <BlockNumber num={provenance.num} />
-                <div className="mt-6">
-                  <BlockCopyContent block={provenance} />
-                </div>
-              </div>
-              <FeatureFrame
-                image={provenance.image}
-                alt={provenance.alt}
-                aspectClassName="aspect-[4/3] sm:aspect-[4/5]"
-                initialRotate={-1}
-              />
-            </div>
-          </div>
+          </m.div>
         </div>
       </section>
     </MotionProvider>

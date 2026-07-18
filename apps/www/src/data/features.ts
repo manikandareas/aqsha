@@ -1,6 +1,6 @@
 /**
  * Feature identity SSOT for marketing — hero collage, feature blocks, and nav
- * share keys / hrefs / images / titles from here. Layout-only props (tilt,
+ * share keys / ids / images / titles from here. Layout-only props (tilt,
  * collage position) stay colocated with the section that owns them.
  */
 
@@ -8,15 +8,14 @@ export type FeatureKey = "workspace" | "astra" | "citations" | "provenance";
 
 export type FeatureDefinition = {
   key: FeatureKey;
-  /** Anchor id target, e.g. `#fitur-workspace`. */
-  href: string;
+  /** DOM id / hash target without `#`, e.g. `fitur-workspace`. */
+  id: string;
   image: string;
   /** Full editorial title (feature blocks + hero aria). */
   title: string;
   /** Short chrome label (hero window title bar). */
   label: string;
   num: string;
-  phase: string;
   body: string;
   points: readonly string[];
   alt: string;
@@ -28,12 +27,11 @@ export type FeatureDefinition = {
 export const FEATURES = {
   workspace: {
     key: "workspace",
-    href: "#fitur-workspace",
+    id: "fitur-workspace",
     image: "/landing/frame-workspace.webp",
     title: "Semua sumber di satu tempat",
     label: "Workspace",
     num: "01",
-    phase: "Pas mulai",
     body: "Cari referensi dan simpan semuanya di satu workspace — nggak ada lagi 30 tab kebuka dan bingung mana yang penting.",
     points: ["Cari jurnal dari workspace", "PDF, DOI, dan catatan jadi satu"],
     alt: "Workspace riset Aqsha dengan sumber, PDF, dan catatan terkumpul",
@@ -43,12 +41,11 @@ export const FEATURES = {
   },
   astra: {
     key: "astra",
-    href: "#fitur-astra",
+    id: "fitur-astra",
     image: "/landing/frame-astra.webp",
     title: "Nulis bareng Astra",
     label: "Nulis bareng Astra",
     num: "02",
-    phase: "Pas nyusun & nulis",
     body: "Astra bantu nyari dan nyusun bahan dari jurnal. Kamu yang ngarahin dan mikir, dia yang bantu beresin — bukan ngerjain semuanya.",
     points: ["Arah riset tetap di tanganmu", "Tiap poin nunjuk sumbernya"],
     alt: "Menulis draf riset bersama asisten Astra",
@@ -58,12 +55,11 @@ export const FEATURES = {
   },
   citations: {
     key: "citations",
-    href: "#fitur-citations",
+    id: "fitur-citations",
     image: "/landing/frame-citations.webp",
     title: "Tiap sumber dicek ke aslinya",
     label: "Cek sitasi",
     num: "03",
-    phase: "Sebelum submit",
     body: "Sebelum dikirim, Aqsha mastiin tiap kutipan beneran ada di sumbernya — dicocokin ke isi paper aslinya, bukan cuma judulnya.",
     points: ["Yang aman ditandai", "Yang meragukan diflag biar kamu cek dulu"],
     alt: "Pengecekan kutipan ke paper asli sebelum submit",
@@ -73,12 +69,11 @@ export const FEATURES = {
   },
   provenance: {
     key: "provenance",
-    href: "#fitur-provenance",
+    id: "fitur-provenance",
     image: "/landing/frame-provenance.webp",
     title: "Jejak prosesmu tersimpan",
     label: "Jejak proses",
     num: "04",
-    phase: "Kalau ditanya",
     body: "Setiap langkah nulismu direkam. Kalau tulisan jujurmu salah dicap buatan AI, kamu punya bukti prosesnya.",
     points: ["Kapan nulis, kapan pakai AI, kapan sitasi", "Bukti proses, bukan cuma hasil akhir"],
     alt: "Jejak proses penulisan yang terekam per langkah",
@@ -88,7 +83,7 @@ export const FEATURES = {
   },
 } as const satisfies Record<FeatureKey, FeatureDefinition>;
 
-/** Editorial order on the landing (workspace → provenance). */
+/** Editorial order on the landing (workspace → provenance). Must stay even length for the 2-col steps grid. */
 export const FEATURE_KEYS = [
   "workspace",
   "astra",
@@ -103,3 +98,21 @@ export const FEATURE_NAV_KEYS = [
   "citations",
   "workspace",
 ] as const satisfies readonly FeatureKey[];
+
+/** In-page hash, e.g. `#fitur-workspace`. */
+export function featureHash(id: string): string {
+  return `#${id}`;
+}
+
+/** Cross-page landing deep link, e.g. `/#fitur-workspace`. */
+export function featurePath(id: string): string {
+  return `/#${id}`;
+}
+
+/**
+ * Partner cell in the 2-column steps grid (0↔1, 2↔3).
+ * Assumes `FEATURE_KEYS` is even and laid out as row pairs.
+ */
+export function featurePartnerIndex(index: number): number {
+  return index % 2 === 0 ? index + 1 : index - 1;
+}

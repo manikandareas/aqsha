@@ -7,8 +7,14 @@ import { ArrowDownIcon } from "@/components/icons";
 import { HeroDoodles } from "@/components/marketing/hero-doodles";
 import { MagneticButton } from "@/components/marketing/magnetic-button";
 import { Button } from "@/components/ui/button";
-import { FEATURES, type FeatureKey } from "@/data/features";
+import {
+  FEATURE_KEYS,
+  FEATURES,
+  featureHash,
+  type FeatureKey,
+} from "@/data/features";
 import { appUrl } from "@/lib/app-url";
+import { EASE_OUT, FRAME_SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { LatestUpdate } from "@/lib/marketing/latest";
 
@@ -77,27 +83,12 @@ const HERO_FRAME_LAYOUT: Record<
   },
 };
 
-const HERO_FRAME_ORDER = [
-  "workspace",
-  "astra",
-  "citations",
-  "provenance",
-] as const satisfies readonly FeatureKey[];
-
-const HERO_FRAMES = HERO_FRAME_ORDER.map((key) => ({
+const HERO_FRAMES = FEATURE_KEYS.map((key) => ({
   ...FEATURES[key],
   ...HERO_FRAME_LAYOUT[key],
 }));
 
 type HeroFrame = (typeof HERO_FRAMES)[number];
-
-/** One shared spring for lift + neighbour shifts: fast settle, no bounce. */
-const STACK_SPRING = {
-  type: "spring",
-  stiffness: 400,
-  damping: 30,
-  mass: 0.8,
-} as const;
 
 /**
  * HeroFrameCard — one window in the stack. Hover / keyboard focus lifts it
@@ -143,7 +134,7 @@ function HeroFrameCard({
 
   return (
     <m.a
-      href={frame.href}
+      href={featureHash(frame.id)}
       aria-label={`Lihat fitur: ${frame.title}`}
       className={cn(
         "group absolute block outline-none",
@@ -170,7 +161,7 @@ function HeroFrameCard({
       <m.span
         className="relative block"
         animate={{ x: shiftX, y: liftY, rotate }}
-        transition={STACK_SPRING}
+        transition={FRAME_SPRING}
       >
         {/* Static shadow layer, faded in — animating box-shadow itself janks. */}
         <m.span
@@ -272,7 +263,7 @@ export function LandingHeroSection({
               className="lip-static mb-6 inline-flex max-w-full items-center gap-2 rounded-full border-2 border-border bg-card py-1 pl-1.5 pr-3.5 text-sm text-foreground transition-colors hover:bg-muted"
               initial={reduce ? false : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.45, ease: EASE_OUT }}
             >
               <span className="shrink-0 rounded-full border-2 border-coral-soft-border bg-coral-soft px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-coral-foreground">
                 {latestUpdate.tag}
@@ -287,7 +278,7 @@ export function LandingHeroSection({
               reduce ? false : { clipPath: "inset(0 100% 0 0)", opacity: 0.25 }
             }
             animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1 }}
-            transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.95, ease: EASE_OUT }}
           >
             Kenalan sama Astra, asisten risetmu
           </m.h1>
@@ -296,7 +287,7 @@ export function LandingHeroSection({
             className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-foreground/80 sm:mt-6 sm:text-lg sm:leading-relaxed"
             initial={reduce ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.12, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ delay: 0.12, duration: 0.55, ease: EASE_OUT }}
           >
             Aqsha itu ruang kerja AI tempat kamu baca, nulis, dan sitasi — tiap
             klaim tetap bisa dilacak balik ke paper aslinya.

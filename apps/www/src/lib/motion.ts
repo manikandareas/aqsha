@@ -3,6 +3,17 @@
 import { useEffect, useRef } from "react";
 import { useMotionValue, useSpring, useReducedMotion } from "motion/react";
 
+/** Shared editorial ease — hero, steps, section reveals. */
+export const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+
+/** Shared spring for hero shelf + feature-block frame expand/lean. */
+export const FRAME_SPRING = {
+  type: "spring",
+  stiffness: 400,
+  damping: 30,
+  mass: 0.8,
+} as const;
+
 type MagneticOptions = {
   /** Radius (px) within which the element reacts to the cursor. Default 120. */
   radius?: number;

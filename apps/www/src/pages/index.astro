@@ -2,11 +2,12 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import LandingFooter from "@/components/marketing/landing-footer.astro";
 import WhatsNewTeaserSection from "@/components/marketing/whats-new-teaser-section.astro";
+import { AudienceSection } from "@/components/marketing/audience-section";
 import { BottomCtaSection } from "@/components/marketing/bottom-cta-section";
 import { FaqSection } from "@/components/marketing/faq-section";
 import { FeatureBlocksSection } from "@/components/marketing/feature-blocks-section";
-import { ForYouSection } from "@/components/marketing/for-you-section";
 import { LandingHeroZone } from "@/components/marketing/landing-hero-zone";
+import { PricingSection } from "@/components/marketing/pricing-section";
 import { StructuredData } from "@/components/marketing/structured-data";
 import { UniversityMarqueeSection } from "@/components/marketing/university-marquee-section";
 import { WhyAqshaSection } from "@/components/marketing/why-aqsha-section";
@@ -42,7 +43,8 @@ const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
     <UniversityMarqueeSection client:visible />
     <WhyAqshaSection client:visible />
     <FeatureBlocksSection client:visible />
-    <ForYouSection client:visible />
+    <AudienceSection client:visible />
+    <PricingSection client:visible />
     <FaqSection client:visible />
     <WhatsNewTeaserSection latest={teaserLatest} />
     <BottomCtaSection client:visible />

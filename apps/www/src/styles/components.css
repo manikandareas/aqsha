@@ -145,6 +145,48 @@
 		background-color: var(--alert-fill);
 		box-shadow: 0 3px 0 0 var(--alert-edge);
 	}
+
+	/* Feature steps timeline rails — gap matches sm/lg grid gap-x; overlap sits under the partner badge.
+	   Layout shell owns translateY; the inner span owns scaleX so Motion doesn't clobber centering. */
+	.feature-step-rail {
+		--rail-gap: 2rem;
+		--rail-overlap: 1.5rem;
+		position: absolute;
+		top: 50%;
+		display: none;
+		height: 1px;
+		transform: translateY(-50%);
+	}
+
+	@media (min-width: 640px) {
+		.feature-step-rail {
+			display: block;
+		}
+	}
+
+	@media (min-width: 1024px) {
+		.feature-step-rail {
+			--rail-gap: 3rem;
+		}
+	}
+
+	.feature-step-rail--first {
+		left: 0;
+		width: 100vw;
+	}
+
+	.feature-step-rail--pair {
+		left: -50vw;
+		width: calc(50vw + 100% + var(--rail-gap) + var(--rail-overlap));
+	}
+
+	.feature-step-rail-line {
+		display: block;
+		height: 100%;
+		width: 100%;
+		transform-origin: left center;
+		background-color: var(--border);
+	}
 }
 
 @keyframes aq-shimmer {

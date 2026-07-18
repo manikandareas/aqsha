@@ -8,6 +8,7 @@
 import {
   FEATURE_NAV_KEYS,
   FEATURES,
+  featurePath,
   type FeatureKey,
 } from "@/data/features";
 
@@ -49,7 +50,7 @@ export const NAV_DESKTOP_MQ = "(min-width: 1024px)";
 function featureNavItem(key: FeatureKey): NavItem {
   const feature = FEATURES[key];
   return {
-    href: `/${feature.href}`,
+    href: featurePath(feature.id),
     label: feature.navLabel,
     description: feature.navDescription,
     icon: feature.navIcon,
