@@ -1,7 +1,11 @@
 # Research-first Fase 4: Editor bab SuperDoc
 
+> **SUPERSEDED 2026-07-18.** Gate GO/NO-GO SuperDoc = NO-GO (lihat `.superpowers/sdd/progress.md`).
+> Fase 4 di-pivot ke fondasi LaTeX/PDF agen-first:
+> `2026-07-18-research-first-phase4-latex-foundation-design.md`. Dokumen ini disimpan sebagai riwayat.
+
 Tanggal: 2026-07-18
-Status: disetujui untuk implementation plan
+Status: SUPERSEDED (implementasi SuperDoc dibangun lalu ditolak gate; diganti pivot LaTeX)
 Scope: `apps/svelte` + `apps/api` + `packages/services` + `packages/db` (satu migration additive)
 Induk: `docs/superpowers/specs/2026-07-17-research-first-repositioning-design.md` (fase 4 dari 5)
 
