@@ -12,6 +12,11 @@ export {
   renderDocumentCitations,
 } from "./citation-format";
 export {
+  type BibliographyExport,
+  buildBibliographyFile,
+  generateBibKeys,
+} from "./citation-bib";
+export {
   CitationUsageService,
   extractCitationClusters,
   type ParsedCitationCluster,

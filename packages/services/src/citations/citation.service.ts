@@ -31,6 +31,7 @@ import {
   renderBibliographyEntries,
   renderDocumentCitations,
 } from "./citation-format";
+import { type BibliographyExport, buildBibliographyFile } from "./citation-bib";
 import {
   buildCslFromManualInput,
   canonicalKeyForCsl,
@@ -852,6 +853,23 @@ export const CitationService = {
     const items = rows.map((r) => ({ ...(r.cslJson as CslItem), id: r.id }));
     const { content, mimeType, extension } = exportCitations(items, input.format);
     return { content, mimeType, filename: `sitasi.${extension}` };
+  },
+
+  /**
+   * .bib (biblatex) dari perpustakaan + peta id→kunci \cite{}. Himpunan kosong
+   * sah (dokumen tanpa sitasi tetap harus bisa compile) — beda dengan `export`
+   * yang menolak ekspor kosong.
+   */
+  async exportBib(
+    db: DbOrTx,
+    input: { ownerUserId: string; citationIds?: string[] },
+  ): Promise<BibliographyExport> {
+    const rows = input.citationIds?.length
+      ? (await CitationRepo.findByIds(db, input.ownerUserId, input.citationIds)).filter(
+          (r) => !r.deletedAt,
+        )
+      : await CitationRepo.listAllActive(db, input.ownerUserId);
+    return buildBibliographyFile(rows.map((r) => ({ id: r.id, csl: r.cslJson as CslItem })));
   },
 
   /**
