@@ -14,7 +14,9 @@ export {
 export {
   type BibliographyExport,
   buildBibliographyFile,
+  composeBibliography,
   generateBibKeys,
+  proposeBibKeys,
 } from "./citation-bib";
 export {
   CitationUsageService,

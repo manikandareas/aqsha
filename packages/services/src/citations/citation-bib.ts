@@ -45,14 +45,15 @@ function baseBibKey(csl: CslItem): string {
 }
 
 /**
- * Kunci sitasi stabil: deterministik terhadap himpunan input (diurut by id),
- * bebas tabrakan via suffix a/b/c…, hanya [a-z0-9] — aman untuk \cite{}.
+ * Usulkan kunci sitasi untuk item TANPA kunci, menghormati (dan menambah ke) `taken`
+ * — himpunan kunci yang sudah direservasi owner. Deterministik terhadap input
+ * (diurut by id), hanya [a-z0-9], tabrakan → suffix a/b/c….
  */
-export function generateBibKeys(
+export function proposeBibKeys(
   items: Array<{ id: string; csl: CslItem }>,
+  taken: Set<string>,
 ): Record<string, string> {
   const sorted = [...items].sort((a, b) => a.id.localeCompare(b.id));
-  const taken = new Set<string>();
   const keyById: Record<string, string> = {};
   for (const item of sorted) {
     const base = baseBibKey(item.csl);
@@ -64,19 +65,32 @@ export function generateBibKeys(
   return keyById;
 }
 
-/** CSL-JSON perpustakaan → isi file .bib (dialek biblatex) + peta id→kunci. */
+/** CSL-JSON + kunci eksternal (bib_key persisten) → isi file .bib dialek biblatex. */
+export function composeBibliography(items: Array<{ key: string; csl: CslItem }>): string {
+  if (items.length === 0) return "";
+  const withKeys = items.map(({ key, csl }) => ({
+    // citation-js menolak item tanpa type; fallback generik untuk data lama.
+    type: "document",
+    ...csl,
+    id: key,
+    "citation-key": key,
+  }));
+  const cite = new Cite(withKeys, { generateGraph: false });
+  return cite.format("biblatex") as string;
+}
+
+/** Kompat: propose dari nol (taken kosong) — untuk pemakai tanpa kunci persisten. */
+export function generateBibKeys(
+  items: Array<{ id: string; csl: CslItem }>,
+): Record<string, string> {
+  return proposeBibKeys(items, new Set());
+}
+
+/** CSL-JSON perpustakaan → .bib + peta id→kunci (kunci di-propose lokal, non-persisten). */
 export function buildBibliographyFile(
   items: Array<{ id: string; csl: CslItem }>,
 ): BibliographyExport {
   const keyById = generateBibKeys(items);
-  if (items.length === 0) return { bib: "", keyById };
-  const withKeys = items.map(({ id, csl }) => ({
-    // citation-js menolak item tanpa type; fallback generik untuk data lama.
-    type: "document",
-    ...csl,
-    id: keyById[id],
-    "citation-key": keyById[id],
-  }));
-  const cite = new Cite(withKeys, { generateGraph: false });
-  return { bib: cite.format("biblatex") as string, keyById };
+  const bib = composeBibliography(items.map(({ id, csl }) => ({ key: keyById[id]!, csl })));
+  return { bib, keyById };
 }

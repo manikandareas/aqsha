@@ -37,6 +37,7 @@ export const artifactTypes = [
   "csv",
   "code",
   "url",
+  "latex",
 ] as const;
 export type ArtifactType = (typeof artifactTypes)[number];
 
@@ -239,6 +240,7 @@ export function artifactFamilyForType(artifactType: ArtifactType): ArtifactFamil
   switch (artifactType) {
     case "markdown":
     case "plain_text":
+    case "latex":
       return "text";
     case "pdf":
     case "docx":
@@ -363,6 +365,8 @@ export function defaultLanguageForArtifactType(artifactType: ArtifactType): stri
       return "markdown";
     case "plain_text":
       return "text";
+    case "latex":
+      return "latex";
     default:
       return undefined;
   }

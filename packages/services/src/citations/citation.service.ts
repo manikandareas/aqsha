@@ -31,7 +31,11 @@ import {
   renderBibliographyEntries,
   renderDocumentCitations,
 } from "./citation-format";
-import { type BibliographyExport, buildBibliographyFile } from "./citation-bib";
+import {
+  type BibliographyExport,
+  composeBibliography,
+  proposeBibKeys,
+} from "./citation-bib";
 import {
   buildCslFromManualInput,
   canonicalKeyForCsl,
@@ -869,7 +873,55 @@ export const CitationService = {
           (r) => !r.deletedAt,
         )
       : await CitationRepo.listAllActive(db, input.ownerUserId);
-    return buildBibliographyFile(rows.map((r) => ({ id: r.id, csl: r.cslJson as CslItem })));
+    const keyById = await this.ensureBibKeys(db, {
+      ownerUserId: input.ownerUserId,
+      citationIds: rows.map((r) => r.id),
+    });
+    const bib = composeBibliography(
+      rows.map((r) => ({ key: keyById[r.id]!, csl: r.cslJson as CslItem })),
+    );
+    return { bib, keyById };
+  },
+
+  /**
+   * Pastikan tiap citation punya bib_key persisten; kembalikan peta id→kunci.
+   * Kunci di-assign SEKALI lalu beku — \cite{} yang tertanam di sumber tak boleh
+   * bergeser. Race assign paralel ditangkap unique index → refresh taken + retry.
+   */
+  async ensureBibKeys(
+    db: DbOrTx,
+    input: { ownerUserId: string; citationIds: string[] },
+  ): Promise<Record<string, string>> {
+    const rows = await CitationRepo.findByIds(db, input.ownerUserId, input.citationIds);
+    const keyById: Record<string, string> = {};
+    const missing: typeof rows = [];
+    for (const row of rows) {
+      if (row.bibKey) keyById[row.id] = row.bibKey;
+      else missing.push(row);
+    }
+    if (missing.length === 0) return keyById;
+
+    const taken = new Set(await CitationRepo.listTakenBibKeys(db, input.ownerUserId));
+    const proposed = proposeBibKeys(
+      missing.map((r) => ({ id: r.id, csl: r.cslJson as CslItem })),
+      taken,
+    );
+    const now = Date.now();
+    for (const row of missing) {
+      let key = proposed[row.id]!;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await CitationRepo.updateById(db, row.id, { bibKey: key, updatedAt: now });
+          break;
+        } catch (err) {
+          if ((err as { code?: string }).code !== "23505" || attempt >= 3) throw err;
+          const fresh = new Set(await CitationRepo.listTakenBibKeys(db, input.ownerUserId));
+          key = proposeBibKeys([{ id: row.id, csl: row.cslJson as CslItem }], fresh)[row.id]!;
+        }
+      }
+      keyById[row.id] = key;
+    }
+    return keyById;
   },
 
   /**

@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { CitationRepo } from "@aqsha/db";
-import { buildBibliographyFile, generateBibKeys } from "../src/citations/citation-bib";
+import {
+  buildBibliographyFile,
+  composeBibliography,
+  generateBibKeys,
+  proposeBibKeys,
+} from "../src/citations/citation-bib";
 import type { CslItem } from "../src/citations/citation-normalize";
 import { CitationService } from "../src/citations/citation.service";
 
@@ -50,6 +55,39 @@ describe("generateBibKeys", () => {
   });
 });
 
+describe("proposeBibKeys", () => {
+  const csl = (family: string, year: number) => ({
+    type: "book",
+    title: "T",
+    author: [{ family }],
+    issued: { "date-parts": [[year]] },
+  });
+
+  test("menghormati taken set — kunci terpakai tak diberikan ulang", () => {
+    const taken = new Set(["sugiyono2019"]);
+    const keys = proposeBibKeys([{ id: "a", csl: csl("Sugiyono", 2019) }], taken);
+    expect(keys.a).toBe("sugiyono2019a");
+    expect(taken.has("sugiyono2019a")).toBe(true);
+  });
+
+  test("stabil: item lama tak bergeser saat item baru masuk belakangan", () => {
+    const taken = new Set<string>();
+    const first = proposeBibKeys([{ id: "a", csl: csl("Creswell", 2018) }], taken);
+    const second = proposeBibKeys([{ id: "b", csl: csl("Creswell", 2018) }], taken);
+    expect(first.a).toBe("creswell2018");
+    expect(second.b).toBe("creswell2018a");
+  });
+});
+
+describe("composeBibliography", () => {
+  test("memakai kunci eksternal apa adanya", () => {
+    const bib = composeBibliography([
+      { key: "kuncicustom99", csl: { type: "book", title: "Judul", author: [{ family: "Penulis" }] } },
+    ]);
+    expect(bib).toMatch(/@\w+\{kuncicustom99,/);
+  });
+});
+
 describe("buildBibliographyFile", () => {
   test("menghasilkan entri biblatex dengan kunci yang di-generate", () => {
     const { bib, keyById } = buildBibliographyFile([
@@ -79,21 +117,26 @@ describe("buildBibliographyFile", () => {
 });
 
 describe("CitationService.exportBib", () => {
-  test("memetakan baris repo → bib + keyById", async () => {
-    spyOn(CitationRepo, "listAllActive").mockResolvedValue([
-      {
-        id: "row-1",
-        deletedAt: null,
-        cslJson: {
-          type: "book",
-          title: "Metode Penelitian",
-          author: [{ family: "Sugiyono" }],
-          issued: { "date-parts": [[2019]] },
-        },
+  test("memetakan baris repo → bib + keyById (assign bib_key lazy)", async () => {
+    const row = {
+      id: "row-1",
+      deletedAt: null,
+      bibKey: null,
+      cslJson: {
+        type: "book",
+        title: "Metode Penelitian",
+        author: [{ family: "Sugiyono" }],
+        issued: { "date-parts": [[2019]] },
       },
-    ] as never);
+    };
+    spyOn(CitationRepo, "listAllActive").mockResolvedValue([row] as never);
+    // exportBib → ensureBibKeys: baca ulang via findByIds, cek taken, assign lazy.
+    spyOn(CitationRepo, "findByIds").mockResolvedValue([row] as never);
+    spyOn(CitationRepo, "listTakenBibKeys").mockResolvedValue([]);
+    const updateById = spyOn(CitationRepo, "updateById").mockResolvedValue(undefined as never);
     const result = await CitationService.exportBib({} as never, { ownerUserId: "u1" });
     expect(result.keyById).toEqual({ "row-1": "sugiyono2019" });
     expect(result.bib).toMatch(/@\w+\{sugiyono2019,/);
+    expect(updateById).toHaveBeenCalledWith({}, "row-1", expect.objectContaining({ bibKey: "sugiyono2019" }));
   });
 });
