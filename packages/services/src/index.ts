@@ -265,19 +265,10 @@ export {
   type ProviderFolder,
 } from "./integrations";
 
-export {
-  type CompileError,
-  type CompileErrorSeverity,
-  LatexCompileService,
-  type LatexCompileInput,
-  type LatexCompileOptions,
-  type LatexCompileResult,
-  parseSynctex,
-  parseTexLog,
-  runSandboxed,
-  type SynctexData,
-  synctexInverseLookup,
-} from "./latex";
+// Modul latex dipakai lewat subpath `@aqsha/services/latex` (bukan barrel root).
+// Barrel root ikut di-typecheck oleh konsumen web (via tipe App @aqsha/api) yang
+// tak punya tipe global Bun; runner.ts memakai Bun.spawn. Menjaga latex di subpath
+// mengikuti konvensi granular paket ini dan mencegah Bun bocor ke type-graph web.
 
 // Waitlist publik — double opt-in via Resend (marketing site → API).
 export {
