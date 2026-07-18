@@ -8,6 +8,11 @@ export { InterestService } from "./interest.service";
 export { DEFAULT_WORKSPACE_NAME, WorkspaceService } from "./workspace.service";
 export { SECTION_TEMPLATES, type SectionTemplate } from "./workspaces/section-templates";
 export { SectionService } from "./section.service";
+export {
+  SectionDocumentService,
+  parseClustersJson,
+  type SaveSectionDocumentResult,
+} from "./section-document.service";
 export { FolderService } from "./folder.service";
 export { ContextService, type HydratedContext } from "./context.service";
 export {
