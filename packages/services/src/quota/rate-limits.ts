@@ -21,7 +21,8 @@ export type RateLimitRule =
   | "integrations:sync"
   | "waitlist:submit-ip"
   | "waitlist:submit-email"
-  | "waitlist:verify-ip";
+  | "waitlist:verify-ip"
+  | "latex:compile";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
@@ -49,6 +50,9 @@ const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number
   "waitlist:submit-ip": { points: 5, duration: 600 },
   "waitlist:submit-email": { points: 3, duration: 3600 },
   "waitlist:verify-ip": { points: 10, duration: 600 },
+  // Compile LaTeX sinkron memakan CPU detik-an per panggilan; 10/menit/user cukup untuk
+  // loop edit manusia + agen, sekaligus mencegah antrean compile menumpuk.
+  "latex:compile": { points: 10, duration: 60 },
 };
 
 /** Konfigurasi rule (points/duration) — dipakai `getSendStatus` untuk hitung cooldown. */

@@ -5,6 +5,7 @@ import {
   SectionService,
   WorkspaceService,
 } from "@aqsha/services";
+import { LatexBuildService } from "@aqsha/services/latex";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
@@ -232,6 +233,38 @@ export const workspaces = new Elysia()
         baseVersion: t.Optional(t.Numeric()),
       }),
     },
+  )
+  .post(
+    "/sections/:id/compile",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return LatexBuildService.compileSection(db, { ownerUserId, sectionId: params.id });
+    },
+    { auth: true, rateLimit: "latex:compile" },
+  )
+  .get(
+    "/sections/:id/build",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return LatexBuildService.getSectionBuild(db, { ownerUserId, sectionId: params.id });
+    },
+    { auth: true },
+  )
+  .post(
+    "/workspaces/:id/compile",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return LatexBuildService.compileWorkspace(db, { ownerUserId, workspaceId: params.id });
+    },
+    { auth: true, rateLimit: "latex:compile" },
+  )
+  .get(
+    "/workspaces/:id/build",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return LatexBuildService.getWorkspaceBuild(db, { ownerUserId, workspaceId: params.id });
+    },
+    { auth: true },
   )
   // ── Folder nested (legacy board) ─────────────────────────────────────────
   .get(
