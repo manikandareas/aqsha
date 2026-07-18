@@ -18,6 +18,8 @@ export * from "./citationImportBatchRepo";
 export * from "./documentCitationUsageRepo";
 export * from "./documentRevisionRepo";
 export * from "./latexBuildRepo";
+export * from "./documentAnnotationRepo";
+export * from "./sectionEditProposalRepo";
 export * from "./integrationConnectionRepo";
 export * from "./analysisSandboxRepo";
 export * from "./analysisResultBlockRepo";

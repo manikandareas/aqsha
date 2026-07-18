@@ -1,0 +1,64 @@
+import { and, asc, eq, inArray } from "drizzle-orm";
+import {
+  type DocumentAnnotation,
+  documentAnnotations,
+  type NewDocumentAnnotation,
+} from "../schema/documentAnnotations";
+import type { DbOrTx } from "../types";
+
+/** Repo document_annotations — query Drizzle saja; aturan lifecycle hidup di service. */
+export const DocumentAnnotationRepo = {
+  async findById(db: DbOrTx, ownerUserId: string, id: string): Promise<DocumentAnnotation | null> {
+    const rows = await db
+      .select()
+      .from(documentAnnotations)
+      .where(and(eq(documentAnnotations.ownerUserId, ownerUserId), eq(documentAnnotations.id, id)))
+      .limit(1);
+    return rows[0] ?? null;
+  },
+
+  async listBySection(
+    db: DbOrTx,
+    ownerUserId: string,
+    sectionId: string,
+  ): Promise<DocumentAnnotation[]> {
+    return db
+      .select()
+      .from(documentAnnotations)
+      .where(
+        and(
+          eq(documentAnnotations.ownerUserId, ownerUserId),
+          eq(documentAnnotations.sectionId, sectionId),
+        ),
+      )
+      .orderBy(asc(documentAnnotations.createdAt));
+  },
+
+  async insert(db: DbOrTx, row: NewDocumentAnnotation): Promise<void> {
+    await db.insert(documentAnnotations).values(row);
+  },
+
+  async updateById(db: DbOrTx, id: string, patch: Partial<NewDocumentAnnotation>): Promise<void> {
+    await db.update(documentAnnotations).set(patch).where(eq(documentAnnotations.id, id));
+  },
+
+  async deleteById(db: DbOrTx, id: string): Promise<void> {
+    await db.delete(documentAnnotations).where(eq(documentAnnotations.id, id));
+  },
+
+  /** Transisi status massal (mark-sent / resolve / reopen) — dibatasi owner + daftar id. */
+  async updateStatusByIds(
+    db: DbOrTx,
+    ownerUserId: string,
+    ids: string[],
+    patch: Partial<NewDocumentAnnotation>,
+  ): Promise<void> {
+    if (ids.length === 0) return;
+    await db
+      .update(documentAnnotations)
+      .set(patch)
+      .where(
+        and(eq(documentAnnotations.ownerUserId, ownerUserId), inArray(documentAnnotations.id, ids)),
+      );
+  },
+};

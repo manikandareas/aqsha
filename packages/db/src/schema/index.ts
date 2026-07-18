@@ -18,6 +18,8 @@ export * from "./citationImportBatches";
 export * from "./documentCitationUsages";
 export * from "./documentRevisions";
 export * from "./latexBuilds";
+export * from "./documentAnnotations";
+export * from "./sectionEditProposals";
 export * from "./integrationConnections";
 export * from "./analysisSandboxes";
 export * from "./analysisResultBlocks";
