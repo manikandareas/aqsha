@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { beforeNavigate } from '$app/navigation';
 	import { Badge } from '@aqsha/ui-svelte/components/badge';
@@ -154,9 +155,13 @@
 		);
 	}
 
-	// Satu scheduler per editor termount. `artifact.data` sudah pasti terisi di sini untuk bab
-	// existing — `editorReady` menahan blok editor sampai render+detail artifact selesai dimuat,
-	// jadi baseVersion awal selalu benar sebelum ketikan pertama bisa terjadi.
+	// Effect A: satu scheduler per editor+bab, dikonstruksi SEKALI. Sengaja TIDAK bergantung
+	// reaktif pada `artifact.data` — save sukses menginvalidasi `artifacts.detail`, dan kalau
+	// effect ini ikut re-run tiap refetch, instance lama dibongkar (timer save susulan yang sudah
+	// di-re-arm karena ketikan SAAT save masih in-flight ikut batal) lalu diganti instance idle
+	// baru, diam-diam menghilangkan ketikan itu. baseVersion awal dibaca lewat `untrack` supaya
+	// pembacaan `artifact.data` di sini tidak ikut jadi dependency; sinkronisasi baseVersion
+	// selanjutnya ditangani reaktif oleh Effect B tanpa membongkar instance.
 	$effect(() => {
 		if (!editorHandle || !section || isBibliography) return;
 		const instance = new SectionAutosave({
@@ -173,9 +178,10 @@
 				staleVersion = v;
 			}
 		});
-		instance.setBaseVersion(
+		const initialVersion = untrack(() =>
 			documentArtifactId ? (artifact.data?.artifact.contentVersion ?? undefined) : undefined
 		);
+		instance.setBaseVersion(initialVersion);
 		autosave = instance;
 		// Bab existing membawa pill dari save sebelumnya — sinkronkan snapshot begitu editor siap,
 		// jangan tunggu ketikan pertama.
@@ -184,6 +190,17 @@
 			instance.dispose();
 			autosave = null;
 		};
+	});
+
+	// Effect B: sinkronkan baseVersion tiap kali detail artifact berubah (mis. refetch sesudah save
+	// sukses, atau save pertama yang baru mengisi documentArtifactId) — TANPA membongkar scheduler.
+	// Instance sudah membarui `#baseVersion`-nya sendiri sesudah tiap save, jadi re-affirm nilai
+	// yang sama di sini aman (idempoten).
+	$effect(() => {
+		if (!autosave) return;
+		autosave.setBaseVersion(
+			documentArtifactId ? (artifact.data?.artifact.contentVersion ?? undefined) : undefined
+		);
 	});
 
 	beforeNavigate(() => {
