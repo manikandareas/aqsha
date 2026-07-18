@@ -18,18 +18,21 @@ export type RunOptions = {
 };
 
 const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+// Jeda flush setelah proses mati. Drain normal selesai jauh di bawah ini; batas
+// ini hanya menjaga dari gantung saat proses yang dibunuh meninggalkan anak yatim
+// yang masih memegang pipe stdout/stderr (mis. `sh -c "sleep"` di Linux).
+const DRAIN_GRACE_MS = 200;
 
-async function drainCapped(
+async function drainInto(
   stream: ReadableStream<Uint8Array>,
   cap: number,
-): Promise<string> {
+  sink: { text: string },
+): Promise<void> {
   const decoder = new TextDecoder();
-  let out = "";
   for await (const chunk of stream) {
     // Terus drain melewati cap supaya pipe child tak penuh dan proses tak menggantung.
-    if (out.length < cap) out += decoder.decode(chunk, { stream: true });
+    if (sink.text.length < cap) sink.text += decoder.decode(chunk, { stream: true });
   }
-  return out.slice(0, cap);
 }
 
 function withMemoryLimit(cmd: string[], maxMemoryKb?: number): string[] {
@@ -58,16 +61,27 @@ export async function runSandboxed(cmd: string[], opts: RunOptions): Promise<Run
     proc.kill("SIGKILL");
   }, opts.timeoutMs);
   const cap = opts.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
-  const [stdout, stderr, exitCode] = await Promise.all([
-    drainCapped(proc.stdout, cap),
-    drainCapped(proc.stderr, cap),
-    proc.exited,
+  const stdoutSink = { text: "" };
+  const stderrSink = { text: "" };
+  const drains = Promise.all([
+    drainInto(proc.stdout, cap, stdoutSink).catch(() => {}),
+    drainInto(proc.stderr, cap, stderrSink).catch(() => {}),
   ]);
+  const exitCode = await proc.exited;
   clearTimeout(timer);
+  // Tunggu drain selesai, TAPI jangan menggantung: kalau proses dibunuh dan anak
+  // yatim masih menahan pipe, drain tak akan pernah selesai — ambil output parsial.
+  await new Promise<void>((resolve) => {
+    const grace = setTimeout(resolve, DRAIN_GRACE_MS);
+    void drains.finally(() => {
+      clearTimeout(grace);
+      resolve();
+    });
+  });
   return {
     exitCode: timedOut ? null : exitCode,
-    stdout,
-    stderr,
+    stdout: stdoutSink.text.slice(0, cap),
+    stderr: stderrSink.text.slice(0, cap),
     timedOut,
     killedBy: proc.signalCode ?? null,
   };
