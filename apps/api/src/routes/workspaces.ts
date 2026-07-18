@@ -6,7 +6,7 @@ import {
   SectionService,
   WorkspaceService,
 } from "@aqsha/services";
-import { LatexBuildService } from "@aqsha/services/latex";
+import { LatexBuildService, SectionProposalService } from "@aqsha/services/latex";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
@@ -360,6 +360,31 @@ export const workspaces = new Elysia()
         messageId: t.Optional(t.String()),
       }),
     },
+  )
+  // ── Proposal suntingan agen ──────────────────────────────────────────────
+  .get(
+    "/sections/:id/proposals",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return SectionProposalService.getPending(db, { ownerUserId, sectionId: params.id });
+    },
+    { auth: true },
+  )
+  .post(
+    "/sections/:id/proposals/:pid/accept",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return SectionProposalService.accept(db, { ownerUserId, proposalId: params.pid });
+    },
+    { auth: true },
+  )
+  .post(
+    "/sections/:id/proposals/:pid/reject",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return SectionProposalService.reject(db, { ownerUserId, proposalId: params.pid });
+    },
+    { auth: true },
   )
   // ── Folder nested (legacy board) ─────────────────────────────────────────
   .get(
