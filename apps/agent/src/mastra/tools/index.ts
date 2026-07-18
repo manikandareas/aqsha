@@ -5,6 +5,7 @@ import { exportAnalysisResults } from "./export-analysis-results";
 import { formatReferences } from "./format-references";
 import { getArtifact } from "./get-artifact";
 import { getRenderPayload } from "./get-render-payload";
+import { getSectionSource } from "./get-section-source";
 import { getWorkspaceCitation } from "./get-workspace-citation";
 import { linkToWorkspace } from "./link-to-workspace";
 import { listAnalyses } from "./list-analyses";
@@ -15,6 +16,7 @@ import { profileDataset } from "./profile-dataset";
 import { runAnalysis } from "./run-analysis";
 import { runPythonAnalysis } from "./run-python-analysis";
 import { proposeArtifact } from "./propose-artifact";
+import { proposeSectionEdit } from "./propose-section-edit";
 import { readUrl } from "./read-url";
 import { renameWorkspace } from "./rename-workspace";
 import { requestDocumentEdit } from "./request-document-edit";
@@ -40,11 +42,15 @@ export const readTools = {
   get_workspace_citation: getWorkspaceCitation,
   // Sinyal picu AI editor native (Fase 3.5) — TANPA write DB; penyuntingan + billing dijaga route.
   request_document_edit: requestDocumentEdit,
+  // Baca sumber LaTeX bab + anotasi terbuka; wajib sebelum propose_section_edit.
+  get_section_source: getSectionSource,
 };
 
 /** Tool mutasi data app. `delete_artifact` = approval-card; sisanya konfirmasi percakapan. */
 export const writeTools = {
   propose_artifact: proposeArtifact,
+  // Usulkan suntingan LaTeX bab (gated dry-run compile); user Terima/Tolak di halaman bab.
+  propose_section_edit: proposeSectionEdit,
   create_workspace: createWorkspace,
   rename_workspace: renameWorkspace,
   link_to_workspace: linkToWorkspace,
