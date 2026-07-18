@@ -8,9 +8,14 @@ export { parseTexLog } from "./log-parser";
 export { type RunOptions, type RunResult, runSandboxed } from "./runner";
 export {
   parseSynctex,
+  pdfPointToSp,
+  SP_PER_PDF_POINT,
+  spToPdfPoint,
   type SynctexData,
   type SynctexRecord,
+  synctexForwardLookup,
   synctexInverseLookup,
+  synctexInverseLookupPdfPoint,
 } from "./synctex";
 export type { CompileError, CompileErrorSeverity } from "./types";
 export {

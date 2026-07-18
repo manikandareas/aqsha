@@ -101,3 +101,64 @@ export function synctexInverseLookup(
   }
   return best;
 }
+
+/**
+ * Koordinat file synctex = sp TeX (65536 sp = 1 pt TeX = 1/72.27 inch) dikali `unit`;
+ * PDF point = 1/72 inch. Konversi di sini supaya konsumen (anotasi/overlay) hanya
+ * berbicara dalam PDF point (satuan viewport pdf.js scale 1).
+ */
+export const SP_PER_PDF_POINT = (65536 * 72.27) / 72;
+
+export function pdfPointToSp(pt: number): number {
+  return pt * SP_PER_PDF_POINT;
+}
+
+export function spToPdfPoint(sp: number): number {
+  return sp / SP_PER_PDF_POINT;
+}
+
+/** Inverse lookup dengan target dalam PDF point (origin kiri-atas halaman). */
+export function synctexInverseLookupPdfPoint(
+  data: SynctexData,
+  target: { page: number; xPt: number; yPt: number },
+): { file: string; line: number; distance: number } | null {
+  const unit = data.unit || 1;
+  return synctexInverseLookup(data, {
+    page: target.page,
+    x: pdfPointToSp(target.xPt) / unit,
+    y: pdfPointToSp(target.yPt) / unit,
+  });
+}
+
+/**
+ * Forward lookup: (file, baris) → posisi PDF (halaman + titik dalam pt). Pilih record dengan
+ * selisih baris terkecil pada file tersebut (match by suffix path — Tectonic menulis path
+ * absolut tmpdir); seri dipecah oleh baris lebih kecil lalu halaman lebih awal. Dipakai
+ * re-anchor marker anotasi lintas build (best-effort — baris yang bergeser jauh oleh
+ * suntingan tampil sebagai basi, bukan salah tempat).
+ */
+export function synctexForwardLookup(
+  data: SynctexData,
+  target: { file: string; line: number },
+): { page: number; xPt: number; yPt: number; line: number } | null {
+  const tags = new Set(
+    [...data.inputs.entries()].filter(([, p]) => p.endsWith(target.file)).map(([t]) => t),
+  );
+  if (tags.size === 0) return null;
+  const unit = data.unit || 1;
+  let best: { record: SynctexRecord; delta: number } | null = null;
+  for (const record of data.records) {
+    if (!tags.has(record.tag)) continue;
+    const delta = Math.abs(record.line - target.line);
+    if (!best || delta < best.delta || (delta === best.delta && record.page < best.record.page)) {
+      best = { record, delta };
+    }
+  }
+  if (!best) return null;
+  return {
+    page: best.record.page,
+    xPt: spToPdfPoint(best.record.x * unit),
+    yPt: spToPdfPoint(best.record.y * unit),
+    line: best.record.line,
+  };
+}

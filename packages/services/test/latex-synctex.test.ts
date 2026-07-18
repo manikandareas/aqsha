@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseSynctex, synctexInverseLookup } from "../src/latex/synctex";
+import {
+  parseSynctex,
+  pdfPointToSp,
+  spToPdfPoint,
+  synctexForwardLookup,
+  synctexInverseLookup,
+  synctexInverseLookupPdfPoint,
+} from "../src/latex/synctex";
 
 const FIXTURE = new Uint8Array(
   readFileSync(join(import.meta.dir, "fixtures/latex/sample.synctex.gz")),
@@ -60,5 +67,53 @@ describe("synctexInverseLookup", () => {
   test("halaman tanpa record → null", () => {
     const data = parseSynctex(FIXTURE);
     expect(synctexInverseLookup(data, { page: 99, x: 0, y: 0 })).toBeNull();
+  });
+});
+
+describe("konversi koordinat sp ↔ PDF point", () => {
+  test("round-trip pt → sp → pt stabil", () => {
+    expect(spToPdfPoint(pdfPointToSp(100))).toBeCloseTo(100, 3);
+    // 1 inch = 72 pt PDF = 72.27 pt TeX = 72.27*65536 sp.
+    expect(pdfPointToSp(72)).toBeCloseTo(72.27 * 65536, -2);
+  });
+});
+
+describe("synctexInverseLookupPdfPoint", () => {
+  test("koordinat record (dikonversi ke pt) → baris sumber yang sama", () => {
+    const data = parseSynctex(FIXTURE);
+    const mainTags = new Set(
+      [...data.inputs.entries()].filter(([, p]) => p.endsWith("main.tex")).map(([t]) => t),
+    );
+    const anchor = data.records.find(
+      (r) => r.page === 1 && mainTags.has(r.tag) && Math.abs(r.line - CITE_LINE) <= 1,
+    );
+    expect(anchor).toBeDefined();
+    if (!anchor) return;
+    const found = synctexInverseLookupPdfPoint(data, {
+      page: 1,
+      xPt: spToPdfPoint(anchor.x * data.unit),
+      yPt: spToPdfPoint(anchor.y * data.unit),
+    });
+    expect(found?.file.endsWith("main.tex")).toBe(true);
+    expect(Math.abs((found?.line ?? 0) - CITE_LINE)).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("synctexForwardLookup", () => {
+  test("file+baris \\cite → posisi halaman 1 dengan koordinat pt masuk akal", () => {
+    const data = parseSynctex(FIXTURE);
+    const hit = synctexForwardLookup(data, { file: "main.tex", line: CITE_LINE });
+    expect(hit).not.toBeNull();
+    expect(hit?.page).toBe(1);
+    // Halaman A4 ≈ 595×842 pt — koordinat wajib dalam rentang halaman.
+    expect(hit!.xPt).toBeGreaterThanOrEqual(0);
+    expect(hit!.xPt).toBeLessThan(700);
+    expect(hit!.yPt).toBeGreaterThanOrEqual(0);
+    expect(hit!.yPt).toBeLessThan(900);
+  });
+
+  test("file tak dikenal / baris jauh → null atau baris terdekat masih di file itu", () => {
+    const data = parseSynctex(FIXTURE);
+    expect(synctexForwardLookup(data, { file: "tidak-ada.tex", line: 1 })).toBeNull();
   });
 });
