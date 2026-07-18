@@ -30,8 +30,8 @@
 	 * (`variant="page"`) and the thread-detail artifact side panel (`variant="panel"`); only the chrome differs.
 	 *
 	 * Document editing is deferred to the post-cutover editor redesign. Both variants render markdown
-	 * read-only as prose; the page variant adds a small read-only note. Render-error / autosave surfaces
-	 * are not modelled (they belong to the editor redesign).
+	 * read-only as prose; the page variant adds a small read-only note. Render-error and
+	 * save-status surfaces are not modelled (they belong to the editor redesign).
 	 */
 	type ArtifactDetailData = ReturnType<typeof useArtifactDetailData>;
 	type ArtifactDetailVariant = 'page' | 'panel';

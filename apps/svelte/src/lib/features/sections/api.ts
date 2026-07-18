@@ -3,11 +3,18 @@ import { getApiClient } from '$lib/api';
 import { queryKeys, unwrap } from '$lib/query';
 
 /**
- * Hooks dokumen bab. Save TIDAK memakai toast onError — indikator autosave di header editor
- * membaca status mutation langsung; toast per retry debounced akan jadi spam.
+ * Hooks dokumen bab (sumber LaTeX). Save mengembalikan union `stale_write` dan tidak
+ * men-toast error di sini — konsumen editor menampilkan status simpannya sendiri.
  */
 
 const alwaysTrue = () => true;
+
+export type SectionDocumentPayload = {
+	artifactId: string;
+	source: string;
+	contentVersion: number;
+	updatedAt: number;
+} | null;
 
 export type SaveSectionDocumentResult =
 	| { status: 'saved'; artifactId: string; contentVersion: number; sectionStatus: string }
@@ -18,24 +25,35 @@ export type WorkspaceBibliography = {
 	entries: Array<{ id: string; text: string }>;
 };
 
-/** Simpan DOCX bab hasil export SuperDoc. `baseVersion` mismatch → `stale_write` (union, bukan throw). */
+/** Sumber LaTeX bab (null = belum pernah ditulis). */
+export function useSectionDocument(sectionId: () => string) {
+	const api = getApiClient();
+	return createQuery(() => ({
+		queryKey: queryKeys.workspaces.sectionDocument(sectionId()),
+		queryFn: async () =>
+			unwrap(await api.sections({ id: sectionId() }).document.get()) as SectionDocumentPayload
+	}));
+}
+
+/**
+ * Simpan sumber LaTeX bab. `baseVersion` mismatch → `stale_write` (union, bukan throw).
+ * PENTING (aturan spec): respons save TIDAK boleh memicu refetch/replace buffer editor —
+ * hanya perbarui baseVersion pemanggil; buffer client = source of truth selama mengetik.
+ */
 export function useSaveSectionDocument(sectionId: () => string, workspaceId: () => string) {
 	const api = getApiClient();
 	const qc = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: async (input: { file: File; baseVersion?: number; clustersJson?: string }) =>
+		mutationFn: async (input: { source: string; baseVersion?: number }) =>
 			unwrap(
 				await api.sections({ id: sectionId() }).document.put({
-					file: input.file,
-					...(input.baseVersion !== undefined ? { baseVersion: input.baseVersion } : {}),
-					...(input.clustersJson ? { clustersJson: input.clustersJson } : {})
+					source: input.source,
+					...(input.baseVersion !== undefined ? { baseVersion: input.baseVersion } : {})
 				})
 			) as SaveSectionDocumentResult,
 		onSuccess: (result: SaveSectionDocumentResult) => {
 			if (result.status !== 'saved') return;
 			qc.invalidateQueries({ queryKey: queryKeys.workspaces.sections(workspaceId()) });
-			qc.invalidateQueries({ queryKey: queryKeys.artifacts.detail(result.artifactId) });
-			qc.invalidateQueries({ queryKey: queryKeys.artifacts.render(result.artifactId) });
 			qc.invalidateQueries({ queryKey: queryKeys.citations.bibliography(workspaceId()) });
 		}
 	}));
