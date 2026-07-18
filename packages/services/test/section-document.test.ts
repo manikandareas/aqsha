@@ -4,6 +4,7 @@ import {
   WorkspaceSectionRepo,
 } from "@aqsha/db";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import * as extractMod from "../src/artifacts/extract";
 
 const { SectionDocumentService, parseClustersJson } = await import(
   "../src/section-document.service"
@@ -141,6 +142,45 @@ describe("SectionDocumentService.saveDocument", () => {
     expect(patch.contentVersion).toBe(4);
   });
 
+  test("save berikutnya dengan ekstraksi teks sukses: plainText tersinkron ke artifact yang benar", async () => {
+    spyCommon();
+    // Every other test in this file feeds a 4-byte corrupt DOCX fixture, so extraction always
+    // fails and the `plainText !== null` sync branches never run. Mock a real extraction result
+    // to exercise those branches here.
+    const extractedText = "Isi bab hasil ekstraksi DOCX yang sebenarnya.";
+    spyOn(extractMod, "extractStoredDocument").mockResolvedValue({
+      markdown: extractedText,
+      plainText: extractedText,
+    } as never);
+    spyOn(SectionService, "assertSectionOwner").mockResolvedValue(
+      makeSection({ status: "draft", documentArtifactId: "a1" }),
+    );
+    spyOn(ArtifactRepo, "findById").mockResolvedValue(makeDocArtifact());
+    const artifactUpdate = spyOn(ArtifactRepo, "update").mockResolvedValue(undefined as never);
+    const contentUpdate = spyOn(ArtifactContentRepo, "updateByArtifact").mockResolvedValue(
+      undefined as never,
+    );
+
+    const result = await SectionDocumentService.saveDocument(fakeDb, {
+      ownerUserId: "u1",
+      sectionId: "s1",
+      bytes: DOCX_BYTES,
+      fileName: "Bab 1.docx",
+      baseVersion: 3,
+      clusters: [],
+    });
+
+    expect(result).toMatchObject({ status: "saved", artifactId: "a1", contentVersion: 4 });
+    // Pin the target row explicitly (not just "was called") so a wrong-artifact regression fails here.
+    expect(contentUpdate).toHaveBeenCalledWith(
+      fakeDb,
+      "a1",
+      expect.objectContaining({ plainText: extractedText }),
+    );
+    const artifactPatch = artifactUpdate.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(artifactPatch.plainTextPreview).toBe(extractedText);
+  });
+
   test("versi tak cocok → stale_write tanpa menulis apa pun", async () => {
     spyCommon();
     spyOn(SectionService, "assertSectionOwner").mockResolvedValue(
@@ -224,8 +264,25 @@ describe("parseClustersJson", () => {
       { nodeId: "n1", citationIds: ["c1"], locator: { locator: "3" } },
     ]);
   });
-  test("JSON rusak / shape salah → throw document_clusters_invalid", () => {
-    expect(() => parseClustersJson("{not json")).toThrow();
-    expect(() => parseClustersJson(JSON.stringify([{ nope: true }]))).toThrow();
+  test("JSON rusak → throw document_clusters_invalid", () => {
+    let thrown: unknown;
+    try {
+      parseClustersJson("{not json");
+    } catch (err) {
+      thrown = err;
+    }
+    // Asserting the code (not just "it threw") catches a regression that throws the wrong
+    // AppError code, or a plain TypeError from an unrelated bug, which `.toThrow()` alone would miss.
+    expect((thrown as { code?: string } | undefined)?.code).toBe("document_clusters_invalid");
+  });
+
+  test("shape salah (kurang nodeId/citationIds) → throw document_clusters_invalid", () => {
+    let thrown: unknown;
+    try {
+      parseClustersJson(JSON.stringify([{ nope: true }]));
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as { code?: string } | undefined)?.code).toBe("document_clusters_invalid");
   });
 });
