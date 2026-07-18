@@ -63,6 +63,11 @@ export const StorageService = {
     return key;
   },
 
+  /** Timpa blob pada key existing (save dokumen bab — pointer artifact tetap stabil). */
+  async overwriteBytes(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+    await s3.putObject(key, bytes, contentType);
+  },
+
   /** Offload bila teks > inline limit → kembalikan storage key; else undefined (inline). */
   async maybeOffloadText(
     ownerUserId: string,

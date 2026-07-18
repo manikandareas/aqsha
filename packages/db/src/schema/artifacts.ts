@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, index, pgTable, text } from "drizzle-orm/pg-core";
+import { bigint, check, index, integer, pgTable, text } from "drizzle-orm/pg-core";
 import { users } from "./users";
 import { workspaceFolders } from "./workspaceFolders";
 import { workspaces } from "./workspaces";
@@ -37,6 +37,9 @@ export const artifacts = pgTable(
     indexingFailureReason: text("indexing_failure_reason"),
     detectedDocumentKind: text("detected_document_kind"),
     storageR2Key: text("storage_r2_key"),
+    // Versi konten dokumen authored (DOCX bab): +1 tiap save, guard stale_write.
+    // Null untuk artifact non-authored (upload/url/markdown lama).
+    contentVersion: integer("content_version"),
     ragEntryId: text("rag_entry_id"),
     plainTextPreview: text("plain_text_preview"),
     indexedAt: bigint("indexed_at", { mode: "number" }),

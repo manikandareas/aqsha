@@ -83,24 +83,24 @@ function hasLocatorData(locator: CitationLocator): boolean {
   return Boolean(locator.locator || locator.label || locator.prefix || locator.suffix);
 }
 
-/**
- * Rekonsiliasi document_citation_usages dari blocksJson dokumen — dipanggil dalam
- * transaksi save (`ArtifactService.updateDocument`). Hanya citationId yang benar-benar
- * ada di workspace yang dicatat (FK aman; id yang missing diabaikan — editor sudah
- * menampilkan state missing dari hasil render). Idempotent: replace-all per dokumen.
- */
 export const CitationUsageService = {
-  async reconcileDocument(
+  /**
+   * Rekonsiliasi document_citation_usages dari cluster yang SUDAH di-parse (editor DOCX
+   * mengirim cluster langsung, decoupled dari blocksJson BlockNote). Dipanggil dalam
+   * transaksi save. Hanya citationId yang benar-benar ada di perpustakaan owner yang
+   * dicatat (FK aman; id yang missing diabaikan — editor sudah menampilkan state missing
+   * dari hasil render). Idempotent: replace-all per dokumen.
+   */
+  async reconcileClusters(
     db: Db | DbOrTx,
     input: {
       ownerUserId: string;
       workspaceId: string;
       documentArtifactId: string;
-      blocksJson: string | null | undefined;
+      clusters: ParsedCitationCluster[];
     },
   ): Promise<void> {
-    const clusters = extractCitationClusters(input.blocksJson);
-    const referencedIds = [...new Set(clusters.flatMap((c) => c.citationIds))];
+    const referencedIds = [...new Set(input.clusters.flatMap((c) => c.citationIds))];
 
     let validIds = new Set<string>();
     if (referencedIds.length > 0) {
@@ -113,7 +113,7 @@ export const CitationUsageService = {
     const now = Date.now();
     const rows: NewDocumentCitationUsage[] = [];
     let order = 0;
-    for (const cluster of clusters) {
+    for (const cluster of input.clusters) {
       for (const citationId of cluster.citationIds) {
         if (!validIds.has(citationId)) continue;
         rows.push({
@@ -136,6 +136,24 @@ export const CitationUsageService = {
       ownerUserId: input.ownerUserId,
       documentArtifactId: input.documentArtifactId,
       rows,
+    });
+  },
+
+  /** Jalur BlockNote lama: parse blocksJson lalu delegasi ke reconcileClusters. */
+  async reconcileDocument(
+    db: Db | DbOrTx,
+    input: {
+      ownerUserId: string;
+      workspaceId: string;
+      documentArtifactId: string;
+      blocksJson: string | null | undefined;
+    },
+  ): Promise<void> {
+    await this.reconcileClusters(db, {
+      ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId,
+      documentArtifactId: input.documentArtifactId,
+      clusters: extractCitationClusters(input.blocksJson),
     });
   },
 };
