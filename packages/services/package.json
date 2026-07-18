@@ -108,6 +108,13 @@
       "node": "./dist/citations/index.js",
       "import": "./dist/citations/index.js",
       "default": "./dist/citations/index.js"
+    },
+    "./latex": {
+      "types": "./src/latex/index.ts",
+      "bun": "./src/latex/index.ts",
+      "node": "./dist/latex/index.js",
+      "import": "./dist/latex/index.js",
+      "default": "./dist/latex/index.js"
     }
   },
   "scripts": {

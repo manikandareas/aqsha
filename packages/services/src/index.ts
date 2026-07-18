@@ -265,6 +265,12 @@ export {
   type ProviderFolder,
 } from "./integrations";
 
+export {
+  type CompileError,
+  type CompileErrorSeverity,
+  parseTexLog,
+} from "./latex";
+
 // Waitlist publik — double opt-in via Resend (marketing site → API).
 export {
   createWaitlistVerificationToken,
