@@ -9,10 +9,13 @@ export { DEFAULT_WORKSPACE_NAME, WorkspaceService } from "./workspace.service";
 export { SECTION_TEMPLATES, type SectionTemplate } from "./workspaces/section-templates";
 export { SectionService } from "./section.service";
 export {
-  SectionDocumentService,
-  parseClustersJson,
+  DOCUMENT_REVISION_RETENTION,
+  type DocumentAuthor,
+  LATEX_SOURCE_MAX_BYTES,
   type SaveSectionDocumentResult,
-} from "./section-document.service";
+  type SectionDocumentPayload,
+  SectionLatexService,
+} from "./section-latex.service";
 export { FolderService } from "./folder.service";
 export { ContextService, type HydratedContext } from "./context.service";
 export {

@@ -12,14 +12,6 @@ const REDIS_URL = process.env.REDIS_URL;
 const itest = DATABASE_URL ? test : test.skip;
 // Rate-limit butuh Redis live; tanpa REDIS_URL macro fail-open (tak ada 429) → skip.
 const rltest = DATABASE_URL && REDIS_URL ? test : test.skip;
-// Section document save menulis blob nyata (StorageService.storeBytes/overwriteBytes) —
-// butuh object storage live, bukan cuma Postgres. Tanpa kredensial → skip (mirror artifacts.test.ts).
-const hasS3 = Boolean(
-  process.env.S3_BUCKET &&
-    process.env.S3_ENDPOINT &&
-    !process.env.S3_ENDPOINT.includes("CHANGEME"),
-);
-const s3test = DATABASE_URL && hasS3 ? test : test.skip;
 
 const suffix = Math.floor(Math.random() * 1e9);
 const OWNER_CRUD = `user_itest_ws_crud_${suffix}`;
@@ -28,11 +20,10 @@ const OWNER_RL = `user_itest_ws_rl_${suffix}`;
 // Nama-validation memakai owner tersendiri: rate-limit `workspaces:create` (3/jam)
 // dikonsumsi SEBELUM validasi, jadi attempt invalid tak boleh memakan budget owner CRUD.
 const OWNER_NAME = `user_itest_ws_name_${suffix}`;
-const OWNER_DOC = `user_itest_ws_doc_${suffix}`;
 
 // CRUD + rate-limit owner di-admin-kan (unlimited) supaya capacity tak mengganggu;
 // rate-limit (3/jam) tetap berlaku lintas plan.
-process.env.AQSHA_ADMIN_OWNER_USER_IDS = `${OWNER_CRUD},${OWNER_RL},${OWNER_NAME},${OWNER_DOC}`;
+process.env.AQSHA_ADMIN_OWNER_USER_IDS = `${OWNER_CRUD},${OWNER_RL},${OWNER_NAME}`;
 
 // Import app SETELAH mock.module + set env supaya authMacro/plan memakai nilai ini.
 const { app } = await import("../src/index");
@@ -53,25 +44,6 @@ function req(method: string, path: string, token?: string, body?: unknown) {
 }
 const get = (path: string, token?: string) => req("GET", path, token);
 
-// Multipart PUT — section document save takes `file` (+ optional baseVersion/clustersJson).
-function reqMultipartPut(
-  path: string,
-  token: string,
-  fields: { file: File; baseVersion?: number; clustersJson?: string },
-) {
-  const form = new FormData();
-  form.append("file", fields.file);
-  if (fields.baseVersion !== undefined) form.append("baseVersion", String(fields.baseVersion));
-  if (fields.clustersJson !== undefined) form.append("clustersJson", fields.clustersJson);
-  return app.handle(
-    new Request(`http://localhost${path}`, {
-      method: "PUT",
-      headers: { authorization: `Bearer ${token}` },
-      body: form,
-    }),
-  );
-}
-
 // biome-ignore lint/suspicious/noExplicitAny: test reads dynamic JSON bodies
 function readJson(res: Response): Promise<any> {
   return res.json();
@@ -80,9 +52,8 @@ function readJson(res: Response): Promise<any> {
 async function cleanup() {
   if (!DATABASE_URL) return;
   const { client } = createDb(DATABASE_URL);
-  // Section document save (s3test) leaves artifact rows + a workspace_sections →
-  // artifacts link behind. workspace_sections.document_artifact_id has no cascade,
-  // so it must be cleared before artifacts are deleted (FK-safe order).
+  // workspace_sections.document_artifact_id has no cascade, so it must be cleared
+  // before artifacts are deleted (FK-safe order) — defensive against any leftover link.
   await client`delete from document_citation_usages where owner_user_id like 'user_itest_ws_%'`;
   await client`update workspace_sections set document_artifact_id = null where workspace_id in (select id from workspaces where owner_user_id like 'user_itest_ws_%')`;
   await client`delete from artifact_contents where owner_user_id like 'user_itest_ws_%'`;
@@ -297,60 +268,8 @@ describe("api workspaces — CRUD round-trip (admin owner, no capacity cap)", ()
   }, 20000);
 });
 
-describe("api sections — document save (PUT /sections/:id/document, live S3/MinIO)", () => {
-  // Magic bytes only (not a real docx) — mirrors packages/services/test/section-document.test.ts;
-  // extraction is expected to fail gracefully and the save must still succeed.
-  const DOCX_BYTES = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
-  const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  let sectionId = "";
-
-  itest("setup: sync + create workspace + pick an editable (non-bibliography) section", async () => {
-    await req("POST", "/users/me/sync", tok(OWNER_DOC));
-    const created = await req("POST", "/workspaces", tok(OWNER_DOC), {
-      name: "Skripsi Dokumen",
-      kind: "undergraduate_thesis",
-    });
-    expect(created.status).toBe(200);
-    const { id: workspaceId } = await readJson(created);
-    const sections = await readJson(await get(`/workspaces/${workspaceId}/sections`, tok(OWNER_DOC)));
-    const chapter = sections.find((s: { role: string | null }) => s.role !== "bibliography");
-    expect(chapter).toBeDefined();
-    sectionId = chapter.id;
-  });
-
-  s3test("happy path: PUT with FormData docx → 200 saved, contentVersion 1", async () => {
-    const res = await reqMultipartPut(`/sections/${sectionId}/document`, tok(OWNER_DOC), {
-      file: new File([DOCX_BYTES], "bab.docx", { type: DOCX_MIME }),
-    });
-    expect(res.status).toBe(200);
-    const body = await readJson(res);
-    expect(body).toEqual({
-      status: "saved",
-      artifactId: body.artifactId,
-      contentVersion: 1,
-      sectionStatus: "draft",
-    });
-    expect(body.artifactId).toBeString();
-  });
-
-  s3test("second save without baseVersion → stale_write (client out of sync)", async () => {
-    const res = await reqMultipartPut(`/sections/${sectionId}/document`, tok(OWNER_DOC), {
-      file: new File([DOCX_BYTES], "bab.docx", { type: DOCX_MIME }),
-    });
-    expect(res.status).toBe(200);
-    expect(await readJson(res)).toEqual({ status: "stale_write", currentVersion: 1 });
-  });
-
-  s3test("save with correct baseVersion → saved, contentVersion bumps to 2", async () => {
-    const res = await reqMultipartPut(`/sections/${sectionId}/document`, tok(OWNER_DOC), {
-      file: new File([DOCX_BYTES], "bab.docx", { type: DOCX_MIME }),
-      baseVersion: 1,
-    });
-    expect(res.status).toBe(200);
-    const body = await readJson(res);
-    expect(body).toMatchObject({ status: "saved", contentVersion: 2 });
-  });
-});
+// Route dokumen bab (GET/PUT /sections/:id/document, kontrak sumber LaTeX JSON) diuji
+// di apps/api/test/latex-routes.test.ts.
 
 describe("api workspaces — capacity (free plan)", () => {
   itest("free owner at cap (default ws) → POST 403 workspace_limit_reached", async () => {

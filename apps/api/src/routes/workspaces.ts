@@ -1,9 +1,7 @@
 import type { WorkspaceKind, WorkspaceStage } from "@aqsha/db";
 import {
   FolderService,
-  MAX_UPLOAD_BYTES,
-  parseClustersJson,
-  SectionDocumentService,
+  SectionLatexService,
   SectionService,
   WorkspaceService,
 } from "@aqsha/services";
@@ -206,26 +204,32 @@ export const workspaces = new Elysia()
     },
     { auth: true },
   )
+  .get(
+    "/sections/:id/document",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return SectionLatexService.getDocument(db, { ownerUserId, sectionId: params.id });
+    },
+    { auth: true },
+  )
   .put(
     "/sections/:id/document",
-    async ({ ownerUserId, params, body }) => {
+    ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      return SectionDocumentService.saveDocument(db, {
+      return SectionLatexService.saveDocument(db, {
         ownerUserId,
         sectionId: params.id,
-        bytes: new Uint8Array(await body.file.arrayBuffer()),
-        fileName: body.file.name,
+        source: body.source,
         baseVersion: body.baseVersion,
-        clusters: parseClustersJson(body.clustersJson),
+        author: "user",
       });
     },
     {
       auth: true,
       // Tanpa rateLimit: dipanggil autosave debounced — limiter akan memutus penyimpanan.
       body: t.Object({
-        file: t.File({ maxSize: MAX_UPLOAD_BYTES }),
+        source: t.String(),
         baseVersion: t.Optional(t.Numeric()),
-        clustersJson: t.Optional(t.String()),
       }),
     },
   )
