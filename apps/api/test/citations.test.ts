@@ -501,6 +501,21 @@ describe("api citations — duplicates + bulk", () => {
   });
 });
 
+describe("api citations — bibliography proyek (GET /workspaces/:id/bibliography)", () => {
+  itest("proyek tanpa usage sitasi (belum ada bab tersimpan) → entries kosong", async () => {
+    const res = await req("GET", `/workspaces/${workspaceId}/bibliography`, tok(OWNER));
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.entries).toEqual([]);
+    expect(body.styleId).toBeString();
+  });
+
+  itest("intruder tidak bisa membaca bibliography proyek owner", async () => {
+    const res = await req("GET", `/workspaces/${workspaceId}/bibliography`, tok(INTRUDER));
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("api citations — render dokumen", () => {
   let cA = "";
   let cB = "";

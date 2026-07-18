@@ -1,5 +1,12 @@
 import type { WorkspaceKind, WorkspaceStage } from "@aqsha/db";
-import { FolderService, SectionService, WorkspaceService } from "@aqsha/services";
+import {
+  FolderService,
+  MAX_UPLOAD_BYTES,
+  parseClustersJson,
+  SectionDocumentService,
+  SectionService,
+  WorkspaceService,
+} from "@aqsha/services";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
@@ -198,6 +205,29 @@ export const workspaces = new Elysia()
       return SectionService.remove(db, { ownerUserId, sectionId: params.id });
     },
     { auth: true },
+  )
+  .put(
+    "/sections/:id/document",
+    async ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return SectionDocumentService.saveDocument(db, {
+        ownerUserId,
+        sectionId: params.id,
+        bytes: new Uint8Array(await body.file.arrayBuffer()),
+        fileName: body.file.name,
+        baseVersion: body.baseVersion,
+        clusters: parseClustersJson(body.clustersJson),
+      });
+    },
+    {
+      auth: true,
+      // Tanpa rateLimit: dipanggil autosave debounced — limiter akan memutus penyimpanan.
+      body: t.Object({
+        file: t.File({ maxSize: MAX_UPLOAD_BYTES }),
+        baseVersion: t.Optional(t.Numeric()),
+        clustersJson: t.Optional(t.String()),
+      }),
+    },
   )
   // ── Folder nested (legacy board) ─────────────────────────────────────────
   .get(

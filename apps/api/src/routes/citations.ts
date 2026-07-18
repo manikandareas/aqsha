@@ -388,6 +388,17 @@ export const citations = new Elysia()
       }),
     },
   )
+  .get(
+    "/workspaces/:id/bibliography",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationService.renderWorkspaceBibliography(db, {
+        ownerUserId,
+        workspaceId: params.id,
+      });
+    },
+    { auth: true },
+  )
   .post(
     "/workspaces/:id/citations/render-document",
     ({ ownerUserId, params, body }) => {

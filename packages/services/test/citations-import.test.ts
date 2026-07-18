@@ -7,6 +7,7 @@ import {
 } from "@aqsha/db";
 import { CitationImportService } from "../src/citations/citation-import.service";
 import { CitationService } from "../src/citations/citation.service";
+import { WorkspaceService } from "../src/workspace.service";
 
 const fakeDb = { transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb) } as never;
 
@@ -303,5 +304,23 @@ describe("CitationService guards", () => {
     spyOn(CitationRepo, "listAllActive").mockResolvedValue([]);
     const result = await CitationService.render(fakeDb, { ownerUserId: OWNER });
     expect(result.styleId).toBe("apa-7");
+  });
+});
+
+describe("CitationService.renderWorkspaceBibliography", () => {
+  test("proyek tanpa usage sitasi → entries kosong, styleId ikut settings proyek", async () => {
+    spyOn(WorkspaceService, "assertWorkspaceOwner").mockResolvedValue({} as never);
+    spyOn(DocumentCitationUsageRepo, "listByWorkspace").mockResolvedValue([]);
+    spyOn(CitationService, "getSettings").mockResolvedValue({
+      defaultStyleId: "ieee",
+      bibliographySort: "author",
+    });
+
+    const result = await CitationService.renderWorkspaceBibliography(fakeDb, {
+      ownerUserId: OWNER,
+      workspaceId: "w1",
+    });
+
+    expect(result).toEqual({ styleId: "ieee", entries: [] });
   });
 });

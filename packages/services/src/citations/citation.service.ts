@@ -896,6 +896,37 @@ export const CitationService = {
   },
 
   /**
+   * Daftar pustaka proyek: agregat sitasi yang benar-benar terpakai di dokumen
+   * bab-bab (document_citation_usages), dirender dengan gaya proyek. Urutan akhir
+   * mengikuti aturan sort gaya (citeproc), bukan urutan kemunculan.
+   */
+  async renderWorkspaceBibliography(
+    db: DbOrTx,
+    input: { ownerUserId: string; workspaceId: string },
+  ): Promise<{ styleId: CitationStyleId; entries: Array<{ id: string; text: string }> }> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
+    const usages = await DocumentCitationUsageRepo.listByWorkspace(
+      db,
+      input.ownerUserId,
+      input.workspaceId,
+    );
+    const citationIds = [...new Set(usages.map((u) => u.citationId))];
+    if (citationIds.length === 0) {
+      const settings = await this.getSettings(db, {
+        ownerUserId: input.ownerUserId,
+        workspaceId: input.workspaceId,
+      });
+      return { styleId: settings.defaultStyleId as CitationStyleId, entries: [] };
+    }
+    const rendered = await this.render(db, {
+      ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId,
+      citationIds,
+    });
+    return { styleId: rendered.styleId, entries: rendered.entries };
+  },
+
+  /**
    * Render sitasi in-text seluruh dokumen (per cluster, numbering konsisten) +
    * bibliography used-in-document. `clusters` urut kemunculan di dokumen; id yang
    * sudah dihapus/tak ada dilaporkan di `missingIds` supaya editor bisa menandai

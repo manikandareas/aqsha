@@ -25,6 +25,23 @@ export const DocumentCitationUsageRepo = {
       .orderBy(documentCitationUsages.occurrenceOrder);
   },
 
+  /** Semua usage lintas bab satu proyek — dasar agregasi daftar pustaka proyek. */
+  async listByWorkspace(
+    db: DbOrTx,
+    ownerUserId: string,
+    workspaceId: string,
+  ): Promise<DocumentCitationUsage[]> {
+    return db
+      .select()
+      .from(documentCitationUsages)
+      .where(
+        and(
+          eq(documentCitationUsages.ownerUserId, ownerUserId),
+          eq(documentCitationUsages.workspaceId, workspaceId),
+        ),
+      );
+  },
+
   /** Ganti seluruh usage satu dokumen (delete-all + insert) — dipanggil dalam tx save. */
   async replaceForDocument(
     db: DbOrTx,
