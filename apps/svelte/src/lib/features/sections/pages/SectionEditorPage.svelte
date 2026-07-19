@@ -10,7 +10,7 @@
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
-	import { Icon, ArrowLeftIcon, ChevronDownIcon, SparklesIcon } from '$lib/icons';
+	import { Icon, ArrowLeftIcon, ChevronDownIcon, SparklesIcon, Code2Icon, EyeIcon } from '$lib/icons';
 	import { readableApiErrorMessage } from '$lib/errors/api-error';
 	import ProjectSidePanel from '$lib/features/workspaces/components/ProjectSidePanel.svelte';
 	import {
@@ -21,6 +21,7 @@
 	import { projectDisplayTitle } from '$lib/features/workspaces/types';
 	import {
 		useSectionDocument,
+		useSaveSectionDocument,
 		useSectionBuild,
 		useCompileSection,
 		useSectionAnnotations,
@@ -41,6 +42,9 @@
 	import AnnotationComposerDialog from '../components/AnnotationComposerDialog.svelte';
 	import SectionBuildErrorPanel from '../components/SectionBuildErrorPanel.svelte';
 	import ProposalReviewCard from '../components/ProposalReviewCard.svelte';
+	import LatexSourceEditor from '../components/LatexSourceEditor.svelte';
+	import { AutosaveController } from '../lib/autosave-controller.svelte';
+	import type { LatexEditorHandle } from '../lib/latex-editor';
 
 	/**
 	 * Halaman bab agen-first: PDF ter-compile + lapisan anotasi (seleksi teks / pin) yang
@@ -72,6 +76,81 @@
 
 	// Error compile hasil pilihan hunk parsial (accept mengembalikan compile_error, bukan throw).
 	let proposalAcceptErrors = $state<LatexCompileError[] | null>(null);
+
+	const saveDocument = useSaveSectionDocument(
+		() => sectionId,
+		() => projectId
+	);
+
+	let editMode = $state(false);
+	let editorHandle = $state<LatexEditorHandle | null>(null);
+
+	// Controller autosave dibuat sekali saat dokumen tersedia; versi awal = versi termuat.
+	let autosave = $state<AutosaveController | null>(null);
+	const docKey = $derived(`${sectionId}:${document.data?.contentVersion ?? 0}`);
+
+	$effect(() => {
+		const doc = document.data;
+		if (!doc) return;
+		if (!autosave) {
+			autosave = new AutosaveController({
+				initialVersion: doc.contentVersion,
+				save: (input) => saveDocument.mutateAsync(input)
+			});
+		}
+	});
+
+	$effect(() => {
+		const c = autosave;
+		return () => c?.dispose();
+	});
+
+	function handleEditorChange(next: string): void {
+		autosave?.edit(next);
+	}
+
+	async function toggleEditMode(): Promise<void> {
+		if (editMode) {
+			// Keluar dari edit: pastikan simpanan terakhir tuntas sebelum kembali ke PDF.
+			await autosave?.flush();
+			editMode = false;
+			return;
+		}
+		editMode = true;
+	}
+
+	// "Compile ulang" saat edit: flush dulu supaya build memakai sumber terbaru.
+	async function requestCompileFromEditor(): Promise<void> {
+		await autosave?.flush();
+		requestCompile();
+	}
+
+	// Muat ulang sumber setelah konflik stale: ambil ulang dokumen & reset buffer + controller.
+	async function reloadSource(): Promise<void> {
+		await document.refetch();
+		const doc = document.data;
+		if (doc) {
+			autosave?.reset(doc.contentVersion);
+			editorHandle?.setDoc(doc.source);
+		}
+	}
+
+	const saveStatusLabel = $derived.by(() => {
+		switch (autosave?.status) {
+			case 'saving':
+				return 'Menyimpan…';
+			case 'saved':
+				return 'Tersimpan';
+			case 'dirty':
+				return 'Perubahan belum disimpan';
+			case 'stale':
+				return 'Sumber berubah di tempat lain';
+			case 'error':
+				return 'Gagal menyimpan';
+			default:
+				return '';
+		}
+	});
 
 	const section = $derived(sections.data?.find((s) => s.id === sectionId) ?? null);
 	const isBibliography = $derived(section?.role === 'bibliography');
@@ -308,19 +387,32 @@
 								<Badge variant="outline">perlu compile ulang</Badge>
 							{/if}
 							{#if document.data}
+								{#if editMode && saveStatusLabel}
+									<span class="text-label text-muted-foreground">{saveStatusLabel}</span>
+								{/if}
+								<Button
+									type="button"
+									variant={editMode ? 'secondary' : 'ghost'}
+									size="sm"
+									aria-pressed={editMode}
+									onclick={toggleEditMode}
+								>
+									<Icon icon={editMode ? EyeIcon : Code2Icon} class="size-4" />
+									{editMode ? 'Lihat PDF' : 'Edit sumber'}
+								</Button>
 								<Button
 									type="button"
 									variant="secondary"
 									size="sm"
 									disabled={compile.isPending}
-									onclick={requestCompile}
+									onclick={editMode ? requestCompileFromEditor : requestCompile}
 								>
 									{#if compile.isPending}
 										<Spinner class="size-4" />
 									{/if}
 									Compile ulang
 								</Button>
-								<Badge variant="outline">Sumber v{currentVersion}</Badge>
+								<Badge variant="outline">Sumber v{autosave?.version ?? currentVersion}</Badge>
 							{/if}
 						{/if}
 					</header>
@@ -328,6 +420,32 @@
 					{#if isBibliography}
 						<div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
 							<BibliographyView workspaceId={projectId} />
+						</div>
+					{:else if editMode && document.data}
+						{#if autosave?.status === 'stale'}
+							<div
+								class="mx-4 mt-1 flex items-center justify-between gap-2 rounded-md border-2 border-border bg-lemon/20 px-3 py-2 text-label"
+								role="status"
+							>
+								<span
+									>Sumber bab ini berubah di tempat lain. Muat ulang untuk menyunting versi
+									terbaru.</span
+								>
+								<Button type="button" size="sm" variant="secondary" onclick={reloadSource}>
+									Muat ulang sumber
+								</Button>
+							</div>
+						{/if}
+						<div class="min-h-0 flex-1 px-4 pt-1 pb-4">
+							<div class="h-full overflow-hidden rounded-lg border-2 border-border">
+								<LatexSourceEditor
+									value={document.data.source}
+									{docKey}
+									editable={autosave?.status !== 'stale'}
+									onChange={handleEditorChange}
+									onReady={(h) => (editorHandle = h)}
+								/>
+							</div>
 						</div>
 					{:else}
 						{#if proposal.data}
