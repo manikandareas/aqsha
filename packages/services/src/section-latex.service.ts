@@ -58,7 +58,14 @@ export const SectionLatexService = {
     const section = await SectionService.assertSectionOwner(db, input.ownerUserId, input.sectionId);
     if (!section.documentArtifactId) return null;
     const artifact = await ArtifactRepo.findById(db, section.documentArtifactId);
-    if (!artifact || artifact.ownerUserId !== input.ownerUserId || artifact.status !== "active") {
+    if (
+      !artifact ||
+      artifact.ownerUserId !== input.ownerUserId ||
+      artifact.status !== "active" ||
+      artifact.artifactType !== "latex"
+    ) {
+      // Pointer non-LaTeX (mis. artifact `docx` sisa editor lama) bukan dokumen LaTeX bab → baca
+      // sebagai kosong; saveDocument akan meng-adopt/mengganti pointer dengan artifact LaTeX baru.
       return null;
     }
     const content = await ArtifactContentRepo.findByArtifact(db, input.ownerUserId, artifact.id);
@@ -113,8 +120,22 @@ export const SectionLatexService = {
     const sectionStatus: SectionStatus =
       section.status === "empty" ? "draft" : (section.status as SectionStatus);
 
-    if (!section.documentArtifactId) {
+    const existing = section.documentArtifactId
+      ? await ArtifactRepo.findById(db, section.documentArtifactId)
+      : null;
+    const existingIsLatex =
+      existing != null &&
+      existing.ownerUserId === input.ownerUserId &&
+      existing.status === "active" &&
+      existing.artifactType === "latex";
+
+    if (!existingIsLatex) {
+      // Bab belum punya dokumen LaTeX valid: belum pernah ditulis (pointer null) ATAU pointer lama
+      // menunjuk artifact non-LaTeX (mis. `docx` sisa editor lama). Buat artifact LaTeX baru & set
+      // pointer; baseVersion diabaikan — tak ada versi LaTeX untuk di-CAS, dan pointer non-LaTeX
+      // bukan sumber kebenaran LaTeX jadi tak ada tulisan yang tertimpa.
       const artifactId = crypto.randomUUID();
+      const hadStalePointer = section.documentArtifactId != null;
       try {
         await db.transaction(async (tx) => {
           await ArtifactRepo.insert(tx, {
@@ -160,13 +181,22 @@ export const SectionLatexService = {
             createdAt: now,
             updatedAt: now,
           });
-          const claimed = await WorkspaceSectionRepo.setDocumentArtifactIfNull(
-            tx,
-            section.id,
-            artifactId,
-            now,
-          );
-          if (!claimed) throw new StaleWriteRollback();
+          if (hadStalePointer) {
+            // Repoint dari artifact non-LaTeX lama (tanpa guard null; race amat jarang di bab
+            // legacy, last-writer-wins bisa diterima untuk jalur pemulihan ini).
+            await WorkspaceSectionRepo.update(tx, section.id, {
+              documentArtifactId: artifactId,
+              updatedAt: now,
+            });
+          } else {
+            const claimed = await WorkspaceSectionRepo.setDocumentArtifactIfNull(
+              tx,
+              section.id,
+              artifactId,
+              now,
+            );
+            if (!claimed) throw new StaleWriteRollback();
+          }
           if (section.status === "empty") {
             await WorkspaceSectionRepo.update(tx, section.id, { status: "draft", updatedAt: now });
           }
@@ -199,20 +229,8 @@ export const SectionLatexService = {
       return { status: "saved", artifactId, contentVersion: 1, sectionStatus };
     }
 
-    const artifact = await ArtifactRepo.findById(db, section.documentArtifactId);
-    if (
-      !artifact ||
-      artifact.ownerUserId !== input.ownerUserId ||
-      artifact.status !== "active" ||
-      artifact.artifactType !== "latex"
-    ) {
-      throwAppError({
-        message: "Dokumen bab tidak ditemukan",
-        code: "section_document_not_found",
-        severity: "error",
-        status: 404,
-      });
-    }
+    // existingIsLatex true di titik ini → artifact valid & non-null (jalur update CAS).
+    const artifact = existing!;
     const currentVersion = artifact.contentVersion ?? 0;
     if (input.baseVersion === undefined || input.baseVersion !== currentVersion) {
       return { status: "stale_write", currentVersion };

@@ -185,4 +185,64 @@ describe("SectionLatexService", () => {
       }),
     ).rejects.toThrow(AppError);
   });
+
+  itest("heal: pointer artifact non-LaTeX (docx lama) → getDocument null + save bikin latex baru & repoint", async () => {
+    const SEC_DOCX = `itsl_${SUFFIX}:secdocx`;
+    const ART_DOCX = `itsl_${SUFFIX}:artdocx`;
+    await ArtifactRepo.insert(db, {
+      id: ART_DOCX,
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      folderId: null,
+      threadId: null,
+      artifactType: "docx",
+      artifactFamily: "file",
+      source: "manual",
+      title: "Bab lama",
+      language: null,
+      mimeType: null,
+      fileName: null,
+      byteSize: null,
+      indexingStatus: "not_indexed",
+      indexingFailureReason: null,
+      detectedDocumentKind: null,
+      storageR2Key: null,
+      ragEntryId: null,
+      plainTextPreview: null,
+      indexedAt: null,
+      contentVersion: 671,
+      status: "active",
+      deletedAt: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    await WorkspaceSectionRepo.insertMany(db, [
+      { id: SEC_DOCX, workspaceId: WS, title: "Bab 2", sortOrder: 2, status: "draft", role: null, documentArtifactId: ART_DOCX, createdAt: NOW, updatedAt: NOW },
+    ]);
+
+    // Pointer non-LaTeX dibaca sebagai kosong (bukan phantom versi 671).
+    expect(
+      await SectionLatexService.getDocument(db, { ownerUserId: OWNER, sectionId: SEC_DOCX }),
+    ).toBeNull();
+
+    // Save menyembuhkan: artifact latex baru + repoint section, baseVersion diabaikan.
+    const healed = await SectionLatexService.saveDocument(db, {
+      ownerUserId: OWNER,
+      sectionId: SEC_DOCX,
+      source: "Isi bab hasil pemulihan.",
+      author: "agent",
+    });
+    if (healed.status !== "saved") throw new Error("harus saved");
+    expect(healed.contentVersion).toBe(1);
+    expect(healed.artifactId).not.toBe(ART_DOCX);
+
+    const newArtifact = await ArtifactRepo.findById(db, healed.artifactId);
+    expect(newArtifact?.artifactType).toBe("latex");
+    const section = await WorkspaceSectionRepo.findById(db, SEC_DOCX);
+    expect(section?.documentArtifactId).toBe(healed.artifactId);
+
+    const doc = await SectionLatexService.getDocument(db, { ownerUserId: OWNER, sectionId: SEC_DOCX });
+    expect(doc?.source).toBe("Isi bab hasil pemulihan.");
+    expect(doc?.contentVersion).toBe(1);
+  });
 });

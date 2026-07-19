@@ -18,33 +18,54 @@ export type RunOptions = {
 };
 
 /**
- * Single Bun boundary for LaTeX compilation. This file runs only under Bun (API + agent),
- * but apps/web transitively typechecks it while deriving the Eden `App` type and ships no
- * bun-types — so reach `Bun` through `globalThis` with a local typed surface instead of the
- * ambient global. Keeps the web type-graph free of the missing `Bun` global without weakening
- * the subprocess types used here.
+ * Single subprocess boundary for LaTeX compilation, dipakai dua runtime: Bun (API + worker)
+ * dan Node (runtime agen Mastra di-bundle ke Node — `globalThis.Bun` tak ada di sana, sehingga
+ * spawn lewat Bun melempar "Cannot read properties of undefined"). Pilih `Bun.spawn` bila global
+ * Bun ada, kalau tidak jatuh ke `node:child_process` dengan kontrak stream/timeout/kill yang sama.
+ * apps/web ikut men-typecheck file ini saat menurunkan tipe Eden `App` dan tak memuat bun-types —
+ * jadi kedua runtime dicapai lewat surface bertipe lokal, bukan global ambient, agar type-graph
+ * web tetap bebas dari global `Bun`.
  */
-type BunSpawnedProcess = {
-  stdout: ReadableStream<Uint8Array>;
-  stderr: ReadableStream<Uint8Array>;
+type SpawnedProcess = {
+  stdout: AsyncIterable<Uint8Array>;
+  stderr: AsyncIterable<Uint8Array>;
   exited: Promise<number>;
-  signalCode: string | null;
+  readonly signalCode: string | null;
   kill(signal?: number | string): void;
 };
-const bun = (
-  globalThis as unknown as {
-    Bun: {
-      spawn(options: {
-        cmd: string[];
-        cwd?: string;
-        env?: Record<string, string | undefined>;
-        stdin?: "ignore";
-        stdout?: "pipe";
-        stderr?: "pipe";
-      }): BunSpawnedProcess;
-    };
-  }
-).Bun;
+
+type BunGlobal = {
+  spawn(options: {
+    cmd: string[];
+    cwd?: string;
+    env?: Record<string, string | undefined>;
+    stdin?: "ignore";
+    stdout?: "pipe";
+    stderr?: "pipe";
+  }): SpawnedProcess;
+};
+
+type NodeChildProcess = {
+  stdout: AsyncIterable<Uint8Array>;
+  stderr: AsyncIterable<Uint8Array>;
+  signalCode: string | null;
+  kill(signal?: number | string): boolean;
+  on(event: "close", listener: (code: number | null, signal: string | null) => void): void;
+};
+
+type NodeChildProcessModule = {
+  spawn(
+    command: string,
+    args: string[],
+    options: {
+      cwd?: string;
+      env?: Record<string, string>;
+      stdio: ["ignore", "pipe", "pipe"];
+    },
+  ): NodeChildProcess;
+};
+
+const bunGlobal = (globalThis as unknown as { Bun?: BunGlobal }).Bun;
 
 const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 // Jeda flush setelah proses mati. Drain normal selesai jauh di bawah ini; batas
@@ -52,8 +73,48 @@ const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 // yang masih memegang pipe stdout/stderr (mis. `sh -c "sleep"` di Linux).
 const DRAIN_GRACE_MS = 200;
 
+async function spawnProcess(cmd: string[], opts: RunOptions): Promise<SpawnedProcess> {
+  if (bunGlobal) {
+    return bunGlobal.spawn({
+      cmd,
+      cwd: opts.cwd,
+      env: opts.env ?? {},
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+  }
+  // Runtime Node (agen Mastra): env diganti utuh (tanpa warisan induk, paritas Bun.spawn —
+  // caller pass PATH sendiri). Buang nilai undefined supaya Node tak menstringifikasi jadi
+  // "undefined".
+  const { spawn } = (await import("node:child_process")) as unknown as NodeChildProcessModule;
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(opts.env ?? {})) {
+    if (value !== undefined) env[key] = value;
+  }
+  const child = spawn(cmd[0]!, cmd.slice(1), {
+    cwd: opts.cwd,
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const exited = new Promise<number>((resolve) => {
+    child.on("close", (code) => resolve(code ?? 0));
+  });
+  return {
+    stdout: child.stdout,
+    stderr: child.stderr,
+    exited,
+    get signalCode() {
+      return child.signalCode;
+    },
+    kill: (signal) => {
+      child.kill(signal);
+    },
+  };
+}
+
 async function drainInto(
-  stream: ReadableStream<Uint8Array>,
+  stream: AsyncIterable<Uint8Array>,
   cap: number,
   sink: { text: string },
 ): Promise<void> {
@@ -76,14 +137,7 @@ function withMemoryLimit(cmd: string[], maxMemoryKb?: number): string[] {
 }
 
 export async function runSandboxed(cmd: string[], opts: RunOptions): Promise<RunResult> {
-  const proc = bun.spawn({
-    cmd: withMemoryLimit(cmd, opts.maxMemoryKb),
-    cwd: opts.cwd,
-    env: opts.env ?? {},
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const proc = await spawnProcess(withMemoryLimit(cmd, opts.maxMemoryKb), opts);
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
