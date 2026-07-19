@@ -19,9 +19,11 @@ import {
   FileSearchIcon as HugeFileSearchIcon,
   Flag02Icon,
   Idea01Icon,
+  InstagramIcon as HugeInstagramIcon,
   Menu01Icon,
   Moon02Icon,
   Mortarboard02Icon,
+  NewTwitterIcon,
   PauseIcon as HugePauseIcon,
   Pen01Icon,
   PlayIcon as HugePlayIcon,
@@ -29,6 +31,8 @@ import {
   Search01Icon,
   SparklesIcon as HugeSparklesIcon,
   Sun02Icon,
+  ThreadsIcon as HugeThreadsIcon,
+  TiktokIcon as HugeTiktokIcon,
   WorkHistoryIcon,
   Wrench01Icon,
 } from "@hugeicons/core-free-icons";
@@ -80,3 +84,7 @@ export const SparklesIcon = createIcon(HugeSparklesIcon);
 export const TrendingUpIcon = createIcon(ChartUpIcon);
 export const WrenchIcon = createIcon(Wrench01Icon);
 export const XIcon = createIcon(Cancel01Icon);
+export const InstagramIcon = createIcon(HugeInstagramIcon);
+export const ThreadsIcon = createIcon(HugeThreadsIcon);
+export const TiktokIcon = createIcon(HugeTiktokIcon);
+export const XSocialIcon = createIcon(NewTwitterIcon);

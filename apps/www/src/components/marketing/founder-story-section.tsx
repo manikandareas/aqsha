@@ -175,18 +175,40 @@ export function FounderStorySection() {
         >
           <div
             aria-hidden
-            className="pointer-events-none mb-2 hidden select-none items-end justify-end gap-2 pr-6 sm:flex"
+            className="pointer-events-none mb-4 hidden select-none items-start justify-start gap-2 pl-6 sm:flex"
           >
             <HandNote className="-rotate-2" delay={0.3}>
               intip cara kerjanya
             </HandNote>
-            <DrawnArrow
-              className="mb-[-0.5rem] scale-x-[-1]"
-              curve="M74 8 C 66 32, 46 44, 18 47"
-              head="M34 36 L16 47 L35 56"
-              delay={0.45}
-              headDelay={0.9}
-            />
+            {/* Idle nudge toward the video once the stroke finishes drawing. */}
+            <m.div
+              animate={
+                reduce
+                  ? undefined
+                  : {
+                      transform: [
+                        "translateY(0px)",
+                        "translateY(5px)",
+                        "translateY(0px)",
+                      ],
+                    }
+              }
+              transition={{
+                duration: 1.4,
+                ease: "easeInOut",
+                repeat: Infinity,
+                repeatDelay: 0.4,
+                delay: 1.4,
+              }}
+            >
+              <DrawnArrow
+                className="mt-2 text-primary"
+                curve="M10 10 C 30 14, 48 26, 56 52"
+                head="M46 42 L56 55 L66 43"
+                delay={0.45}
+                headDelay={0.9}
+              />
+            </m.div>
           </div>
           <div className="relative overflow-hidden rounded-2xl">
             <div className="relative aspect-video w-full">
