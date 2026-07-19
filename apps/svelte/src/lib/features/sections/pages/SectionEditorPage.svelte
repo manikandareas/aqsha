@@ -186,19 +186,27 @@
 		panelTab = 'chat';
 	}
 
-	// Antrian anotasi terpilih → satu context message untuk turn chat berikutnya.
+	// Konteks chat bab: SELALU sertakan sectionId bab yang terbuka supaya agen bisa
+	// get_section_source/propose_section_edit tanpa perlu anotasi (mis. menulis bab kosong lewat
+	// CTA "Tulis dengan Astra"); antrian anotasi terpilih ditambahkan bila ada.
 	function annotationContextParts(): string[] {
+		if (!section) return [];
+		const parts = [
+			`Bab yang sedang dibuka user: "${section.title}" (sectionId: ${sectionId}). Bila user minta menulis atau menyunting bab ini, panggil get_section_source lalu propose_section_edit dengan sectionId tersebut.`
+		];
 		const chosen = (annotations.data ?? []).filter(
 			(a) => a.status === 'open' && selectedAnnotationIds.has(a.id)
 		);
-		if (chosen.length === 0 || !section) return [];
-		return [
-			buildAnnotationClientContext({
-				sectionId,
-				sectionTitle: section.title,
-				annotations: chosen
-			})
-		];
+		if (chosen.length > 0) {
+			parts.push(
+				buildAnnotationClientContext({
+					sectionId,
+					sectionTitle: section.title,
+					annotations: chosen
+				})
+			);
+		}
+		return parts;
 	}
 
 	// Turn berangkat → tandai anotasi terpilih "terkirim" (ikut turn ini apa pun hasil stream).

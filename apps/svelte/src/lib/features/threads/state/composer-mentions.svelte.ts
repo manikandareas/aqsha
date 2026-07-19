@@ -116,6 +116,21 @@ export class ComposerMentions {
 		this.#draftContent = text;
 		this.#draftEpoch += 1;
 	}
+
+	#draftConsumedEpoch = 0;
+
+	/**
+	 * Return the draft if it hasn't been consumed yet (epoch rose since the last consume), and mark it
+	 * consumed. The consumed-epoch lives on this page-level instance (not per composer mount), so a
+	 * draft published BEFORE the composer mounts — e.g. "Tulis dengan Astra" switches to the chat tab,
+	 * mounting the composer only after `setComposerDraft` — is still picked up exactly once. Reading
+	 * `#draftEpoch` here (a rune) makes the caller's `$effect` re-run when a new draft is published.
+	 */
+	consumeDraft(): string | null {
+		if (this.#draftEpoch === this.#draftConsumedEpoch) return null;
+		this.#draftConsumedEpoch = this.#draftEpoch;
+		return this.#draftContent;
+	}
 }
 
 const composerMentionsContext = createContext<ComposerMentions>('composer-mentions');

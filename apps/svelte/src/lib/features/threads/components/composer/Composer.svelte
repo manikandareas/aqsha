@@ -198,15 +198,16 @@
 		}
 	});
 
-	// Prefill composer text (stats next-step chip) — overwrite `content` when the draft epoch rises.
-	// rises. Plain text → also set `richContent` so it doesn't drift before edit.
-	let seenDraftEpoch = mentions.draftEpoch;
+	// Prefill composer text (stats next-step chip, "Tulis dengan Astra" CTA) — adopt any draft not yet
+	// consumed. `consumeDraft` tracks the draft epoch (re-runs on a new draft) and keeps the consumed
+	// epoch on the shared `mentions` instance, so a draft published BEFORE this composer mounts (tab
+	// switch mounts it late) is still picked up once. Plain text → set `richContent` too so it doesn't
+	// drift before edit.
 	$effect(() => {
-		const epoch = mentions.draftEpoch;
-		if (epoch === seenDraftEpoch) return;
-		seenDraftEpoch = epoch;
-		content = mentions.draftContent;
-		richContent = mentions.draftContent;
+		const draft = mentions.consumeDraft();
+		if (draft === null) return;
+		content = draft;
+		richContent = draft;
 	});
 
 	const hasText = $derived(content.trim().length > 0);

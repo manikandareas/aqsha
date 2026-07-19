@@ -8,7 +8,9 @@
 	/**
 	 * Satu halaman PDF beranotasi: canvas + text layer (seleksi) + overlay marker.
 	 * Text layer WAJIB untuk seleksi teks; overlay diposisikan dalam PDF point × skala render.
-	 * Container text layer butuh `--scale-factor` (kontrak pdf.js v4+).
+	 * pdf.js v5 menulis font-size span sebagai `calc(var(--total-scale-factor) * …)`; variabel
+	 * ini WAJIB di-set di container, kalau tidak glyph text layer render tanpa skala (≈½ lebar)
+	 * dan lapisan seleksi tak lagi menutup teks canvas → seleksi/anotasi meleset.
 	 */
 	let {
 		pdf,
@@ -96,9 +98,11 @@
 				await renderTask.promise;
 				if (cancelled) return;
 
-				// Text layer: pdf.js menulis span terposisi absolut; --scale-factor wajib
-				// supaya offset span cocok dengan canvas (kontrak pdf.js v4+).
+				// Text layer: pdf.js menulis span terposisi absolut dengan font-size ber-skala
+				// via `calc(var(--total-scale-factor) * …)`; tanpa variabel ini glyph render
+				// tak ter-skala (≈½ lebar) sehingga seleksi teks meleset dari teks canvas.
 				textContainer.replaceChildren();
+				textContainer.style.setProperty('--total-scale-factor', String(viewport.scale));
 				textContainer.style.setProperty('--scale-factor', String(viewport.scale));
 				const textLayer = new pdfjs.TextLayer({
 					textContentSource: page.streamTextContent(),
