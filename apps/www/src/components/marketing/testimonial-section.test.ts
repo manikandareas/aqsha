@@ -11,7 +11,7 @@ const componentFile = Bun.file(
 
 test("places the testimonial directly before pricing", () => {
   expect(indexSource).toContain(
-    '<AudienceSection client:visible />\n    <TestimonialSection client:visible />\n    <PricingSection client:visible />',
+    '<TestimonialSection client:visible />\n    <PricingSection client:visible />',
   );
 });
 

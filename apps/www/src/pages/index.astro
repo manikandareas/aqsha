@@ -2,7 +2,7 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import LandingFooter from "@/components/marketing/landing-footer.astro";
 import WhatsNewTeaserSection from "@/components/marketing/whats-new-teaser-section.astro";
-import { AudienceSection } from "@/components/marketing/audience-section";
+// import { AudienceSection } from "@/components/marketing/audience-section";
 import { BottomCtaSection } from "@/components/marketing/bottom-cta-section";
 import { FaqSection } from "@/components/marketing/faq-section";
 import { FeatureBlocksSection } from "@/components/marketing/feature-blocks-section";
@@ -47,7 +47,7 @@ const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
     <WhatsNewTeaserSection latest={teaserLatest} />
     <FeatureBlocksSection client:visible />
     <FounderStorySection client:visible />
-    <AudienceSection client:visible />
+    {/* <AudienceSection client:visible /> */}
     <TestimonialSection client:visible />
     <PricingSection client:visible />
     <FaqSection client:visible />

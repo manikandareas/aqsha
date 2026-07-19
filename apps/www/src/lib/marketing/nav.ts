@@ -68,24 +68,7 @@ export const navTree: NavTopItem[] = [
       { href: "/#bandingin", label: "Bandingin Aqsha" },
     ],
   },
-  {
-    type: "menu",
-    label: "Untuk siapa",
-    items: [
-      {
-        href: "/#buat-siapa",
-        label: "Mahasiswa tingkat akhir",
-        description: "Skripsi dan tugas akhir yang aman pas sidang.",
-        icon: "graduation-cap",
-      },
-      {
-        href: "/#buat-siapa",
-        label: "Peneliti & dosen",
-        description: "Tesis, disertasi, sampai paper publikasi.",
-        icon: "idea",
-      },
-    ],
-  },
+  { type: "link", label: "About", href: "/#cerita-pembuat" },
   { type: "link", label: "Harga", href: "/#pricing" },
   { type: "link", label: "Blog", href: "/blog" },
   { type: "link", label: "Changelog", href: "/changelog" },
