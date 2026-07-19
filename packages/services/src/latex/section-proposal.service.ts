@@ -10,6 +10,7 @@ import { LATEX_SOURCE_MAX_BYTES, SectionLatexService } from "../section-latex.se
 import { assembleSection } from "./assembly.service";
 import { loadSectionCompileContext } from "./build.service";
 import { LatexCompileService } from "./compile.service";
+import { applyHunkSelection, computeProposalHunks, type ProposalHunk } from "./hunks";
 import type { CompileError } from "./types";
 
 export type ProposalEdit = { oldText: string; newText: string };
@@ -21,7 +22,8 @@ export type ProposeSectionEditResult =
 
 export type AcceptProposalResult =
   | { status: "accepted"; contentVersion: number }
-  | { status: "stale"; currentVersion: number };
+  | { status: "stale"; currentVersion: number }
+  | { status: "compile_error"; compileErrors: CompileError[] };
 
 export type PendingProposalView = {
   id: string;
@@ -35,6 +37,7 @@ export type PendingProposalView = {
   currentSource: string;
   currentVersion: number;
   isStale: boolean;
+  hunks: ProposalHunk[];
 };
 
 /**
@@ -63,6 +66,24 @@ export function applyProposalEdits(
     current = current.replace(edit.oldText, edit.newText);
   }
   return { ok: true, source: current };
+}
+
+/** Satu bucket dengan compile user; store error → fail-open (paritas rateLimitMacro API). */
+async function consumeCompileQuota(ownerUserId: string): Promise<void> {
+  try {
+    await getRateLimiter("latex:compile").consume(ownerUserId);
+  } catch (rejected) {
+    if (rejected instanceof Error) {
+      console.error("[proposal] rate limit store error", rejected);
+    } else {
+      throwAppError({
+        message: "Terlalu banyak compile. Coba lagi sebentar lagi.",
+        code: "rate_limited",
+        severity: "info",
+        status: 429,
+      });
+    }
+  }
 }
 
 async function assertPendingProposal(
@@ -112,21 +133,7 @@ export const SectionProposalService = {
     },
   ): Promise<ProposeSectionEditResult> {
     if (input.enforceRateLimit !== false) {
-      try {
-        await getRateLimiter("latex:compile").consume(input.ownerUserId);
-      } catch (rejected) {
-        if (rejected instanceof Error) {
-          // Store error → fail-open (paritas perilaku rateLimitMacro API).
-          console.error("[proposal] rate limit store error", rejected);
-        } else {
-          throwAppError({
-            message: "Terlalu banyak compile. Coba lagi sebentar lagi.",
-            code: "rate_limited",
-            severity: "info",
-            status: 429,
-          });
-        }
-      }
+      await consumeCompileQuota(input.ownerUserId);
     }
 
     const { section, doc, project, bib } = await loadSectionCompileContext(db, {
@@ -220,19 +227,92 @@ export const SectionProposalService = {
   },
 
   /**
-   * Terima proposal: CAS `saveDocument(author:'agent')` atas baseVersion proposal — versi
-   * bergeser (user menyimpan duluan) → proposal di-supersede dan TIDAK menimpa. Urutan
-   * save→transisi: gagal di antaranya menyisakan pending yang aman (accept ulang → stale).
+   * Terima proposal, utuh atau per-hunk. Utuh (tanpa acceptedHunkIndexes) memakai
+   * proposedSource yang sudah lolos dry-run saat propose — tanpa compile ulang. Subset hunk
+   * menghasilkan sumber baru → wajib dry-run compile dulu; gagal → union compile_error dan
+   * proposal tetap pending. Basis hunk = sumber terkini, sah hanya bila versi belum bergeser
+   * (guard di awal); CAS saveDocument tetap lapisan pengaman kedua. Urutan save→transisi:
+   * gagal di antaranya menyisakan pending yang aman (accept ulang → stale).
    */
   async accept(
     db: Db,
-    input: { ownerUserId: string; proposalId: string },
+    input: {
+      ownerUserId: string;
+      proposalId: string;
+      acceptedHunkIndexes?: number[];
+      enforceRateLimit?: boolean;
+    },
   ): Promise<AcceptProposalResult> {
     const proposal = await assertPendingProposal(db, input.ownerUserId, input.proposalId);
+
+    let source = proposal.proposedSource;
+    if (input.acceptedHunkIndexes) {
+      const doc = await SectionLatexService.getDocument(db, {
+        ownerUserId: input.ownerUserId,
+        sectionId: proposal.sectionId,
+      });
+      const currentVersion = doc?.contentVersion ?? 0;
+      if (currentVersion !== proposal.baseVersion) {
+        await SectionEditProposalRepo.updateById(db, proposal.id, {
+          status: "superseded",
+          decidedAt: Date.now(),
+        });
+        return { status: "stale", currentVersion };
+      }
+      const baseSource = doc?.source ?? "";
+      const hunks = computeProposalHunks(baseSource, proposal.proposedSource);
+      const selected = new Set(input.acceptedHunkIndexes);
+      const invalid =
+        selected.size === 0 ||
+        [...selected].some((i) => !Number.isInteger(i) || i < 0 || i >= hunks.length);
+      if (invalid) {
+        throwAppError({
+          message: "Pilihan hunk tidak valid",
+          code: "invalid_hunk_selection",
+          severity: "warning",
+          status: 422,
+        });
+      }
+      if (selected.size < hunks.length) {
+        source = applyHunkSelection(baseSource, hunks, selected);
+        if (Buffer.byteLength(source, "utf8") > LATEX_SOURCE_MAX_BYTES) {
+          throwAppError({
+            message: "Sumber hasil pilihan terlalu besar. Maksimum 2 MB.",
+            code: "latex_source_too_large",
+            severity: "warning",
+            status: 413,
+          });
+        }
+        if (input.enforceRateLimit !== false) {
+          await consumeCompileQuota(input.ownerUserId);
+        }
+        // Sumber parsial belum pernah compile — dry-run dulu, build resmi tak tersentuh.
+        const { section, project, bib } = await loadSectionCompileContext(db, {
+          ownerUserId: input.ownerUserId,
+          sectionId: proposal.sectionId,
+        });
+        const assembled = assembleSection(project, {
+          id: section.id,
+          title: section.title,
+          sortOrder: section.sortOrder,
+          role: section.role,
+          source,
+        });
+        const compiled = await LatexCompileService.compile({
+          mainTex: assembled.mainTex,
+          extraFiles: assembled.extraFiles,
+          bib,
+        });
+        if (!compiled.ok) {
+          return { status: "compile_error", compileErrors: compiled.errors };
+        }
+      }
+    }
+
     const saved = await SectionLatexService.saveDocument(db, {
       ownerUserId: input.ownerUserId,
       sectionId: proposal.sectionId,
-      source: proposal.proposedSource,
+      source,
       // baseVersion 0 = bab belum pernah ditulis (lazy-create tanpa CAS versi).
       ...(proposal.baseVersion > 0 ? { baseVersion: proposal.baseVersion } : {}),
       author: "agent",
@@ -301,6 +381,7 @@ export const SectionProposalService = {
       currentSource: doc?.source ?? "",
       currentVersion,
       isStale: row.baseVersion !== currentVersion,
+      hunks: computeProposalHunks(doc?.source ?? "", row.proposedSource),
     };
   },
 };
