@@ -32,6 +32,8 @@
 		usePendingProposal,
 		useAcceptProposal,
 		useRejectProposal,
+		useSynctexInverse,
+		useSynctexForward,
 		type AnnotationRect,
 		type LatexCompileError
 	} from '../api';
@@ -151,6 +153,52 @@
 				return '';
 		}
 	});
+
+	const synctexInverse = useSynctexInverse(() => sectionId);
+	const synctexForward = useSynctexForward(() => sectionId);
+	let locateMode = $state(false);
+	let pdfFlash = $state<{ page: number; xPt: number; yPt: number } | null>(null);
+
+	// Klik PDF (mode lompat) → inverse → buka editor di baris.
+	function handleLocate(a: { page: number; xPt: number; yPt: number }): void {
+		synctexInverse.mutate(a, {
+			onSuccess: (hit) => {
+				if (!hit) {
+					toast.info('Tidak ada baris sumber untuk titik itu.');
+					return;
+				}
+				editMode = true;
+				// Tunggu editor mount bila baru dibuka, lalu lompat.
+				queueMicrotask(() => editorHandle?.scrollToLine(hit.line));
+			}
+		});
+	}
+
+	// Tombol editor "Lihat di PDF" → forward(baris kursor) → PDF + kedip.
+	function locateInPdf(): void {
+		const line = editorHandle?.getCursorLine();
+		if (line == null) return;
+		synctexForward.mutate(
+			{ line },
+			{
+				onSuccess: (pos) => {
+					if (!pos) {
+						toast.info('Belum ada posisi PDF untuk baris itu (compile ulang dulu).');
+						return;
+					}
+					editMode = false;
+					pdfFlash = pos;
+					queueMicrotask(() => {
+						window.document
+							.getElementById(`pdf-page-${pos.page}`)
+							?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+					});
+					// Bersihkan kedip setelah animasi.
+					setTimeout(() => (pdfFlash = null), 2000);
+				}
+			}
+		);
+	}
 
 	const section = $derived(sections.data?.find((s) => s.id === sectionId) ?? null);
 	const isBibliography = $derived(section?.role === 'bibliography');
@@ -390,6 +438,12 @@
 								{#if editMode && saveStatusLabel}
 									<span class="text-label text-muted-foreground">{saveStatusLabel}</span>
 								{/if}
+								{#if editMode}
+									<Button type="button" variant="ghost" size="sm" onclick={locateInPdf}>
+										<Icon icon={EyeIcon} class="size-4" />
+										Lihat di PDF
+									</Button>
+								{/if}
 								<Button
 									type="button"
 									variant={editMode ? 'secondary' : 'ghost'}
@@ -508,11 +562,14 @@
 								url={build.data.pdfUrl}
 								annotations={annotations.data ?? []}
 								bind:pinMode
+								bind:locateMode
 								{activeAnnotationId}
 								{stale}
+								flash={pdfFlash}
 								onCreateHighlight={handleCreateHighlight}
 								onCreatePin={handleCreatePin}
 								onSelectAnnotation={(id) => (activeAnnotationId = id)}
+								onLocate={handleLocate}
 							/>
 						{:else if document.data}
 							<div

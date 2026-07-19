@@ -2,7 +2,15 @@
 	import { browser } from '$app/environment';
 	import type { PDFDocumentProxy } from 'pdfjs-dist';
 	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Icon, Loader2Icon, AlertCircleIcon, MinusIcon, PlusIcon, PinIcon } from '$lib/icons';
+	import {
+		Icon,
+		Loader2Icon,
+		AlertCircleIcon,
+		MinusIcon,
+		PlusIcon,
+		PinIcon,
+		Code2Icon
+	} from '$lib/icons';
 	import type { AnnotationRect, AnnotationView } from '../api';
 	import PdfAnnotatedPage from './PdfAnnotatedPage.svelte';
 
@@ -17,9 +25,12 @@
 		pinMode = $bindable(false),
 		activeAnnotationId = null,
 		stale = false,
+		locateMode = $bindable(false),
+		flash = null,
 		onCreateHighlight,
 		onCreatePin,
-		onSelectAnnotation
+		onSelectAnnotation,
+		onLocate
 	}: {
 		url: string;
 		annotations?: AnnotationView[];
@@ -27,6 +38,8 @@
 		pinMode?: boolean;
 		activeAnnotationId?: string | null;
 		stale?: boolean;
+		locateMode?: boolean;
+		flash?: { page: number; xPt: number; yPt: number } | null;
 		onCreateHighlight?: (a: {
 			page: number;
 			rects: AnnotationRect[];
@@ -34,6 +47,7 @@
 		}) => void;
 		onCreatePin?: (a: { page: number; x: number; y: number }) => void;
 		onSelectAnnotation?: (id: string) => void;
+		onLocate?: (a: { page: number; xPt: number; yPt: number }) => void;
 	} = $props();
 
 	const MAX_PAGE_WIDTH = 820;
@@ -133,9 +147,12 @@
 						{pinMode}
 						{annotations}
 						{activeAnnotationId}
+						{locateMode}
+						{flash}
 						{onCreateHighlight}
 						{onCreatePin}
 						{onSelectAnnotation}
+						{onLocate}
 					/>
 				{/each}
 			</div>
@@ -186,6 +203,18 @@
 					onclick={() => (pinMode = !pinMode)}
 				>
 					<Icon icon={PinIcon} class="size-4" />
+				</Button>
+				<Button
+					type="button"
+					variant={locateMode ? 'secondary' : 'ghost'}
+					size="icon-sm"
+					aria-label={locateMode
+						? 'Matikan lompat ke sumber'
+						: 'Lompat ke sumber — klik PDF untuk buka baris editor'}
+					aria-pressed={locateMode}
+					onclick={() => (locateMode = !locateMode)}
+				>
+					<Icon icon={Code2Icon} class="size-4" />
 				</Button>
 			{/if}
 		</div>

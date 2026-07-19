@@ -23,7 +23,10 @@
 		activeAnnotationId = null,
 		onCreateHighlight,
 		onCreatePin,
-		onSelectAnnotation
+		onSelectAnnotation,
+		locateMode = false,
+		onLocate,
+		flash = null
 	}: {
 		pdf: PDFDocumentProxy;
 		pageNumber: number;
@@ -40,6 +43,9 @@
 		}) => void;
 		onCreatePin?: (a: { page: number; x: number; y: number }) => void;
 		onSelectAnnotation?: (id: string) => void;
+		locateMode?: boolean;
+		onLocate?: (a: { page: number; xPt: number; yPt: number }) => void;
+		flash?: { page: number; xPt: number; yPt: number } | null;
 	} = $props();
 
 	let containerEl = $state<HTMLDivElement | null>(null);
@@ -140,15 +146,17 @@
 	}
 
 	function handleClick(event: MouseEvent): void {
-		if (!annotatable || !pinMode || !onCreatePin) return;
 		const container = containerEl;
 		if (!container) return;
 		const pageBox = container.getBoundingClientRect();
-		onCreatePin({
-			page: pageNumber,
-			x: (event.clientX - pageBox.left) / scale,
-			y: (event.clientY - pageBox.top) / scale
-		});
+		const xPt = (event.clientX - pageBox.left) / scale;
+		const yPt = (event.clientY - pageBox.top) / scale;
+		if (locateMode && onLocate) {
+			onLocate({ page: pageNumber, xPt, yPt });
+			return;
+		}
+		if (!annotatable || !pinMode || !onCreatePin) return;
+		onCreatePin({ page: pageNumber, x: xPt, y: yPt });
 	}
 </script>
 
@@ -156,7 +164,7 @@
 	bind:this={containerEl}
 	id={`pdf-page-${pageNumber}`}
 	data-page={pageNumber}
-	class="aqsha-pdf-page relative mx-auto select-text"
+	class="aqsha-pdf-page relative mx-auto select-text {locateMode ? 'cursor-crosshair' : ''}"
 	style={`width:${width}px`}
 	onmouseup={handleMouseUp}
 	onclick={handleClick}
@@ -188,6 +196,12 @@
 				{/each}
 			{/each}
 		</div>
+		{#if flash && flash.page === pageNumber}
+			<div
+				class="pointer-events-none absolute z-20 h-5 w-1.5 -translate-x-1/2 animate-pulse rounded-full bg-primary"
+				style={`left:${flash.xPt * scale}px;top:${flash.yPt * scale - 10}px`}
+			></div>
+		{/if}
 	{:else}
 		<div style={`height:${estimatedHeight}px`}></div>
 	{/if}

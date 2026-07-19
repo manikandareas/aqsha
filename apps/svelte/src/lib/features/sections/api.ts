@@ -133,6 +133,29 @@ export function useCompileSection(sectionId: () => string) {
 	}));
 }
 
+export type SynctexInverseResult = { line: number } | null;
+export type SynctexForwardResult = { page: number; xPt: number; yPt: number } | null;
+
+/** Klik PDF → baris sumber (best-effort; null bila tak ada synctex / di luar body bab). */
+export function useSynctexInverse(sectionId: () => string) {
+	const api = getApiClient();
+	return createMutation(() => ({
+		mutationFn: async (input: { page: number; xPt: number; yPt: number }) =>
+			unwrap(await api.sections({ id: sectionId() }).synctex.inverse.post(input)) as SynctexInverseResult
+	}));
+}
+
+/** Baris sumber → posisi PDF (best-effort). */
+export function useSynctexForward(sectionId: () => string) {
+	const api = getApiClient();
+	return createMutation(() => ({
+		mutationFn: async (input: { line: number }) =>
+			unwrap(
+				await api.sections({ id: sectionId() }).synctex.forward.post(input)
+			) as SynctexForwardResult
+	}));
+}
+
 export function useWorkspaceBuild(workspaceId: () => string, enabled: () => boolean = alwaysTrue) {
 	const api = getApiClient();
 	return createQuery(() => ({
