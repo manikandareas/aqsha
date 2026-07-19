@@ -178,6 +178,15 @@ export function useCompileWorkspace(workspaceId: () => string) {
 	}));
 }
 
+/** Ekspor best-effort dokumen penuh ke .docx; mengembalikan signed URL unduhan. */
+export function useExportDocx(workspaceId: () => string) {
+	const api = getApiClient();
+	return createMutation(() => ({
+		mutationFn: async () =>
+			unwrap(await api.workspaces({ id: workspaceId() }).export.docx.post()) as { url: string }
+	}));
+}
+
 export function useSectionAnnotations(
 	sectionId: () => string,
 	enabled: () => boolean = alwaysTrue

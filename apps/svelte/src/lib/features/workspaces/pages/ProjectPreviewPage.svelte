@@ -5,10 +5,10 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
-	import { Icon, ArrowLeftIcon } from '$lib/icons';
+	import { Icon, ArrowLeftIcon, DownloadIcon } from '$lib/icons';
 	import { readableApiErrorMessage } from '$lib/errors/api-error';
 	import SectionPdfViewer from '$lib/features/sections/components/SectionPdfViewer.svelte';
-	import { useWorkspaceBuild, useCompileWorkspace } from '$lib/features/sections/api';
+	import { useWorkspaceBuild, useCompileWorkspace, useExportDocx } from '$lib/features/sections/api';
 	import { useSections, useWorkspace } from '../api';
 	import { projectDisplayTitle } from '../types';
 
@@ -22,6 +22,7 @@
 	const sections = useSections(() => projectId);
 	const build = useWorkspaceBuild(() => projectId);
 	const compile = useCompileWorkspace(() => projectId);
+	const exportDocx = useExportDocx(() => projectId);
 
 	// Heuristik basi indikatif: build lebih tua dari perubahan bab terbaru. Cukup untuk
 	// pratinjau — bukan pemetaan versi per-bab seperti di halaman bab.
@@ -42,6 +43,22 @@
 				}
 			},
 			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menyusun dokumen.'))
+		});
+	}
+
+	function downloadDocx(): void {
+		exportDocx.mutate(undefined, {
+			onSuccess: (res) => {
+				// Unduh via anchor sementara (signed URL langsung dari storage).
+				const a = window.document.createElement('a');
+				a.href = res.url;
+				a.download = '';
+				a.rel = 'noopener';
+				window.document.body.appendChild(a);
+				a.click();
+				a.remove();
+			},
+			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal mengekspor DOCX.'))
 		});
 	}
 </script>
@@ -78,6 +95,20 @@
 				<Spinner class="size-4" />
 			{/if}
 			Compile dokumen penuh
+		</Button>
+		<Button
+			type="button"
+			variant="ghost"
+			size="sm"
+			disabled={exportDocx.isPending || !build.data?.pdfUrl}
+			onclick={downloadDocx}
+		>
+			{#if exportDocx.isPending}
+				<Spinner class="size-4" />
+			{:else}
+				<Icon icon={DownloadIcon} class="size-4" />
+			{/if}
+			Unduh DOCX
 		</Button>
 	</header>
 
