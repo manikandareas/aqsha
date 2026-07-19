@@ -30,11 +30,13 @@ export {
 } from "./assembly.service";
 export { scanCiteKeys, stripTexComments } from "./cite-scan";
 export {
+  assembleWorkspaceDocument,
   LatexBuildService,
   type LatexBuildOutcome,
   type LatexBuildView,
   loadSectionCompileContext,
 } from "./build.service";
+export { WorkspaceDocxService } from "./docx-export.service";
 export {
   applyProposalEdits,
   type AcceptProposalResult,

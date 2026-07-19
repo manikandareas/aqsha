@@ -7,7 +7,11 @@ import {
   SectionSynctexService,
   WorkspaceService,
 } from "@aqsha/services";
-import { LatexBuildService, SectionProposalService } from "@aqsha/services/latex";
+import {
+  LatexBuildService,
+  SectionProposalService,
+  WorkspaceDocxService,
+} from "@aqsha/services/latex";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
@@ -306,6 +310,14 @@ export const workspaces = new Elysia()
       return LatexBuildService.getWorkspaceBuild(db, { ownerUserId, workspaceId: params.id });
     },
     { auth: true },
+  )
+  .post(
+    "/workspaces/:id/export/docx",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return WorkspaceDocxService.export(db, { ownerUserId, workspaceId: params.id });
+    },
+    { auth: true, rateLimit: "latex:compile" },
   )
   // ── Anotasi PDF bab ──────────────────────────────────────────────────────
   .get(

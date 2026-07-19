@@ -224,6 +224,44 @@ async function viewOf(row: LatexBuild | null): Promise<LatexBuildView | null> {
   return toView(row, pdfUrl);
 }
 
+/** Rakit dokumen penuh workspace (mainTex + extraFiles + bib) — dipakai compile & ekspor DOCX. */
+export async function assembleWorkspaceDocument(
+  db: Db,
+  input: { ownerUserId: string; workspaceId: string },
+): Promise<{ assembled: AssembledDocument; bib: string; sourceVersions: Record<string, number> }> {
+  const project = await projectInput(db, input.ownerUserId, input.workspaceId);
+  const sections = await WorkspaceSectionRepo.listByWorkspace(db, input.workspaceId);
+  const sourceVersions: Record<string, number> = {};
+  const assemblyInputs = [];
+  for (const section of sections) {
+    if (section.role === "bibliography") {
+      assemblyInputs.push({
+        id: section.id,
+        title: section.title,
+        sortOrder: section.sortOrder,
+        role: section.role,
+        source: null,
+      });
+      continue;
+    }
+    const doc = await SectionLatexService.getDocument(db, {
+      ownerUserId: input.ownerUserId,
+      sectionId: section.id,
+    });
+    if (doc) sourceVersions[section.id] = doc.contentVersion;
+    assemblyInputs.push({
+      id: section.id,
+      title: section.title,
+      sortOrder: section.sortOrder,
+      role: section.role,
+      source: doc?.source ?? null,
+    });
+  }
+  const bib = await projectBib(db, input.ownerUserId, input.workspaceId);
+  const assembled = assembleWorkspace(project, assemblyInputs);
+  return { assembled, bib, sourceVersions };
+}
+
 export const LatexBuildService = {
   /** Compile satu bab (loop edit cepat) — sinkron; hasil dipersist latest-only. */
   async compileSection(
@@ -265,36 +303,7 @@ export const LatexBuildService = {
     db: Db,
     input: { ownerUserId: string; workspaceId: string },
   ): Promise<LatexBuildOutcome> {
-    const project = await projectInput(db, input.ownerUserId, input.workspaceId);
-    const sections = await WorkspaceSectionRepo.listByWorkspace(db, input.workspaceId);
-    const sourceVersions: Record<string, number> = {};
-    const assemblyInputs = [];
-    for (const section of sections) {
-      if (section.role === "bibliography") {
-        assemblyInputs.push({
-          id: section.id,
-          title: section.title,
-          sortOrder: section.sortOrder,
-          role: section.role,
-          source: null,
-        });
-        continue;
-      }
-      const doc = await SectionLatexService.getDocument(db, {
-        ownerUserId: input.ownerUserId,
-        sectionId: section.id,
-      });
-      if (doc) sourceVersions[section.id] = doc.contentVersion;
-      assemblyInputs.push({
-        id: section.id,
-        title: section.title,
-        sortOrder: section.sortOrder,
-        role: section.role,
-        source: doc?.source ?? null,
-      });
-    }
-    const bib = await projectBib(db, input.ownerUserId, input.workspaceId);
-    const assembled = assembleWorkspace(project, assemblyInputs);
+    const { assembled, bib, sourceVersions } = await assembleWorkspaceDocument(db, input);
     const result = await LatexCompileService.compile({
       mainTex: assembled.mainTex,
       extraFiles: assembled.extraFiles,
