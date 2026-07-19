@@ -12,10 +12,16 @@ const OWNER = `apipr_${suffix}`;
 
 const { app } = await import("../src/index");
 
-function req(method: string, path: string, token?: string) {
+function req(method: string, path: string, token?: string, body?: unknown) {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (token) headers.authorization = `Bearer ${token}`;
-  return app.handle(new Request(`http://localhost${path}`, { method, headers }));
+  return app.handle(
+    new Request(`http://localhost${path}`, {
+      method,
+      headers,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    }),
+  );
 }
 
 describe("proposals routes", () => {
@@ -38,5 +44,25 @@ describe("proposals routes", () => {
     expect(res.status).toBe(404);
     const body = (await res.json()) as { code?: string };
     expect(typeof body.code).toBe("string");
+  });
+
+  itest("accept dengan acceptedHunkIndexes → body tervalidasi, id asing tetap 404", async () => {
+    const res = await req(
+      "POST",
+      `/sections/x/proposals/nonexistent_${suffix}/accept`,
+      `tok_${OWNER}`,
+      { acceptedHunkIndexes: [0, 2] },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  itest("accept dengan body salah bentuk → 400 validasi", async () => {
+    const res = await req(
+      "POST",
+      `/sections/x/proposals/nonexistent_${suffix}/accept`,
+      `tok_${OWNER}`,
+      { acceptedHunkIndexes: ["bukan-angka"] },
+    );
+    expect(res.status).toBe(400);
   });
 });

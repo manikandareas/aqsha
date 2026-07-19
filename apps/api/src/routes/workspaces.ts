@@ -372,11 +372,24 @@ export const workspaces = new Elysia()
   )
   .post(
     "/sections/:id/proposals/:pid/accept",
-    ({ ownerUserId, params }) => {
+    ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      return SectionProposalService.accept(db, { ownerUserId, proposalId: params.pid });
+      return SectionProposalService.accept(db, {
+        ownerUserId,
+        proposalId: params.pid,
+        acceptedHunkIndexes: body?.acceptedHunkIndexes,
+      });
     },
-    { auth: true },
+    {
+      auth: true,
+      body: t.Optional(
+        t.Object({
+          acceptedHunkIndexes: t.Optional(
+            t.Array(t.Integer({ minimum: 0 }), { maxItems: 512 }),
+          ),
+        }),
+      ),
+    },
   )
   .post(
     "/sections/:id/proposals/:pid/reject",
