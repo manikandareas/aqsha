@@ -17,6 +17,7 @@ export {
   SectionLatexService,
 } from "./section-latex.service";
 export { AnnotationService, type AnnotationView } from "./annotation.service";
+export { SectionSynctexService } from "./section-synctex.service";
 export { FolderService } from "./folder.service";
 export { ContextService, type HydratedContext } from "./context.service";
 export {

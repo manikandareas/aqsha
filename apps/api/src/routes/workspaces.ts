@@ -4,6 +4,7 @@ import {
   FolderService,
   SectionLatexService,
   SectionService,
+  SectionSynctexService,
   WorkspaceService,
 } from "@aqsha/services";
 import { LatexBuildService, SectionProposalService } from "@aqsha/services/latex";
@@ -257,6 +258,38 @@ export const workspaces = new Elysia()
       return LatexBuildService.getSectionBuild(db, { ownerUserId, sectionId: params.id });
     },
     { auth: true },
+  )
+  .post(
+    "/sections/:id/synctex/inverse",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return SectionSynctexService.inverse(db, {
+        ownerUserId,
+        sectionId: params.id,
+        page: body.page,
+        xPt: body.xPt,
+        yPt: body.yPt,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ page: t.Numeric(), xPt: t.Numeric(), yPt: t.Numeric() }),
+    },
+  )
+  .post(
+    "/sections/:id/synctex/forward",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return SectionSynctexService.forward(db, {
+        ownerUserId,
+        sectionId: params.id,
+        line: body.line,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ line: t.Numeric() }),
+    },
   )
   .post(
     "/workspaces/:id/compile",
