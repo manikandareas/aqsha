@@ -139,6 +139,7 @@
     "@mistralai/mistralai": "^2.3.0",
     "ai": "^6.0.208",
     "bullmq": "^5.79.0",
+    "diff": "^9.0.0",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.7.3",

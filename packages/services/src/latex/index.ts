@@ -43,3 +43,4 @@ export {
   type ProposeSectionEditResult,
   SectionProposalService,
 } from "./section-proposal.service";
+export { applyHunkSelection, computeProposalHunks, type ProposalHunk } from "./hunks";
