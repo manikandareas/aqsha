@@ -6,9 +6,11 @@ import { AudienceSection } from "@/components/marketing/audience-section";
 import { BottomCtaSection } from "@/components/marketing/bottom-cta-section";
 import { FaqSection } from "@/components/marketing/faq-section";
 import { FeatureBlocksSection } from "@/components/marketing/feature-blocks-section";
+import { FounderStorySection } from "@/components/marketing/founder-story-section";
 import { LandingHeroZone } from "@/components/marketing/landing-hero-zone";
 import { PricingSection } from "@/components/marketing/pricing-section";
 import { StructuredData } from "@/components/marketing/structured-data";
+import { TestimonialSection } from "@/components/marketing/testimonial-section";
 import { UniversityMarqueeSection } from "@/components/marketing/university-marquee-section";
 import { WhyAqshaSection } from "@/components/marketing/why-aqsha-section";
 import { mapChangelogEntry } from "@/lib/changelog/map";
@@ -44,7 +46,9 @@ const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
     <WhyAqshaSection client:visible />
     <WhatsNewTeaserSection latest={teaserLatest} />
     <FeatureBlocksSection client:visible />
+    <FounderStorySection client:visible />
     <AudienceSection client:visible />
+    <TestimonialSection client:visible />
     <PricingSection client:visible />
     <FaqSection client:visible />
     <BottomCtaSection client:visible />
