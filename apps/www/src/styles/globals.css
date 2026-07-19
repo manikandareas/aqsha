@@ -110,6 +110,12 @@
   }
 }
 
+/* When Lenis drives the landing page it owns all smoothing — CSS smooth
+   scroll on top would double-animate anchor jumps. */
+html.lenis {
+  scroll-behavior: auto !important;
+}
+
 /* Faint blueprint grid behind the hero, drawn in the border token and faded
    at both edges so it never fights the header or the frame stack. */
 .hero-grid {

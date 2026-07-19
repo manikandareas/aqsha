@@ -51,3 +51,10 @@ const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
     <LandingFooter />
   </main>
 </BaseLayout>
+
+<script>
+  import "locomotive-scroll/locomotive-scroll.css";
+  import { initLandingSmoothScroll } from "@/lib/marketing/smooth-scroll";
+
+  initLandingSmoothScroll();
+</script>
