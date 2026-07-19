@@ -242,6 +242,15 @@ export function useMarkAnnotationsSent(sectionId: () => string) {
 	}));
 }
 
+export type ProposalHunk = {
+	index: number;
+	oldStart: number;
+	oldLines: number;
+	newStart: number;
+	newLines: number;
+	lines: string[];
+};
+
 export type PendingProposalView = {
 	id: string;
 	sectionId: string;
@@ -254,10 +263,13 @@ export type PendingProposalView = {
 	currentSource: string;
 	currentVersion: number;
 	isStale: boolean;
+	hunks: ProposalHunk[];
 } | null;
 
 export type AcceptProposalResult =
-	{ status: 'accepted'; contentVersion: number } | { status: 'stale'; currentVersion: number };
+	| { status: 'accepted'; contentVersion: number }
+	| { status: 'stale'; currentVersion: number }
+	| { status: 'compile_error'; compileErrors: LatexCompileError[] };
 
 export function usePendingProposal(sectionId: () => string, enabled: () => boolean = alwaysTrue) {
 	const api = getApiClient();
@@ -273,9 +285,16 @@ export function useAcceptProposal(sectionId: () => string) {
 	const api = getApiClient();
 	const qc = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: async (proposalId: string) =>
+		mutationFn: async (input: { proposalId: string; acceptedHunkIndexes?: number[] }) =>
 			unwrap(
-				await api.sections({ id: sectionId() }).proposals({ pid: proposalId }).accept.post()
+				await api
+					.sections({ id: sectionId() })
+					.proposals({ pid: input.proposalId })
+					.accept.post(
+						input.acceptedHunkIndexes
+							? { acceptedHunkIndexes: input.acceptedHunkIndexes }
+							: undefined
+					)
 			) as AcceptProposalResult,
 		onSuccess: () => {
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionProposal(sectionId()) });
