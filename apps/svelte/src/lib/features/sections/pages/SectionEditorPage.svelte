@@ -31,7 +31,8 @@
 		usePendingProposal,
 		useAcceptProposal,
 		useRejectProposal,
-		type AnnotationRect
+		type AnnotationRect,
+		type LatexCompileError
 	} from '../api';
 	import { buildAnnotationClientContext } from '../lib/annotation-context';
 	import BibliographyView from '../components/BibliographyView.svelte';
@@ -68,6 +69,9 @@
 	const acceptProposal = useAcceptProposal(() => sectionId);
 	const rejectProposal = useRejectProposal(() => sectionId);
 	const qc = useQueryClient();
+
+	// Error compile hasil pilihan hunk parsial (accept mengembalikan compile_error, bukan throw).
+	let proposalAcceptErrors = $state<LatexCompileError[] | null>(null);
 
 	const section = $derived(sections.data?.find((s) => s.id === sectionId) ?? null);
 	const isBibliography = $derived(section?.role === 'bibliography');
@@ -219,29 +223,39 @@
 
 	// Turn selesai → segarkan proposal (mungkin baru dibuat agen) + status anotasi.
 	function handleAgentSettled(): void {
+		// Proposal baru dari agen tak boleh mewarisi error accept usulan sebelumnya.
+		proposalAcceptErrors = null;
 		void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionProposal(sectionId) });
 		void qc.invalidateQueries({ queryKey: queryKeys.workspaces.sectionAnnotations(sectionId) });
 	}
 
-	function handleAcceptProposal(): void {
+	function handleAcceptProposal(acceptedHunkIndexes: number[] | undefined): void {
 		const p = proposal.data;
 		if (!p) return;
-		acceptProposal.mutate(p.id, {
-			onSuccess: (res) => {
-				if (res.status === 'accepted') {
-					toast.success('Suntingan diterapkan. Menyusun ulang PDF…');
-					requestCompile();
-				} else {
-					toast.warning('Sumber sudah berubah — usulan dibatalkan. Minta Astra menyusun ulang.');
-				}
-			},
-			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menerapkan usulan.'))
-		});
+		proposalAcceptErrors = null;
+		acceptProposal.mutate(
+			{ proposalId: p.id, acceptedHunkIndexes },
+			{
+				onSuccess: (res) => {
+					if (res.status === 'accepted') {
+						toast.success('Suntingan diterapkan. Menyusun ulang PDF…');
+						requestCompile();
+					} else if (res.status === 'compile_error') {
+						proposalAcceptErrors = res.compileErrors;
+						toast.warning('Hasil pilihan hunk gagal compile. Ubah pilihan atau tolak.');
+					} else {
+						toast.warning('Sumber sudah berubah — usulan dibatalkan. Minta Astra menyusun ulang.');
+					}
+				},
+				onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menerapkan usulan.'))
+			}
+		);
 	}
 
 	function handleRejectProposal(): void {
 		const p = proposal.data;
 		if (!p) return;
+		proposalAcceptErrors = null;
 		rejectProposal.mutate(p.id, {
 			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menolak usulan.'))
 		});
@@ -321,6 +335,7 @@
 								<ProposalReviewCard
 									proposal={proposal.data}
 									accepting={acceptProposal.isPending}
+									acceptErrors={proposalAcceptErrors}
 									onAccept={handleAcceptProposal}
 									onReject={handleRejectProposal}
 								/>
