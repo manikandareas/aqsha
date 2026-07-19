@@ -1,0 +1,22 @@
+---
+import MarketingLayout from "@/layouts/MarketingLayout.astro";
+import { ChangelogList } from "@/components/changelog/changelog-list";
+import { mapChangelogEntry } from "@/lib/changelog/map";
+import { getCollection } from "astro:content";
+
+const entries = (await getCollection("changelog"))
+  .filter((e) => !e.data.draft)
+  .sort(
+    (a, b) =>
+      b.data.publishedAt.valueOf() - a.data.publishedAt.valueOf(),
+  )
+  .map((e) => mapChangelogEntry(e, e.body ?? ""));
+---
+
+<MarketingLayout
+  title="Apa yang baru"
+  description="Fitur baru, peningkatan, dan perbaikan terbaru di Aqsha — asisten AI buat riset yang sumbernya beneran dicek."
+  path="/changelog"
+>
+  <ChangelogList entries={entries} />
+</MarketingLayout>

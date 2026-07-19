@@ -1,0 +1,28 @@
+import type { ComponentProps } from "react";
+
+/**
+ * Override elemen HTML yang dihasilkan MDX — dipakai bersama blog & changelog.
+ * Server-safe (tanpa "use client"): dipakai langsung di RSC. Komponen interaktif
+ * (butuh hooks) harus pakai "use client" dan ditambahkan terpisah.
+ */
+export const mdxComponents = {
+  a: ({ href = "", children, rel, ...props }: ComponentProps<"a">) =>
+    // `//host` adalah URL protocol-relative (eksternal), bukan path internal —
+    // wajib dikecualikan dari `<Link>`.
+    href.startsWith("/") && !href.startsWith("//") ? (
+      <a href={href} {...props}>
+        {children}
+      </a>
+    ) : (
+      // `noreferrer` dijamin ada; `rel` dari caller (kalau ada) di-merge, bukan
+      // menimpa nilai keamanan ini.
+      <a href={href} {...props} rel={rel ? `${rel} noreferrer` : "noreferrer"}>
+        {children}
+      </a>
+    ),
+  img: (props: ComponentProps<"img">) => (
+    // `loading` setelah spread → lazy-loading wajib tak bisa ditimpa nilai dari MDX.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img {...props} loading="lazy" alt={props.alt ?? ""} />
+  ),
+};

@@ -1,0 +1,64 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import LandingFooter from "@/components/marketing/landing-footer.astro";
+import WhatsNewTeaserSection from "@/components/marketing/whats-new-teaser-section.astro";
+// import { AudienceSection } from "@/components/marketing/audience-section";
+import { BottomCtaSection } from "@/components/marketing/bottom-cta-section";
+import { FaqSection } from "@/components/marketing/faq-section";
+import { FeatureBlocksSection } from "@/components/marketing/feature-blocks-section";
+import { FounderStorySection } from "@/components/marketing/founder-story-section";
+import { LandingHeroZone } from "@/components/marketing/landing-hero-zone";
+import { PricingSection } from "@/components/marketing/pricing-section";
+import { StructuredData } from "@/components/marketing/structured-data";
+import { TestimonialSection } from "@/components/marketing/testimonial-section";
+import { UniversityMarqueeSection } from "@/components/marketing/university-marquee-section";
+import { WhyAqshaSection } from "@/components/marketing/why-aqsha-section";
+import { mapChangelogEntry } from "@/lib/changelog/map";
+import { mapLandingLatest } from "@/lib/marketing/latest";
+import { getCollection } from "astro:content";
+
+const entries = (await getCollection("changelog"))
+  .filter((e) => !e.data.draft)
+  .sort(
+    (a, b) =>
+      b.data.publishedAt.valueOf() - a.data.publishedAt.valueOf(),
+  )
+  .map((e) => mapChangelogEntry(e));
+
+const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
+---
+
+<!--
+  Astro owns the page graph; React owns interactive widgets only.
+  client:load  — above-the-fold chrome + hero
+  client:visible — below-fold motion / pricing / FAQ
+  static Astro — teaser (CSS motion) + footer (no JS)
+-->
+<BaseLayout
+  title="Asisten AI buat skripsi, tesis & paper"
+  description="Aqsha ngecek tiap sumber ke paper aslinya — jadi kamu nggak ketahuan pas sidang atau direview dosen. Cari jurnal, nulis bareng Astra, semua di satu tempat."
+  path="/"
+>
+  <main class="min-h-svh bg-background text-foreground">
+    <StructuredData />
+    <LandingHeroZone client:load latestUpdate={latestUpdate} />
+    <UniversityMarqueeSection client:visible />
+    <WhyAqshaSection client:visible />
+    <WhatsNewTeaserSection latest={teaserLatest} />
+    <FeatureBlocksSection client:visible />
+    <FounderStorySection client:visible />
+    {/* <AudienceSection client:visible /> */}
+    <TestimonialSection client:visible />
+    <PricingSection client:visible />
+    <FaqSection client:visible />
+    <BottomCtaSection client:visible />
+    <LandingFooter />
+  </main>
+</BaseLayout>
+
+<script>
+  import "locomotive-scroll/locomotive-scroll.css";
+  import { initLandingSmoothScroll } from "@/lib/marketing/smooth-scroll";
+
+  initLandingSmoothScroll();
+</script>

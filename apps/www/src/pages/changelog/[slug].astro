@@ -1,0 +1,60 @@
+---
+import MarketingLayout from "@/layouts/MarketingLayout.astro";
+import { ChangelogPostHeader } from "@/components/changelog/changelog-post-header";
+import { mdxComponents } from "@/components/mdx-components";
+import { mapChangelogEntry } from "@/lib/changelog/map";
+import {
+  changelogColumn,
+  changelogGutter,
+} from "@/lib/changelog/layout";
+import { siteUrl } from "@/lib/seo-config";
+import { getCollection, render } from "astro:content";
+
+export async function getStaticPaths() {
+  const entries = await getCollection("changelog");
+  return entries
+    .filter((e) => !e.data.draft)
+    .map((entry) => ({
+      params: { slug: entry.id.replace(/\.mdx$/, "") },
+      props: { entry },
+    }));
+}
+
+const { entry } = Astro.props;
+const mapped = mapChangelogEntry(entry, entry.body ?? "");
+const { Content } = await render(entry);
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "@id": `${siteUrl}${mapped.url}#article`,
+  mainEntityOfPage: { "@type": "WebPage", "@id": `${siteUrl}${mapped.url}` },
+  headline: mapped.title,
+  description: mapped.excerpt,
+  datePublished: mapped.publishedAt,
+  inLanguage: "id-ID",
+  url: `${siteUrl}${mapped.url}`,
+  ...(mapped.preview ? { image: `${siteUrl}${mapped.preview}` } : {}),
+  publisher: { "@id": `${siteUrl}/#organization` },
+};
+---
+
+<MarketingLayout
+  title={mapped.title}
+  description={mapped.excerpt}
+  path={mapped.url}
+  ogType="article"
+>
+  <main class={`${changelogColumn} py-14 sm:py-20`}>
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify(jsonLd)}
+    />
+    <div class={changelogGutter}>
+      <ChangelogPostHeader entry={mapped} />
+      <article class="aqsha-prose changelog-prose mt-10 sm:mt-12">
+        <Content components={mdxComponents} />
+      </article>
+    </div>
+  </main>
+</MarketingLayout>

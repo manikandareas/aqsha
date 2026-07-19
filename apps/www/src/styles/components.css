@@ -1,0 +1,269 @@
+/* Aqsha UI component-layer classes — the tactile depth language shared by the
+   design-system components. Depth is always a hard "lip" (offset solid shadow),
+   never a gradient. Composed through Tailwind's --tw-shadow chain so ring/focus
+   utilities still layer on top. */
+
+@layer components {
+	/* Keycap button face. --btn-face drives everything; set it per variant
+	   (e.g. [--btn-face:var(--secondary)]). Rest = 4px lip; pressed and open
+	   (dropdown trigger) bottom out: cap sinks 4px onto the surface. */
+	.btn-keycap {
+		--btn-face: var(--primary);
+		--btn-lip: color-mix(in oklch, var(--btn-face) 62%, black 38%);
+		background-color: var(--btn-face);
+		--tw-shadow: 0 4px 0 0 var(--btn-lip);
+		box-shadow:
+			var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+			var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+		transition:
+			box-shadow 0.1s ease,
+			transform 0.1s ease,
+			background-color 0.15s ease,
+			filter 0.15s ease;
+	}
+
+	.btn-keycap:hover {
+		filter: brightness(1.08);
+	}
+
+	.btn-keycap:active,
+	.btn-keycap[aria-expanded='true'] {
+		transform: translateY(4px);
+		--tw-shadow: 0 0 0 0 var(--btn-lip);
+		filter: none;
+	}
+
+	.btn-keycap:disabled {
+		transform: none;
+		filter: none;
+		--tw-shadow: 0 0 #0000;
+	}
+
+	/* Flat-face lip for outline/soft controls: 3px lip in the border color
+	   (or --lip-color override), pressed sinks 3px. */
+	.btn-lip {
+		--lip-color: var(--border);
+		--tw-shadow: 0 3px 0 0 var(--lip-color);
+		box-shadow:
+			var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+			var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+		transition:
+			box-shadow 0.1s ease,
+			transform 0.1s ease,
+			background-color 0.15s ease;
+	}
+
+	.btn-lip:active {
+		transform: translateY(3px);
+		--tw-shadow: 0 0 0 0 var(--lip-color);
+	}
+
+	.btn-lip:disabled {
+		transform: none;
+		--tw-shadow: 0 0 #0000;
+	}
+
+	/* Floating surfaces (menu, popover, hover card, tooltip): hard 3px lip on the
+	   border color plus the soft ambient card shadow. */
+	.lip-pop {
+		box-shadow:
+			0 3px 0 0 var(--border),
+			var(--shadow-soft-card);
+	}
+
+	/* Modal-grade surfaces (dialog, command menu): heavier 4px lip + deep ambient. */
+	.lip-modal {
+		box-shadow:
+			0 4px 0 0 var(--border),
+			0 20px 50px rgb(0 0 0 / 0.18);
+	}
+
+	/* Small static lip for controls that show depth but don't press (checkbox box,
+	   kbd, calendar nav). */
+	.lip-static {
+		--lip-color: var(--border);
+		box-shadow: 0 2px 0 0 var(--lip-color);
+	}
+
+	/* Skeleton shimmer — a faint ink sweep across the muted placeholder. */
+	.skeleton-shimmer {
+		position: relative;
+		overflow: hidden;
+	}
+
+	.skeleton-shimmer::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			90deg,
+			transparent,
+			color-mix(in oklch, var(--foreground) 6%, transparent),
+			transparent
+		);
+		transform: translateX(-100%);
+		animation: aq-shimmer 1.4s infinite;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.skeleton-shimmer::after {
+			animation: none;
+		}
+	}
+
+	/* Logo marquee — the track holds two identical copies, so sliding -50%
+	   loops seamlessly. Pauses on hover; reduced motion stops it entirely. */
+	.marquee-track {
+		animation: aq-marquee var(--marquee-duration, 44s) linear infinite;
+	}
+
+	.marquee-group:hover .marquee-track {
+		animation-play-state: paused;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.marquee-track {
+			animation: none;
+		}
+	}
+
+	/* Single-line control inset: subtle top shadow inside inputs/selects/OTP cells.
+	   Uses the inset slot of the shadow chain so focus rings still compose. */
+	.ctl-inset {
+		--tw-inset-shadow: inset 0 2px 0 0 color-mix(in oklch, var(--border) 45%, transparent);
+		box-shadow:
+			var(--tw-inset-shadow), var(--tw-inset-ring-shadow, 0 0 #0000),
+			var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000),
+			var(--tw-shadow, 0 0 #0000);
+	}
+
+	/* Alert-family surface: bg, 2px border, and 3px lip ride --alert-edge/--alert-fill
+	   (defined in tokens from --alert-hue). Variants only switch the hue. */
+	.alert-surface {
+		--alert-hue: var(--border);
+		border: 2px solid var(--alert-edge);
+		background-color: var(--alert-fill);
+		box-shadow: 0 3px 0 0 var(--alert-edge);
+	}
+
+	/* Feature steps timeline rails — gap matches sm/lg grid gap-x; overlap sits under the partner badge.
+	   Layout shell owns translateY; the inner span owns scaleX so Motion doesn't clobber centering. */
+	.feature-step-rail {
+		--rail-gap: 2rem;
+		--rail-overlap: 1.5rem;
+		position: absolute;
+		top: 50%;
+		display: none;
+		height: 1px;
+		transform: translateY(-50%);
+	}
+
+	@media (min-width: 640px) {
+		.feature-step-rail {
+			display: block;
+		}
+	}
+
+	@media (min-width: 1024px) {
+		.feature-step-rail {
+			--rail-gap: 3rem;
+		}
+	}
+
+	.feature-step-rail--first {
+		left: 0;
+		width: 100vw;
+	}
+
+	.feature-step-rail--pair {
+		left: -50vw;
+		width: calc(50vw + 100% + var(--rail-gap) + var(--rail-overlap));
+	}
+
+	.feature-step-rail-line {
+		display: block;
+		height: 100%;
+		width: 100%;
+		transform-origin: left center;
+		background-color: var(--border);
+	}
+
+	/* Whats-new teaser — CSS one-shot entrances (no React island). Uses the
+	   shared editorial cubic-bezier matching EASE_OUT in lib/motion.ts. */
+	.teaser-rule {
+		transform: scaleX(0);
+		animation: aq-teaser-rule 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	.teaser-rule--late {
+		animation-delay: 0.12s;
+	}
+
+	.teaser-hand-note {
+		opacity: 0;
+		transform: translateY(6px);
+		animation: aq-teaser-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.55s both;
+	}
+
+	.teaser-spark {
+		opacity: 0;
+		transform: scale(0.5) rotate(-6deg);
+		animation: aq-teaser-pop 0.3s cubic-bezier(0.22, 1, 0.36, 1) 0.75s both;
+	}
+
+	.teaser-squiggle {
+		stroke-dasharray: 1;
+		stroke-dashoffset: 1;
+		animation: aq-teaser-draw 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.35s both;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.teaser-rule,
+		.teaser-hand-note,
+		.teaser-spark,
+		.teaser-squiggle {
+			animation: none;
+			opacity: 1;
+			transform: none;
+			stroke-dashoffset: 0;
+		}
+	}
+}
+
+@keyframes aq-shimmer {
+	100% {
+		transform: translateX(100%);
+	}
+}
+
+@keyframes aq-marquee {
+	to {
+		transform: translateX(-50%);
+	}
+}
+
+@keyframes aq-teaser-rule {
+	to {
+		transform: scaleX(1);
+	}
+}
+
+@keyframes aq-teaser-rise {
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes aq-teaser-pop {
+	to {
+		opacity: 1;
+		transform: scale(1) rotate(-6deg);
+	}
+}
+
+@keyframes aq-teaser-draw {
+	to {
+		stroke-dashoffset: 0;
+	}
+}

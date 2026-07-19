@@ -1,0 +1,440 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./tokens.css";
+@import "./components.css";
+
+/* Self-hosted fonts backing --font-* tokens (DS v2 / Svelte). */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Nunito Sans";
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+  src: url("/fonts/nunito-sans-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Caveat";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/caveat-latin-wght-normal.woff2") format("woff2");
+}
+
+:root {
+  --scrollbar-size: 0.625rem;
+  --scrollbar-thumb: color-mix(in oklch, var(--muted-foreground) 30%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply h-full bg-background font-sans;
+    width: 100%;
+    overflow-x: clip;
+  }
+
+  body {
+    @apply min-h-full bg-background text-foreground;
+    width: 100%;
+    letter-spacing: var(--tracking-normal);
+    overflow-x: clip;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-color: var(--scrollbar-thumb);
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+.font-heading {
+  font-family: var(--font-serif), sans-serif;
+}
+
+.font-hand {
+  font-family: var(--font-hand), var(--font-serif), cursive;
+}
+
+/* Smooth in-page scrolling (hero frame stack + nav anchors → sections);
+   reduced motion keeps instant jumps. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* When Lenis drives the landing page it owns all smoothing — CSS smooth
+   scroll on top would double-animate anchor jumps. */
+html.lenis {
+  scroll-behavior: auto !important;
+}
+
+/* Faint blueprint grid behind the hero, drawn in the border token and faded
+   at both edges so it never fights the header or the frame stack. */
+.hero-grid {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklch, var(--border) 55%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--border) 55%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 84px 84px;
+  mask-image: linear-gradient(to bottom, transparent, black 14%, black 86%, transparent);
+}
+
+/* ─── Landing redesign utilities ───
+   Paper grain overlay (SVG turbulence) + Ken Burns slow zoom, used by the
+   Big Image Frame section. Both honor prefers-reduced-motion. */
+.paper-grain {
+  position: relative;
+  isolation: isolate;
+}
+
+.paper-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='aqsha-grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23aqsha-grain)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 220px 220px;
+  opacity: 0.14;
+  mix-blend-mode: multiply;
+}
+
+.dark .paper-grain::after {
+  opacity: 0.08;
+  mix-blend-mode: screen;
+}
+
+@keyframes aqsha-ken-burns {
+  0% {
+    transform: scale(1.02);
+  }
+
+  100% {
+    transform: scale(1.1);
+  }
+}
+
+.ken-burns {
+  animation: aqsha-ken-burns 22s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ken-burns {
+    animation: none;
+  }
+}
+
+.aqsha-error-state-page {
+  animation: aqsha-error-state-enter 210ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.aqsha-error-state-action {
+  transition-duration: 180ms;
+  transition-property: background-color, border-color, color, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.aqsha-error-state-action:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+@keyframes aqsha-error-state-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aqsha-error-state-page {
+    animation-duration: 180ms;
+    animation-name: aqsha-error-state-fade;
+  }
+
+  .aqsha-error-state-action {
+    transition-property: background-color, border-color, color, box-shadow;
+  }
+
+  .aqsha-error-state-action:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+@keyframes aqsha-error-state-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+:where(.aqsha-prose, .artifact-prose) {
+  color: var(--foreground);
+  font-size: 16px;
+  line-height: 1.72;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+:where(.aqsha-prose, .artifact-prose) > :first-child {
+  margin-top: 0;
+}
+
+:where(.aqsha-prose, .artifact-prose) > :last-child {
+  margin-bottom: 0;
+}
+
+:where(.aqsha-prose, .artifact-prose) h1,
+:where(.aqsha-prose, .artifact-prose) h2,
+:where(.aqsha-prose, .artifact-prose) h3,
+:where(.aqsha-prose, .artifact-prose) h4 {
+  color: var(--foreground);
+  font-family: var(--font-serif), sans-serif;
+  font-weight: 700;
+  letter-spacing: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+:where(.aqsha-prose, .artifact-prose) h1 {
+  margin: 2rem 0 1rem;
+  font-size: 2rem;
+  line-height: 1.15;
+}
+
+:where(.aqsha-prose, .artifact-prose) h2 {
+  margin: 2rem 0 0.85rem;
+  font-size: 1.55rem;
+  line-height: 1.2;
+}
+
+:where(.aqsha-prose, .artifact-prose) h3 {
+  margin: 1.6rem 0 0.7rem;
+  font-size: 1.18rem;
+  line-height: 1.3;
+}
+
+:where(.aqsha-prose, .artifact-prose) h4 {
+  margin: 1.25rem 0 0.55rem;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+:where(.aqsha-prose, .artifact-prose) p {
+  margin: 0 0 1.05rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+:where(.aqsha-prose, .artifact-prose) li > p {
+  margin: 0.25rem 0;
+}
+
+:where(.aqsha-prose, .artifact-prose) ul,
+:where(.aqsha-prose, .artifact-prose) ol {
+  margin: 0 0 1.15rem;
+  padding-left: 1.35rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+:where(.aqsha-prose, .artifact-prose) ul {
+  list-style: disc;
+}
+
+:where(.aqsha-prose, .artifact-prose) ol {
+  list-style: decimal;
+}
+
+:where(.aqsha-prose, .artifact-prose) li {
+  margin: 0.35rem 0;
+  padding-left: 0.15rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+:where(.aqsha-prose, .artifact-prose) li > ul,
+:where(.aqsha-prose, .artifact-prose) li > ol {
+  margin: 0.35rem 0 0.45rem;
+}
+
+:where(.aqsha-prose, .artifact-prose) strong {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+:where(.aqsha-prose, .artifact-prose) em {
+  font-style: italic;
+}
+
+:where(.aqsha-prose, .artifact-prose) a {
+  color: var(--primary);
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  text-underline-offset: 4px;
+  overflow-wrap: anywhere;
+}
+
+:where(.aqsha-prose, .artifact-prose) a:hover {
+  text-decoration-color: var(--primary);
+}
+
+/* Heading anchors (rehype-autolink-headings, behavior: wrap) inherit the heading
+   color and drop the link underline; the deep-link affordance shows on hover only. */
+:where(.aqsha-prose, .artifact-prose) :is(h1, h2, h3, h4) a {
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+}
+
+:where(.aqsha-prose, .artifact-prose) :is(h1, h2, h3, h4) a:hover {
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, var(--foreground) 25%, transparent);
+  text-underline-offset: 6px;
+}
+
+:where(.aqsha-prose, .artifact-prose) blockquote {
+  margin: 1.35rem 0;
+  border-left: 2px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+}
+
+:where(.aqsha-prose, .artifact-prose) hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+:where(.aqsha-prose, .artifact-prose) :not(pre) > code {
+  border-radius: 5px;
+  background: var(--muted);
+  padding: 0.12rem 0.35rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.86em;
+  color: var(--foreground);
+}
+
+:where(.aqsha-prose, .artifact-prose) pre {
+  margin: 1.35rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  padding: 1rem 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+:where(.aqsha-prose, .artifact-prose) pre code {
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-mono), monospace;
+  color: var(--foreground);
+}
+
+/* Blog code block — shiki menambah background gelap, jadi band prose default
+   (padding X = 0, border atas/bawah) bikin kode nempel ke tepi. Scope ke blog
+   saja (jangan ubah prose chat/artifact): kartu membulat + padding X proper.
+   Padding ditaruh di <code> (bukan <pre>) supaya padding kiri & kanan tetap
+   terjaga saat baris panjang overflow-scroll. */
+.blog-prose pre {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.blog-prose pre code {
+  display: block;
+  width: fit-content;
+  min-width: 100%;
+  padding: 0.95rem 1.15rem;
+}
+
+/* Changelog body — entri timeline pendek, jadi prose dikecilkan dari default
+   artikel: heading sub-judul (##/###) turun ke ukuran sans kecil-tegas supaya
+   ritmenya ringkas dan nggak nyaingi judul entri (serif) di kiri. */
+.changelog-prose {
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.changelog-prose :where(h2, h3, h4) {
+  font-family: var(--font-sans), sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 1.4rem 0 0.5rem;
+  color: var(--muted-foreground);
+}
+
+.changelog-prose > :first-child {
+  margin-top: 0;
+}
+

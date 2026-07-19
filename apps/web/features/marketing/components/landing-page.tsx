@@ -17,6 +17,9 @@ import { CATEGORY_META } from "@/features/changelog/lib/categories";
 import { publishedEntries } from "@/features/changelog/lib/entries";
 
 /**
+ * @deprecated Canonical landing is apps/www. This file is frozen leftover —
+ * see features/marketing/README.md. Do not edit copy or sections here.
+ *
  * Marketing home composition — 6-section flow, each with its own visual
  * identity and one signature interaction (no repeated scaffold):
  *
@@ -26,9 +29,6 @@ import { publishedEntries } from "@/features/changelog/lib/entries";
  * 4. For you (#buat-siapa, #pricing) — editorial personas + pricing ("price odometer")
  * 5. FAQ (#faq) — narrow single column ("ghost index")
  * 6. Closing CTA — dark inversion ("reading reveal")
- *
- * `<main>` lives on `app/page.tsx`; sections live here under
- * `features/marketing/components/`.
  */
 export function LandingPage() {
   // Dibaca build-time dari Content Collections (statis, nol cost runtime).

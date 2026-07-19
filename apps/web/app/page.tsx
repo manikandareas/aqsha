@@ -1,20 +1,9 @@
-import { createPageMetadata } from "@/lib/metadata";
+import { redirect } from "next/navigation";
 
-import { LandingPage } from "@/features/marketing/components/landing-page";
-import { StructuredData } from "@/features/marketing/components/structured-data";
-
-export const metadata = createPageMetadata({
-  title: "Asisten AI buat skripsi, tesis & paper",
-  description:
-    "Aqsha ngecek tiap sumber ke paper aslinya — jadi kamu nggak ketahuan pas sidang atau direview dosen. Cari jurnal, nulis bareng Astra, semua di satu tempat.",
-  path: "/",
-});
-
+/**
+ * Canonical marketing landing is `@aqsha/www` (aqshara.com).
+ * Do not resurrect the Next marketing page — edit apps/www instead.
+ */
 export default function PublicLandingPage() {
-  return (
-    <main className="min-h-svh bg-background text-foreground">
-      <StructuredData />
-      <LandingPage />
-    </main>
-  );
+  redirect(process.env.NEXT_PUBLIC_SITE_URL ?? "https://aqshara.com");
 }

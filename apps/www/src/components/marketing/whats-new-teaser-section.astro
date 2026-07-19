@@ -1,0 +1,129 @@
+---
+import type { TeaserLatest } from "@/lib/marketing/latest";
+
+type Props = {
+  latest: TeaserLatest | null;
+};
+
+const { latest } = Astro.props as Props;
+---
+
+{
+  latest && (
+    <section class="w-full bg-card pb-24 sm:pb-32">
+      <div class="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="relative">
+          {/* Hand note + spark on the top rule — CSS one-shot entrance, no island. */}
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute -top-8 right-0 flex select-none items-start gap-2 sm:right-6"
+          >
+            <svg
+              viewBox="0 0 32 32"
+              fill="none"
+              class="teaser-spark mt-0.5 size-5 -rotate-6 text-lemon"
+            >
+              <path
+                d="M16 4 L18.4 13.6 L28 16 L18.4 18.4 L16 28 L13.6 18.4 L4 16 L13.6 13.6 Z"
+                fill="currentColor"
+                stroke-linejoin="round"
+              ></path>
+            </svg>
+            <p class="teaser-hand-note font-hand rotate-2 text-xl leading-none text-muted-foreground sm:text-2xl">
+              masih anget, baru rilis
+            </p>
+          </div>
+
+          <span
+            aria-hidden="true"
+            class="teaser-rule block h-px origin-left border-t border-dashed border-foreground/25"
+          ></span>
+
+          <div class="grid gap-y-3 py-6 lg:grid-cols-[minmax(0,4fr)_minmax(0,11fr)] lg:items-baseline lg:gap-x-10 lg:py-7">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <span class="inline-flex items-center gap-1.5 rounded-full border-2 bg-coral-soft px-3 py-0.5 text-xs font-medium text-coral-foreground [border-color:var(--coral-soft-border)]">
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  class="size-3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M3 11v2a1 1 0 0 0 1 1h1l3 4h2V6H8l-3 4H4a1 1 0 0 0-1 1Z"
+                  ></path>
+                  <path d="M15 8.5a4.5 4.5 0 0 1 0 7"></path>
+                  <path d="M17.5 6a8 8 0 0 1 0 12"></path>
+                </svg>
+                Changelog
+              </span>
+              <time
+                datetime={latest.publishedAt}
+                class="text-xs text-muted-foreground"
+              >
+                {latest.dateLabel}
+              </time>
+            </div>
+
+            <div class="flex flex-wrap items-baseline justify-between gap-x-10 gap-y-2">
+              <div class="max-w-2xl">
+                <h2 class="font-heading text-balance text-xl font-medium leading-snug text-foreground sm:text-2xl">
+                  <a
+                    href={latest.href}
+                    class="teaser-title group/title relative inline transition-colors hover:text-foreground/70"
+                  >
+                    {latest.title}
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 100 8"
+                      preserveAspectRatio="none"
+                      fill="none"
+                      class="absolute -bottom-2 left-0 h-2 w-full text-mint transition-colors duration-200 group-hover/title:text-coral"
+                    >
+                      <path
+                        class="teaser-squiggle"
+                        d="M2 5 C 18 2, 36 8, 54 4 C 70 1, 86 7, 98 3"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        pathLength="1"
+                        vector-effect="non-scaling-stroke"
+                      ></path>
+                    </svg>
+                  </a>
+                </h2>
+                {
+                  latest.summary && (
+                    <p class="mt-2 max-w-xl text-pretty text-sm leading-6 text-muted-foreground">
+                      {latest.summary}
+                    </p>
+                  )
+                }
+              </div>
+
+              <a
+                href="/changelog"
+                class="group/link inline-flex items-center gap-1.5 text-sm font-medium text-[var(--mint-foreground)]"
+              >
+                Lihat semua pembaruan
+                <span
+                  aria-hidden="true"
+                  class="transition-transform duration-200 ease-out group-hover/link:translate-x-1"
+                >
+                  →
+                </span>
+              </a>
+            </div>
+          </div>
+
+          <span
+            aria-hidden="true"
+            class="teaser-rule teaser-rule--late block h-px origin-left border-t border-dashed border-foreground/25"
+          ></span>
+        </div>
+      </div>
+    </section>
+  )
+}
