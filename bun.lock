@@ -85,7 +85,6 @@
         "bits-ui": "^2.18.1",
         "clsx": "^2.1.1",
         "date-fns": "4.4.0",
-        "diff": "^9.0.0",
         "mermaid": "^11.15.0",
         "mode-watcher": "^1.1.0",
         "pdfjs-dist": "5.4.296",
