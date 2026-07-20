@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { applyHunkSelection, computeProposalHunks } from "../src/latex/hunks";
+import { applyHunkSelection, computeProposalHunks } from "../src/typst/hunks";
 
 // Dua suntingan berjarak >2×context(3) baris supaya menjadi dua hunk terpisah.
 const BASE = [

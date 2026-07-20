@@ -6,20 +6,10 @@ export { ThreadService, TitleService } from "./chat";
 
 export { InterestService } from "./interest.service";
 export { DEFAULT_WORKSPACE_NAME, WorkspaceService } from "./workspace.service";
-export { SECTION_TEMPLATES, type SectionTemplate } from "./workspaces/section-templates";
-export { SectionService } from "./section.service";
+export { AnnotationService, type AnnotationView } from "./annotation.service";
 export {
   DOCUMENT_REVISION_RETENTION,
   type DocumentAuthor,
-  LATEX_SOURCE_MAX_BYTES,
-  type SaveSectionDocumentResult,
-  type SectionDocumentPayload,
-  SectionLatexService,
-} from "./section-latex.service";
-export { AnnotationService, type AnnotationView } from "./annotation.service";
-export { SectionSynctexService } from "./section-synctex.service";
-export {
-  DOCUMENT_REVISION_RETENTION as TYPST_DOCUMENT_REVISION_RETENTION,
   type SaveWorkspaceDocumentResult,
   TYPST_SOURCE_MAX_BYTES,
   type WorkspaceDocumentPayload,
@@ -277,9 +267,9 @@ export {
   type ProviderFolder,
 } from "./integrations";
 
-// Modul latex dipakai lewat subpath `@aqsha/services/latex` (bukan barrel root).
+// Modul typst dipakai lewat subpath `@aqsha/services/typst` (bukan barrel root).
 // Barrel root ikut di-typecheck oleh konsumen web (via tipe App @aqsha/api) yang
-// tak punya tipe global Bun; runner.ts memakai Bun.spawn. Menjaga latex di subpath
+// tak punya tipe global Bun; runner.ts memakai Bun.spawn. Menjaga typst di subpath
 // mengikuti konvensi granular paket ini dan mencegah Bun bocor ke type-graph web.
 
 // Waitlist publik — double opt-in via Resend (marketing site → API).

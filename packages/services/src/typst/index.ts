@@ -23,3 +23,10 @@ export {
   type ProposalEdit,
   type ProposeDocumentEditResult,
 } from "./document-proposal.service";
+export { WorkspacePdfExportService, type PdfExportResult } from "./pdf-export.service";
+export {
+  WorkspaceDocxExportService,
+  convertTypstToDocx,
+  isPandocAvailable,
+  type ConvertTypstToDocxInput,
+} from "./docx-export.service";

@@ -1,18 +1,13 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
-import { throwAppError } from "@aqsha/db";
+import { join } from "node:path";
+import { type Db, throwAppError } from "@aqsha/db";
+import { StorageService } from "../storage.service";
+import { WorkspaceDocumentService } from "../workspace-document.service";
+import { composeProjectBib } from "./project-bib";
 import { runSandboxed } from "./runner";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
-
-export type DocxConvertInput = {
-  /** Ditulis sebagai main.tex; sitasi merujuk refs.bib. */
-  mainTex: string;
-  bib?: string;
-  extraFiles?: Record<string, Uint8Array>;
-  options?: { timeoutMs?: number };
-};
 
 function pandocBin(): string {
   return process.env.AQSHA_PANDOC_BIN ?? "pandoc";
@@ -32,37 +27,31 @@ export async function isPandocAvailable(): Promise<boolean> {
   }
 }
 
+export type ConvertTypstToDocxInput = {
+  source: string;
+  bib?: string;
+  options?: { timeoutMs?: number };
+};
+
 /**
- * Konversi best-effort LaTeX→DOCX via pandoc. Bibliografi dirender pandoc `--citeproc`
- * (bukan biber) sehingga gaya sitasi mendekati, bukan identik dengan compile Tectonic.
- * `.cls` kustom & makro tak dikenal diabaikan pandoc (best-effort).
+ * Konversi best-effort Typst→DOCX via `pandoc -f typst --citeproc`. Sitasi `@key` +
+ * `#bibliography("refs.bib")` dirender jadi daftar pustaka via citeproc (bukan mesin Typst),
+ * math→OMML, heading/tabel/footnote terbawa. Batasan: gaya halaman hilang (pakai --reference-doc
+ * bila perlu), locator/supplement sitasi drop.
  */
-export async function convertLatexToDocx(input: DocxConvertInput): Promise<Uint8Array> {
-  const workdir = await mkdtemp(join(tmpdir(), "aqsha-docx-"));
+export async function convertTypstToDocx(input: ConvertTypstToDocxInput): Promise<Uint8Array> {
+  const workdir = await mkdtemp(join(tmpdir(), "aqsha-typst-docx-"));
   try {
-    await writeFile(join(workdir, "main.tex"), input.mainTex, "utf8");
+    await writeFile(join(workdir, "main.typ"), input.source, "utf8");
     // Selalu tulis refs.bib (mungkin kosong) supaya --bibliography tak menunjuk file hilang.
     await writeFile(join(workdir, "refs.bib"), input.bib ?? "", "utf8");
-    for (const [relPath, bytes] of Object.entries(input.extraFiles ?? {})) {
-      const target = resolve(workdir, relPath);
-      if (!target.startsWith(workdir + sep)) {
-        throwAppError({
-          message: "Path file tambahan keluar dari direktori kerja",
-          code: "docx_invalid_input",
-          field: relPath,
-        });
-      }
-      await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, bytes);
-    }
 
     const outPath = join(workdir, "out.docx");
     const args = [
       pandocBin(),
-      "main.tex",
-      "--from=latex",
+      "main.typ",
+      "--from=typst",
       "--to=docx",
-      // Rakit daftar pustaka dari sitasi + refs.bib (biber tak dijalankan di jalur ini).
       "--citeproc",
       "--bibliography=refs.bib",
       "--output",
@@ -77,7 +66,6 @@ export async function convertLatexToDocx(input: DocxConvertInput): Promise<Uint8
         env: { PATH: process.env.PATH, HOME: process.env.HOME },
       });
     } catch {
-      // Bun.spawn melempar bila binary tak ditemukan.
       throwAppError({
         message: "Konverter DOCX (pandoc) tidak tersedia",
         code: "docx_export_unavailable",
@@ -112,3 +100,28 @@ export async function convertLatexToDocx(input: DocxConvertInput): Promise<Uint8
     await rm(workdir, { recursive: true, force: true });
   }
 }
+
+export const WorkspaceDocxExportService = {
+  /** Ekspor dokumen penuh → .docx via pandoc; blob StorageService → signed URL. Owner via getDocument. */
+  async export(db: Db, input: { ownerUserId: string; workspaceId: string }): Promise<{ url: string }> {
+    const doc = await WorkspaceDocumentService.getDocument(db, input);
+    if (!doc || !doc.source.trim()) {
+      throwAppError({
+        message: "Dokumen belum punya isi untuk diekspor",
+        code: "document_empty",
+        severity: "warning",
+        status: 409,
+      });
+    }
+    const bib = await composeProjectBib(db, input);
+    const docx = await convertTypstToDocx({ source: doc!.source, bib });
+    const key = await StorageService.storeBytes(
+      input.ownerUserId,
+      input.workspaceId,
+      "docx-export",
+      docx,
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    return { url: await StorageService.getSignedReadUrl(key) };
+  },
+};

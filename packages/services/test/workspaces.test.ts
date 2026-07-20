@@ -8,12 +8,14 @@ import {
   ArtifactUrlRepo,
   BillingRepo,
   decodeKeysetCursor,
+  DocumentRevisionRepo,
   encodeKeysetCursor,
   FolderRepo,
   UserRepo,
   WorkspaceRepo,
 } from "@aqsha/db";
 import { resolveAdminOverride } from "../src/billing/snapshot";
+import { CitationUsageService } from "../src/citations/citation-usages";
 import { FolderService } from "../src/folder.service";
 import { WorkspaceService } from "../src/workspace.service";
 
@@ -79,6 +81,11 @@ beforeEach(() => {
   spyOn(ArtifactUrlRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
   spyOn(ArtifactPaperMetadataRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
   spyOn(ArtifactEmbeddingRepo, "setWorkspaceByArtifactIds").mockResolvedValue(undefined);
+  // create() kini scaffold dokumen Typst awal (insertInitialDocument) → stub repo dokumennya.
+  spyOn(ArtifactRepo, "insert").mockResolvedValue(undefined);
+  spyOn(ArtifactContentRepo, "insert").mockResolvedValue(undefined);
+  spyOn(DocumentRevisionRepo, "insert").mockResolvedValue(undefined);
+  spyOn(CitationUsageService, "reconcileClusters").mockResolvedValue(undefined);
   // P5: capacity check kini resolveEffectivePlanKey (db-aware) — stub billing reads
   // ke "tanpa override/subscription" → plan jatuh ke env-admin allowlist atau 'free'.
   spyOn(BillingRepo, "findLatestSubscriptionByOwner").mockResolvedValue(null);
