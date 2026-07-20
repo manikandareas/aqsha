@@ -12,8 +12,10 @@
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { threadTranscriptColumnClass } from '$lib/components/layout/panel-surface';
 	import MessageList from '$lib/features/threads/components/MessageList.svelte';
+	import OlderHistorySentinel from '$lib/features/threads/components/OlderHistorySentinel.svelte';
 	import ToolCard from '$lib/features/threads/components/ToolCard.svelte';
 	import type { MessageAttachment } from '$lib/features/threads/lib/attachment-buckets';
+	import type { ThreadHistoryControls } from '$lib/features/threads/lib/thread-history';
 	import { wfStepLabel } from '$lib/features/threads/lib/mastra-timeline';
 	import type { ResearchSource } from '$lib/features/threads/types';
 	import type { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
@@ -40,7 +42,8 @@
 		threadId,
 		threadAgentKind,
 		errorDraft,
-		onComposerSend
+		onComposerSend,
+		history = null
 	}: {
 		agent: ThreadAgent;
 		panel: ThreadPanelController | null;
@@ -54,6 +57,7 @@
 		threadAgentKind: 'lite' | 'pro';
 		errorDraft: string | null;
 		onComposerSend: (payload: ComposerSendPayload) => void;
+		history?: ThreadHistoryControls | null;
 	} = $props();
 
 	const reduce = $derived(prefersReducedMotion.current);
@@ -63,6 +67,9 @@
 	<Conversation class="flex-1">
 		<ConversationContent class="max-w-none p-0">
 			<div class={cn(threadTranscriptColumnClass, 'flex flex-col gap-4 pt-3 pb-8')}>
+				{#if history}
+					<OlderHistorySentinel {history} />
+				{/if}
 				<MessageList
 					messages={agent.messages}
 					pending={agent.status === 'submitted'}

@@ -46,6 +46,28 @@ export class StickToBottom {
 		}, 60);
 	}
 
+	/** Prepend content while keeping the same transcript pixels under the viewport. */
+	async preserveViewportWhile(loader: () => void | Promise<void>): Promise<void> {
+		const el = this.#scroller;
+		if (!el) {
+			await loader();
+			return;
+		}
+		const beforeHeight = el.scrollHeight;
+		const beforeTop = el.scrollTop;
+		const wasFollowing = this.#follow;
+		this.#follow = false;
+		await loader();
+		await new Promise<void>((resolve) =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		);
+		this.#programmatic = true;
+		el.scrollTop = beforeTop + (el.scrollHeight - beforeHeight);
+		this.#programmatic = false;
+		this.#follow = wasFollowing;
+		this.#measure();
+	}
+
 	/** `{@attach}` for the scroll container. Wires scroll tracking + reduced-motion; returns cleanup. */
 	attachScroller = (el: HTMLElement): (() => void) => {
 		this.#scroller = el;
@@ -92,3 +114,5 @@ export class StickToBottom {
 /** Per-tree context — the scroll button reads `isAtBottom` and `scrollToBottom()`. */
 export const stickToBottomContext = createContext<StickToBottom>('stick-to-bottom');
 export const getStickToBottom = (): StickToBottom => stickToBottomContext.get();
+export const getStickToBottomOptional = (): StickToBottom | undefined =>
+	stickToBottomContext.getOptional();

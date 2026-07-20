@@ -14,6 +14,13 @@
 	import { useRecentThreadSummaries } from '$lib/features/threads/use-recent-thread-summaries.svelte';
 	import { ASTRA_AGENT_ID, createMastraClient } from '$lib/features/threads/lib/mastra-client';
 	import { mastraMessagesToTimeline } from '$lib/features/threads/lib/mastra-timeline';
+	import {
+		THREAD_HISTORY_BATCH_SIZE,
+		chronologicalHistoryBatch,
+		historyQueryParams,
+		oldestHistoryCursor
+	} from '$lib/features/threads/lib/thread-history';
+	import { ThreadHistoryPager } from '$lib/features/threads/lib/thread-history-pager.svelte';
 	import { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
 	import {
 		setComposerMentions,
@@ -27,8 +34,8 @@
 
 	/**
 	 * Thread-detail shell — the one place that owns the durable agent + the side-panel slot. Creates the
-	 * per-tree contexts (composer mentions, panel controller), seeds the timeline from server memory
-	 * (400-message history), spins up the `ThreadAgent` lifecycle, and lays out the surface (main)
+	 * per-tree contexts (composer mentions, panel controller), seeds the latest timeline batch from
+	 * server memory, spins up the `ThreadAgent` lifecycle, and lays out the surface (main)
 	 * beside the responsive DetailPanel (`DetailSplitLayout` = inline inset ≥1100px / drawer below).
 	 */
 	let {
@@ -92,6 +99,10 @@
 	});
 
 	const client = createMastraClient(clerkTokenGetter(clerk));
+	const historyPager = new ThreadHistoryPager({
+		getClient: () => client,
+		getThreadId: () => threadId
+	});
 
 	// Stored thread tier (read once, gated to an existing thread → no 404 for a new client id).
 	const threadDetail = useThread(
@@ -112,14 +123,19 @@
 
 	const pageTitle = $derived(threadPageTitle(threadDetail.data));
 
-	// Seed the timeline from server memory (400 messages ≈ 200 turns — beyond a sane thread).
+	// Seed only the latest batch; older messages are fetched by createdAt cursor from the top sentinel.
 	const history = createQuery(() => ({
 		queryKey: ['mastra', 'thread-messages', threadIdProp],
 		enabled: isExistingThread && clerkLoaded && Boolean(userId),
 		queryFn: async () => {
 			const thread = client.getMemoryThread({ threadId: threadId, agentId: ASTRA_AGENT_ID });
-			const res = await thread.listMessages({ perPage: 400 });
-			return mastraMessagesToTimeline(res.messages ?? []);
+			const res = await thread.listMessages(historyQueryParams());
+			const raw = chronologicalHistoryBatch(res.messages ?? []);
+			return {
+				messages: mastraMessagesToTimeline(raw),
+				oldestCursor: oldestHistoryCursor(raw),
+				hasOlder: raw.length === THREAD_HISTORY_BATCH_SIZE
+			};
 		}
 	}));
 
@@ -143,7 +159,9 @@
 		const tid = threadId;
 		const uid = userId;
 		if (!tid || !uid || !clerkLoaded || loading) return;
-		const seed = untrack(() => history.data ?? []);
+		const initialHistory = untrack(() => history.data);
+		const seed = initialHistory?.messages ?? [];
+		historyPager.seed(initialHistory);
 		const initialAgentKind = untrack(() => threadAgentKind);
 		const a = new ThreadAgent({
 			getClient: () => client,
@@ -155,8 +173,10 @@
 			seed
 		});
 		a.start();
+		historyPager.bindAgent(a);
 		agent = a;
 		return () => {
+			historyPager.bindAgent(null);
 			a.destroy();
 			agent = null;
 		};
@@ -210,6 +230,7 @@
 						{compact}
 						{initialContent}
 						ambientWorkspaceId={workspace?.id ?? null}
+						history={historyPager}
 						{threadUrlFor}
 					/>
 				</div>

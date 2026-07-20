@@ -50,4 +50,22 @@ describe('StickToBottom', () => {
 		await settle();
 		expect(stick.isAtBottom).toBe(true);
 	});
+
+	it('preserves the visible message when older content is prepended', async () => {
+		const scroller = makeScroller();
+		const content = scroller.firstElementChild as HTMLElement;
+		const stick = new StickToBottom();
+		cleanups.push(stick.attachScroller(scroller));
+		await settle();
+		scroller.scrollTop = 180;
+		scroller.dispatchEvent(new Event('scroll'));
+		await settle();
+
+		await stick.preserveViewportWhile(async () => {
+			content.style.height = '800px';
+		});
+
+		expect(scroller.scrollTop).toBe(380);
+		expect(stick.isAtBottom).toBe(false);
+	});
 });

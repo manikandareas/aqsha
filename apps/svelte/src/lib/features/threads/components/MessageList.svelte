@@ -36,7 +36,20 @@
 	const last = $derived(messages.at(-1));
 	// Standalone "typing" indicator only when no assistant message exists yet (user just sent).
 	const showTyping = $derived(Boolean(pending) && (!last || last.role === 'user'));
-	const lastAssistantId = $derived([...messages].reverse().find((m) => m.role === 'assistant')?.id);
+	const timelineMeta = $derived.by(() => {
+		let lastAssistantId: string | undefined;
+		let previousUserAt: number | undefined;
+		const turnStartedAtByAssistantId: Record<string, number | undefined> = {};
+		for (const message of messages) {
+			if (message.role === 'user') {
+				previousUserAt = message.createdAt > 0 ? message.createdAt : undefined;
+				continue;
+			}
+			lastAssistantId = message.id;
+			turnStartedAtByAssistantId[message.id] = previousUserAt;
+		}
+		return { lastAssistantId, turnStartedAtByAssistantId };
+	});
 
 	/** Analysis id of the LAST successful run within one assistant message (next-step chips). */
 	function lastSuccessfulAnalysisId(message: TimelineMessage): string | undefined {
@@ -49,15 +62,6 @@
 			}
 		}
 		return found;
-	}
-
-	/** `createdAt` of the nearest user message BEFORE index `i` — durable turn timer anchor. */
-	function precedingUserCreatedAt(i: number): number | undefined {
-		for (let j = i - 1; j >= 0; j--) {
-			const m = messages[j];
-			if (m?.role === 'user') return m.createdAt > 0 ? m.createdAt : undefined;
-		}
-		return undefined;
 	}
 
 	// Next-step chip ritual: only the LAST analysis run of the thread + settled turn.
@@ -73,7 +77,7 @@
 	</div>
 {:else}
 	<div class="flex flex-col gap-6">
-		{#each messages as m, i (m.id)}
+		{#each messages as m (m.id)}
 			{#if m.role === 'user'}
 				<UserBubble parts={m.parts} attachments={attachmentsByMessage?.get(m.id)} />
 			{:else}
@@ -81,8 +85,8 @@
 					message={m}
 					sources={m.turnId ? sourcesByTurn?.get(m.turnId) : undefined}
 					{statsGroupsByToolCallId}
-					onRegenerate={!busy && m.id === lastAssistantId ? onRegenerate : undefined}
-					turnStartedAt={precedingUserCreatedAt(i)}
+					onRegenerate={!busy && m.id === timelineMeta.lastAssistantId ? onRegenerate : undefined}
+					turnStartedAt={timelineMeta.turnStartedAtByAssistantId[m.id]}
 				/>
 			{/if}
 		{/each}

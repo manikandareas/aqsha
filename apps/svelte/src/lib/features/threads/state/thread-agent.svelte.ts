@@ -49,6 +49,7 @@ import {
 	reviveWorkflowTurn
 } from '../lib/mastra-timeline';
 import type { TimelineMessage } from '../lib/timeline-types';
+import { prependUniqueById } from '../lib/thread-history';
 
 // ── Durable-thread chat + `/deep` Workflow agent (Svelte 5 runes state class) ─────────────────────
 //
@@ -196,7 +197,7 @@ export class ThreadAgent {
 	readonly #onRequestDocumentEdit?: (edit: { artifactId: string; instruction: string }) => void;
 
 	// Reactive state (reduces per chunk / drives the UI).
-	#timeline = $state<MastraTimelineState>(initialMastraTimeline());
+	#timeline = $state.raw<MastraTimelineState>(initialMastraTimeline());
 	#sentKind = $state<AgentKind | null>(null);
 	#queued = $state<QueuedSend[]>([]);
 	#deepStalled = $state<string | null>(null);
@@ -266,6 +267,16 @@ export class ThreadAgent {
 	}
 	get deepNotice(): DeepNotice | null {
 		return this.#deepNotice;
+	}
+
+	/** Insert older persisted messages without touching live stream/gate state. */
+	prependHistory(messages: readonly TimelineMessage[]): void {
+		const next = prependUniqueById(this.#timeline.messages, messages);
+		if (!next) return;
+		this.#timeline = {
+			...this.#timeline,
+			messages: next
+		};
 	}
 
 	// ── lifecycle ────────────────────────────────────────────────────────────────────────────────

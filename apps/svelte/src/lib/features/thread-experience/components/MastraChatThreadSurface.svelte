@@ -21,6 +21,7 @@
 	import { bucketMessageAttachments } from '$lib/features/threads/lib/attachment-buckets';
 	import { buildThreadPanelLookups } from '$lib/features/threads/lib/thread-panel-data';
 	import { setMessageInteractions } from '$lib/features/threads/components/message-interactions';
+	import type { ThreadHistoryControls } from '$lib/features/threads/lib/thread-history';
 	import type { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
 	import type { ResearchSource } from '$lib/features/threads/types';
 	import { getThreadPanel } from './thread-panel-context.svelte';
@@ -44,7 +45,8 @@
 		threadUrlFor,
 		ambientWorkspaceId = null,
 		getExtraClientContext,
-		onTurnSent
+		onTurnSent,
+		history = null
 	}: {
 		agent: ThreadAgent;
 		threadId: string;
@@ -68,6 +70,8 @@
 		getExtraClientContext?: () => string[];
 		/** Dipanggil segera setelah turn berangkat — antrian ikut turn ini, lepas dari hasil stream. */
 		onTurnSent?: (threadId: string) => void;
+		/** Older-history pager owned by the shell; null when the surface has no persisted timeline. */
+		history?: ThreadHistoryControls | null;
 	} = $props();
 
 	const qc = useQueryClient();
@@ -247,5 +251,6 @@
 		{threadAgentKind}
 		{errorDraft}
 		{onComposerSend}
+		{history}
 	/>
 {/if}
