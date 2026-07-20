@@ -1,10 +1,9 @@
-import { and, eq, getTableColumns, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   type DocumentCitationUsage,
   documentCitationUsages,
   type NewDocumentCitationUsage,
 } from "../schema/documentCitationUsages";
-import { workspaceSections } from "../schema/workspaceSections";
 import type { DbOrTx } from "../types";
 
 /** Repo document_citation_usages — query Drizzle saja; rekonsiliasi di @aqsha/services. */
@@ -26,34 +25,22 @@ export const DocumentCitationUsageRepo = {
       .orderBy(documentCitationUsages.occurrenceOrder);
   },
 
-  /**
-   * Semua usage lintas bab satu proyek — dasar agregasi daftar pustaka proyek.
-   *
-   * Inner join ke `workspace_sections` (bukan filter langsung ke `workspace_id`
-   * yang didenormalisasi di baris usage) karena bibliografi proyek hanya boleh
-   * mencerminkan bab yang masih ada. Menghapus section tidak menghapus artifact
-   * atau usage terkait — tidak ada cascade dari `workspace_sections` ke tabel ini —
-   * jadi baris usage bab yang sudah dihapus akan tetap "hidup" dan bocor sebagai
-   * sitasi hantu kalau query hanya menyaring `workspace_id`.
-   */
+  /** Semua usage satu proyek (satu dokumen kontinu) — dasar agregasi daftar pustaka proyek. */
   async listByWorkspace(
     db: DbOrTx,
     ownerUserId: string,
     workspaceId: string,
   ): Promise<DocumentCitationUsage[]> {
     return db
-      .select(getTableColumns(documentCitationUsages))
+      .select()
       .from(documentCitationUsages)
-      .innerJoin(
-        workspaceSections,
-        eq(workspaceSections.documentArtifactId, documentCitationUsages.documentArtifactId),
-      )
       .where(
         and(
           eq(documentCitationUsages.ownerUserId, ownerUserId),
-          eq(workspaceSections.workspaceId, workspaceId),
+          eq(documentCitationUsages.workspaceId, workspaceId),
         ),
-      );
+      )
+      .orderBy(documentCitationUsages.occurrenceOrder);
   },
 
   /** Ganti seluruh usage satu dokumen (delete-all + insert) — dipanggil dalam tx save. */

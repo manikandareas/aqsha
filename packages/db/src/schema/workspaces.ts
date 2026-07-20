@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, index, pgTable, text } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, bigint, check, index, jsonb, pgTable, text } from "drizzle-orm/pg-core";
+import { artifacts } from "./artifacts";
 import { users } from "./users";
 
 export const WORKSPACE_KINDS = [
@@ -13,27 +14,44 @@ export const WORKSPACE_KINDS = [
 ] as const;
 export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
 
-export const WORKSPACE_STAGES = [
-  "exploration",
-  "proposal",
-  "research",
-  "writing",
-  "revision",
-  "done",
-] as const;
-export type WorkspaceStage = (typeof WORKSPACE_STAGES)[number];
+/**
+ * Metadata per-kind yang dikumpulkan saat proyek dibuat, disimpan di kolom jsonb
+ * `workspaces.kind_info`. Semua field opsional; service memvalidasi bahwa hanya field
+ * yang relevan untuk `kind` proyek yang dipersist (lihat WORKSPACE_KIND_INFO_FIELDS).
+ * Bentuk tersimpan = superset flat di bawah; halaman judul scaffold membacanya per kind.
+ */
+export type WorkspaceKindInfo = {
+  university?: string | null;
+  faculty?: string | null;
+  studyProgram?: string | null;
+  targetJournal?: string | null;
+  affiliation?: string | null;
+  courseOrVenue?: string | null;
+};
+
+/** Field kind_info yang boleh diisi per kind — dipakai validasi service + rendering form. */
+export const WORKSPACE_KIND_INFO_FIELDS = {
+  undergraduate_thesis: ["university", "faculty", "studyProgram"],
+  masters_thesis: ["university", "faculty", "studyProgram"],
+  dissertation: ["university", "faculty", "studyProgram"],
+  proposal: ["university", "faculty", "studyProgram"],
+  journal_article: ["targetJournal", "affiliation"],
+  paper: ["university", "courseOrVenue"],
+  freeform: [],
+} as const satisfies Record<WorkspaceKind, readonly (keyof WorkspaceKindInfo)[]>;
 
 /**
  * workspaces — proyek karya tulis (skripsi/tesis/disertasi/artikel jurnal/
  * proposal/makalah) milik satu owner. `kind='freeform'` = workspace polos tanpa
- * kerangka bab & stepper tahap.
+ * kerangka bab.
  *
  * - `id` (PK) di-generate aplikasi (`crypto.randomUUID()` di repo) supaya seragam
- *   dengan id eksternal lain di V2 dan diketahui sebelum insert.
+ *   dengan id eksternal lain dan diketahui sebelum insert.
  * - `kind` immutable setelah create — ganti jenis = proyek baru.
- * - `name` boleh string kosong selama tahap exploration; `topic_note` jadi
- *   placeholder judul di UI.
- * - `status` text + CHECK (active|archived) — port `v.union(v.literal(...))` V1.
+ * - `name` boleh string kosong; `topic_note` jadi placeholder judul di UI.
+ * - `document_artifact_id` = satu dokumen Typst kontinu proyek (nullable; dibuat lazy
+ *   saat scaffold/tulis pertama). `kind_info` = metadata per-kind (bentuk divalidasi service).
+ * - `status` text + CHECK (active|archived).
  */
 export const workspaces = pgTable(
   "workspaces",
@@ -46,7 +64,11 @@ export const workspaces = pgTable(
     emoji: text("emoji"),
     description: text("description"),
     kind: text("kind").notNull().default("freeform"),
-    stage: text("stage").notNull().default("exploration"),
+    kindInfo: jsonb("kind_info").$type<WorkspaceKindInfo>(),
+    // AnyPgColumn memutus siklus inferensi tipe: workspaces↔artifacts saling ber-FK.
+    documentArtifactId: text("document_artifact_id").references((): AnyPgColumn => artifacts.id, {
+      onDelete: "set null",
+    }),
     deadline: bigint("deadline", { mode: "number" }),
     topicNote: text("topic_note"),
     status: text("status").notNull().default("active"),
@@ -59,10 +81,6 @@ export const workspaces = pgTable(
     check(
       "workspaces_kind_check",
       sql`${t.kind} in ('undergraduate_thesis', 'masters_thesis', 'dissertation', 'journal_article', 'proposal', 'paper', 'freeform')`,
-    ),
-    check(
-      "workspaces_stage_check",
-      sql`${t.stage} in ('exploration', 'proposal', 'research', 'writing', 'revision', 'done')`,
     ),
     index("workspaces_by_owner_status_updated").on(t.ownerUserId, t.status, t.updatedAt),
     index("workspaces_by_owner_updated").on(t.ownerUserId, t.updatedAt),

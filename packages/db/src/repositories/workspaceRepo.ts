@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
 import { type KeysetCursor, encodeKeysetCursor } from "../cursor";
 import { type NewWorkspace, type Workspace, workspaces } from "../schema/workspaces";
 import type { DbOrTx } from "../types";
@@ -76,5 +76,20 @@ export const WorkspaceRepo = {
 
   async update(db: DbOrTx, id: string, patch: Partial<NewWorkspace>): Promise<void> {
     await db.update(workspaces).set(patch).where(eq(workspaces.id, id));
+  },
+
+  /** Klaim pointer dokumen proyek HANYA bila masih kosong — guard race lazy-create dua penulis. */
+  async setDocumentArtifactIfNull(
+    db: DbOrTx,
+    id: string,
+    artifactId: string,
+    now: number,
+  ): Promise<boolean> {
+    const rows = await db
+      .update(workspaces)
+      .set({ documentArtifactId: artifactId, updatedAt: now })
+      .where(and(eq(workspaces.id, id), isNull(workspaces.documentArtifactId)))
+      .returning({ id: workspaces.id });
+    return rows.length > 0;
   },
 };

@@ -43,18 +43,4 @@ export const WorkspaceCitationLinkRepo = {
       .from(workspaceCitationLinks)
       .where(eq(workspaceCitationLinks.workspaceId, workspaceId));
   },
-
-  async listBySection(db: DbOrTx, sectionId: string): Promise<WorkspaceCitationLink[]> {
-    return db
-      .select()
-      .from(workspaceCitationLinks)
-      .where(eq(workspaceCitationLinks.sectionId, sectionId));
-  },
-
-  async setSection(db: DbOrTx, linkId: string, sectionId: string | null): Promise<void> {
-    await db
-      .update(workspaceCitationLinks)
-      .set({ sectionId })
-      .where(eq(workspaceCitationLinks.id, linkId));
-  },
 };

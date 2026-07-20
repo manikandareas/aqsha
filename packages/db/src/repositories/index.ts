@@ -1,6 +1,5 @@
 export * from "./userRepo";
 export * from "./workspaceRepo";
-export * from "./workspaceSectionRepo";
 export * from "./folderRepo";
 export * from "./onboardingRepo";
 export * from "./userAgentPreferencesRepo";
@@ -17,9 +16,8 @@ export * from "./workspaceCitationSettingsRepo";
 export * from "./citationImportBatchRepo";
 export * from "./documentCitationUsageRepo";
 export * from "./documentRevisionRepo";
-export * from "./latexBuildRepo";
 export * from "./documentAnnotationRepo";
-export * from "./sectionEditProposalRepo";
+export * from "./documentEditProposalRepo";
 export * from "./integrationConnectionRepo";
 export * from "./analysisSandboxRepo";
 export * from "./analysisResultBlockRepo";

@@ -1,6 +1,5 @@
 export * from "./users";
 export * from "./workspaces";
-export * from "./workspaceSections";
 export * from "./workspaceFolders";
 export * from "./userOnboarding";
 export * from "./userAgentPreferences";
@@ -17,9 +16,8 @@ export * from "./workspaceCitationSettings";
 export * from "./citationImportBatches";
 export * from "./documentCitationUsages";
 export * from "./documentRevisions";
-export * from "./latexBuilds";
 export * from "./documentAnnotations";
-export * from "./sectionEditProposals";
+export * from "./documentEditProposals";
 export * from "./integrationConnections";
 export * from "./analysisSandboxes";
 export * from "./analysisResultBlocks";

@@ -17,10 +17,10 @@ export const DocumentAnnotationRepo = {
     return rows[0] ?? null;
   },
 
-  async listBySection(
+  async listByWorkspace(
     db: DbOrTx,
     ownerUserId: string,
-    sectionId: string,
+    workspaceId: string,
   ): Promise<DocumentAnnotation[]> {
     return db
       .select()
@@ -28,7 +28,7 @@ export const DocumentAnnotationRepo = {
       .where(
         and(
           eq(documentAnnotations.ownerUserId, ownerUserId),
-          eq(documentAnnotations.sectionId, sectionId),
+          eq(documentAnnotations.workspaceId, workspaceId),
         ),
       )
       .orderBy(asc(documentAnnotations.createdAt));
