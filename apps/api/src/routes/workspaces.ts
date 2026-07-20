@@ -6,6 +6,7 @@ import {
   WorkspaceService,
 } from "@aqsha/services";
 import {
+  composeProjectBib,
   DocumentProposalService,
   WorkspaceDocxExportService,
   WorkspacePdfExportService,
@@ -147,6 +148,16 @@ export const workspaces = new Elysia()
     ({ ownerUserId, params }) => {
       const { db } = getDb();
       return WorkspaceDocumentService.getDocument(db, { ownerUserId, workspaceId: params.id });
+    },
+    { auth: true },
+  )
+  // refs.bib proyek (BibTeX) untuk compile preview di klien — paritas dengan compile/ekspor server.
+  .get(
+    "/workspaces/:id/document/bib",
+    async ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      await WorkspaceService.assertWorkspaceOwner(db, ownerUserId, params.id);
+      return { bib: await composeProjectBib(db, { ownerUserId, workspaceId: params.id }) };
     },
     { auth: true },
   )

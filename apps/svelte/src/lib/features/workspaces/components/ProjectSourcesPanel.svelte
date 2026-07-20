@@ -1,35 +1,26 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
-	import * as Select from '@aqsha/ui-svelte/components/select';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { Icon, MoreHorizontalIcon, PlusIcon, SearchIcon } from '$lib/icons';
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import { cn } from '@aqsha/ui-svelte/utils';
-	import {
-		useAssignCitationSection,
-		useUnlinkCitation,
-		useWorkspaceCitations
-	} from '$lib/features/citations/api';
+	import { useUnlinkCitation, useWorkspaceCitations } from '$lib/features/citations/api';
 	import { citationMetaLine, type CitationAuthor } from '$lib/features/citations/types';
 	import LibraryPickerDialog from '$lib/features/citations/components/LibraryPickerDialog.svelte';
-	import type { WorkspaceSection } from '../types';
 
 	/**
-	 * Koleksi sumber proyek: item perpustakaan akun yang di-link ke proyek ini
-	 * (+ opsional ditandai untuk satu bab). Kelola perpustakaan penuh = /app/library.
+	 * Koleksi sumber proyek: item perpustakaan akun yang di-link ke proyek ini. Kelola perpustakaan
+	 * penuh = /app/library.
 	 */
-	let { workspaceId, sections }: { workspaceId: string; sections: WorkspaceSection[] } = $props();
+	let { workspaceId }: { workspaceId: string } = $props();
 
 	const linked = useWorkspaceCitations(() => workspaceId);
 	const unlink = useUnlinkCitation();
-	const assignSection = useAssignCitationSection();
 
 	let pickerOpen = $state(false);
 
-	const NO_SECTION = '__none__';
-	const sectionOptions = $derived(sections.filter((s) => s.role !== 'bibliography'));
 	const items = $derived(linked.data?.items ?? []);
 
 	// `useWorkspaceCitations` returns the raw `citations` row shape (`authorsJson`), not the
@@ -92,29 +83,7 @@
 				<li class="grid gap-1.5 rounded-md border-2 border-border bg-card p-3">
 					<p class="text-sm font-medium leading-snug">{item.title}</p>
 					<p class="text-label text-muted-foreground">{metaLine(item)}</p>
-					<div class="flex items-center gap-2">
-						{#if sectionOptions.length > 0}
-							<Select.Root
-								type="single"
-								value={item.sectionId ?? NO_SECTION}
-								onValueChange={(v) =>
-									assignSection.mutate({
-										linkId: item.linkId,
-										workspaceId,
-										sectionId: v === NO_SECTION ? null : v
-									})}
-							>
-								<Select.Trigger class="h-7 flex-1 text-label" aria-label="Tandai untuk bab">
-									{sectionOptions.find((s) => s.id === item.sectionId)?.title ?? 'Seluruh proyek'}
-								</Select.Trigger>
-								<Select.Content>
-									<Select.Item value={NO_SECTION} label="Seluruh proyek" />
-									{#each sectionOptions as s (s.id)}
-										<Select.Item value={s.id} label={s.title} />
-									{/each}
-								</Select.Content>
-							</Select.Root>
-						{/if}
+					<div class="flex items-center justify-end gap-2">
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger>
 								{#snippet child({ props })}

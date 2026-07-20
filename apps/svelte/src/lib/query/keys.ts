@@ -14,6 +14,7 @@ export const queryKeys = {
 		list: (params: { includeArchived: boolean }) => ['workspaces', 'list', params] as const,
 		detail: (id: string) => ['workspaces', 'detail', id] as const,
 		document: (id: string) => ['workspaces', 'document', id] as const,
+		documentBib: (id: string) => ['workspaces', 'documentBib', id] as const,
 		proposals: (id: string) => ['workspaces', 'proposals', id] as const,
 		annotations: (id: string) => ['workspaces', 'annotations', id] as const,
 		sections: (id: string) => ['workspaces', 'sections', id] as const,

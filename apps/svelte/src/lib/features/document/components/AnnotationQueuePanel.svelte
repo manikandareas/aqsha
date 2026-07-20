@@ -5,14 +5,13 @@
 	import type { AnnotationView } from '../api';
 
 	/**
-	 * Antrian anotasi bab: sorotan/pin terbuka + terkirim. Checkbox hanya untuk yang `open`
-	 * (dipilih untuk ikut pesan berikutnya); `sent` tampil redup; `sourceVersion` beda dari
-	 * versi sumber terkini → badge "basi". `resolved`/`dismissed` disembunyikan.
+	 * Antrian anotasi dokumen: sorotan terbuka + terkirim. Checkbox hanya untuk yang `open` (dipilih
+	 * untuk ikut pesan berikutnya); `sent` tampil redup; `resolved`/`dismissed` disembunyikan. Anchor
+	 * = teks terseleksi (bukan baris) → tanpa penanda versi.
 	 */
 	let {
 		annotations,
 		selectedIds,
-		currentVersion,
 		onToggle,
 		onDismiss,
 		onDelete,
@@ -20,7 +19,6 @@
 	}: {
 		annotations: AnnotationView[];
 		selectedIds: Set<string>;
-		currentVersion: number;
 		onToggle: (id: string) => void;
 		onDismiss: (id: string) => void;
 		onDelete: (id: string) => void;
@@ -32,7 +30,7 @@
 
 {#if visible.length === 0}
 	<p class="px-1 py-4 text-center text-label text-muted-foreground">
-		Tandai teks di PDF untuk membuat anotasi.
+		Tandai teks di preview untuk membuat anotasi.
 	</p>
 {:else}
 	<ul class="flex flex-col gap-2">
@@ -51,11 +49,8 @@
 							aria-label="Pilih anotasi untuk dikirim"
 						/>
 					{/if}
-					<Badge variant="outline">{annotation.kind === 'pin' ? 'pin' : 'sorotan'}</Badge>
+					<Badge variant="outline">sorotan</Badge>
 					<span class="text-micro text-muted-foreground">hal. {annotation.page}</span>
-					{#if annotation.sourceVersion !== currentVersion}
-						<Badge variant="outline">basi</Badge>
-					{/if}
 					{#if annotation.status === 'sent'}
 						<span class="text-micro text-muted-foreground">terkirim</span>
 					{/if}
@@ -63,8 +58,8 @@
 						<button
 							type="button"
 							class="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-							aria-label="Sorot di PDF"
-							title="Sorot di PDF"
+							aria-label="Sorot di preview"
+							title="Sorot di preview"
 							onclick={() => onFocus(annotation.id)}
 						>
 							<Icon icon={EyeIcon} class="size-3.5" />

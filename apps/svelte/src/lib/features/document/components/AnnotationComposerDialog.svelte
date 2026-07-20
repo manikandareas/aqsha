@@ -4,18 +4,16 @@
 	import { Textarea } from '@aqsha/ui-svelte/components/textarea';
 
 	/**
-	 * Dialog konfirmasi setelah seleksi teks / pin: catatan opsional sebelum anotasi disimpan.
-	 * `open` dikontrol halaman; menutup lewat Escape/backdrop = batal (anchor dibuang).
+	 * Dialog konfirmasi setelah seleksi teks di preview: catatan opsional sebelum anotasi disimpan.
+	 * `open` dikontrol halaman; menutup lewat Escape/backdrop = batal (draft dibuang).
 	 */
 	let {
 		open,
-		kind,
 		excerpt,
 		onSubmit,
 		onCancel
 	}: {
 		open: boolean;
-		kind: 'highlight' | 'pin';
 		excerpt: string | null;
 		onSubmit: (note: string) => void;
 		onCancel: () => void;
@@ -23,7 +21,7 @@
 
 	let note = $state('');
 
-	// Catatan direset tiap dialog dibuka untuk anchor baru.
+	// Catatan direset tiap dialog dibuka untuk draft baru.
 	$effect(() => {
 		if (open) note = '';
 	});
@@ -37,14 +35,14 @@
 >
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>{kind === 'pin' ? 'Tandai titik' : 'Tandai teks'}</Dialog.Title>
+			<Dialog.Title>Tandai teks</Dialog.Title>
 			<Dialog.Description>
-				Tambahkan catatan opsional. Anotasi tersimpan di bab dan bisa dikirim ke Astra nanti.
+				Tambahkan catatan opsional. Anotasi tersimpan di dokumen dan bisa dikirim ke Astra nanti.
 			</Dialog.Description>
 		</Dialog.Header>
 		{#if excerpt}
 			<p
-				class="line-clamp-2 rounded-md border-2 border-border bg-muted/40 px-3 py-2 text-label text-muted-foreground"
+				class="line-clamp-3 rounded-md border-2 border-border bg-muted/40 px-3 py-2 text-label text-muted-foreground"
 			>
 				“{excerpt}”
 			</p>

@@ -4,12 +4,12 @@
 	import { Checkbox } from '@aqsha/ui-svelte/components/checkbox';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { Icon, SparklesIcon, AlertCircleIcon } from '$lib/icons';
-	import type { LatexCompileError, PendingProposalView, ProposalHunk } from '../api';
+	import type { PendingProposalView, ProposalHunk, TypstCompileError } from '../api';
 
 	/**
-	 * Kartu tinjau usulan suntingan Astra: diff per hunk dengan checkbox terima/tolak per
-	 * segmen. Default semua tercentang — satu klik Terima ≡ terima utuh. Usulan basi (sumber
-	 * berubah sejak dibuat) → checkbox nonaktif, hanya Tolak (accept CAS menolak menimpa).
+	 * Kartu tinjau usulan suntingan Astra: diff per hunk dengan checkbox terima/tolak per segmen.
+	 * Default semua tercentang — satu klik Terima ≡ terima utuh. Usulan basi (sumber berubah sejak
+	 * dibuat) → checkbox nonaktif, hanya Tolak (accept CAS menolak menimpa).
 	 */
 	let {
 		proposal,
@@ -20,7 +20,7 @@
 	}: {
 		proposal: NonNullable<PendingProposalView>;
 		accepting: boolean;
-		acceptErrors: LatexCompileError[] | null;
+		acceptErrors: TypstCompileError[] | null;
 		onAccept: (acceptedHunkIndexes: number[] | undefined) => void;
 		onReject: () => void;
 	} = $props();
@@ -135,14 +135,16 @@
 	</div>
 
 	{#if acceptErrors && acceptErrors.length > 0}
-		<div class="flex flex-col gap-1 rounded-md border-2 border-destructive/40 bg-destructive/5 px-3 py-2">
+		<div
+			class="flex flex-col gap-1 rounded-md border-2 border-destructive/40 bg-destructive/5 px-3 py-2"
+		>
 			<div class="flex items-center gap-2 text-label font-medium text-destructive">
 				<Icon icon={AlertCircleIcon} class="size-4 shrink-0" />
 				Hasil pilihan hunk gagal compile — ubah pilihan atau tolak.
 			</div>
 			{#each acceptErrors.slice(0, 10) as err, i (i)}
 				<p class="text-label text-muted-foreground">
-					{err.line != null ? `baris ${err.line}: ` : ''}{err.message}
+					{err.line > 0 ? `baris ${err.line}: ` : ''}{err.message}
 				</p>
 			{/each}
 		</div>

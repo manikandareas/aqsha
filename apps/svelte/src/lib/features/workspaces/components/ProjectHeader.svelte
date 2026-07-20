@@ -1,10 +1,8 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import * as Popover from '@aqsha/ui-svelte/components/popover';
 	import { Badge } from '@aqsha/ui-svelte/components/badge';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Input } from '@aqsha/ui-svelte/components/input';
-	import { Icon, FileTextIcon } from '$lib/icons';
 	import NameDialog from './NameDialog.svelte';
 	import StageStepper from './StageStepper.svelte';
 	import { useUpdateWorkspace } from '../api';
@@ -77,16 +75,6 @@
 				</div>
 			</Popover.Content>
 		</Popover.Root>
-		<Button
-			href={resolve('/app/(product)/projects/[projectId]/preview', { projectId: workspace.id })}
-			type="button"
-			variant="ghost"
-			size="sm"
-			class="ml-auto text-muted-foreground"
-		>
-			<Icon icon={FileTextIcon} class="size-4" />
-			Pratinjau dokumen
-		</Button>
 	</div>
 	<button
 		type="button"
