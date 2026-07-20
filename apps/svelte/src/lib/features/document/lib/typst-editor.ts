@@ -61,6 +61,7 @@ function toLintDiagnostics(diags: Cm6Diagnostic[]): LintDiagnostic[] {
 
 export type TypstEditorHandle = {
 	setDoc(next: string): void;
+	applyUserEdit(next: string): void;
 	setDiagnostics(diags: Cm6Diagnostic[]): void;
 	scrollToLine(line: number): void;
 	setEditable(editable: boolean): void;
@@ -120,6 +121,12 @@ export async function mountTypstEditor(
 				changes: { from: 0, to: view.state.doc.length, insert: next },
 				annotations: ExternalSync.of(true)
 			});
+		},
+		applyUserEdit(next) {
+			// Tanpa ExternalSync → dilaporkan sebagai edit user (memicu autosave + recompile). Dipakai
+			// manajemen bab lewat TOC: hasil transformasi teks diterapkan sebagai satu edit.
+			if (next === view.state.doc.toString()) return;
+			view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next } });
 		},
 		setDiagnostics(diags) {
 			view.dispatch(setLintDiagnostics(view.state, toLintDiagnostics(diags)));

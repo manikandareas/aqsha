@@ -93,6 +93,10 @@
 	export function scrollToLine(line: number): void {
 		handle?.scrollToLine(line);
 	}
+	/** Terapkan sumber baru sebagai edit user (memicu autosave + recompile) — dipakai manajemen bab TOC. */
+	export function applyUserEdit(next: string): void {
+		handle?.applyUserEdit(next);
+	}
 	export function focus(): void {
 		handle?.focus();
 	}
