@@ -7,7 +7,6 @@
 	import * as Command from '@aqsha/ui-svelte/components/command';
 	import NavUser from './NavUser.svelte';
 	import SidebarSection from './sidebar/SidebarSection.svelte';
-	import NewProjectDialog from '$lib/features/workspaces/components/NewProjectDialog.svelte';
 	import { useWorkspacesList } from '$lib/features/workspaces/api';
 	import { projectDisplayTitle, type Workspace } from '$lib/features/workspaces/types';
 	import {
@@ -50,7 +49,6 @@
 	const projects = $derived<Workspace[]>(list.data?.pages.flatMap((p) => p.items) ?? []);
 
 	let commandOpen = $state(false);
-	let createDialogOpen = $state(false);
 
 	const pathname = $derived(page.url.pathname);
 	const selectedProjectId = $derived(page.params.projectId);
@@ -69,7 +67,7 @@
 
 	function runCreateProject() {
 		commandOpen = false;
-		createDialogOpen = true;
+		void goto(resolve('/app/(product)/projects/new'));
 	}
 
 	function handleShortcut(event: KeyboardEvent) {
@@ -259,5 +257,3 @@
 		{/if}
 	</Command.List>
 </Command.Dialog>
-
-<NewProjectDialog open={createDialogOpen} onOpenChange={(open) => (createDialogOpen = open)} />

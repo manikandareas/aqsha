@@ -13,18 +13,36 @@ export const WORKSPACE_KINDS = [
 ] as const;
 export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
 
-export const WORKSPACE_STAGES = [
-	'exploration',
-	'proposal',
-	'research',
-	'writing',
-	'revision',
-	'done'
-] as const;
-export type WorkspaceStage = (typeof WORKSPACE_STAGES)[number];
+/** Metadata per-kind yang dikumpulkan saat create (jsonb `kind_info`); superset flat, semua opsional. */
+export type WorkspaceKindInfo = {
+	university?: string | null;
+	faculty?: string | null;
+	studyProgram?: string | null;
+	targetJournal?: string | null;
+	affiliation?: string | null;
+	courseOrVenue?: string | null;
+};
 
-export const SECTION_STATUSES = ['empty', 'draft', 'in_review', 'done'] as const;
-export type SectionStatus = (typeof SECTION_STATUSES)[number];
+export type WorkspaceKindInfoField = keyof WorkspaceKindInfo;
+
+/** Field kind_info yang relevan per kind — untuk merender form create + sheet detail. */
+export const WORKSPACE_KIND_INFO_FIELDS = {
+	undergraduate_thesis: ['university', 'faculty', 'studyProgram'],
+	masters_thesis: ['university', 'faculty', 'studyProgram'],
+	dissertation: ['university', 'faculty', 'studyProgram'],
+	proposal: ['university', 'faculty', 'studyProgram'],
+	journal_article: ['targetJournal', 'affiliation'],
+	paper: ['university', 'courseOrVenue'],
+	freeform: []
+} as const satisfies Record<WorkspaceKind, readonly WorkspaceKindInfoField[]>;
+
+/** Kind yang menampung dokumen pedoman (PDF panduan penulisan) di form create + detail. */
+export const THESIS_FAMILY_KINDS: readonly WorkspaceKind[] = [
+	'undergraduate_thesis',
+	'masters_thesis',
+	'dissertation',
+	'proposal'
+];
 
 export type Workspace = {
 	id: string;
@@ -33,23 +51,12 @@ export type Workspace = {
 	emoji: string | null;
 	description: string | null;
 	kind: WorkspaceKind;
-	stage: WorkspaceStage;
+	kindInfo: WorkspaceKindInfo | null;
+	documentArtifactId: string | null;
 	deadline: number | null;
 	topicNote: string | null;
 	status: string; // "active" | "archived"
 	archivedAt: number | null;
-	createdAt: number;
-	updatedAt: number;
-};
-
-export type WorkspaceSection = {
-	id: string;
-	workspaceId: string;
-	title: string;
-	sortOrder: number;
-	status: SectionStatus;
-	role: 'bibliography' | null;
-	documentArtifactId: string | null;
 	createdAt: number;
 	updatedAt: number;
 };

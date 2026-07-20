@@ -1,9 +1,9 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { useClerkContext } from 'svelte-clerk';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, PlusIcon } from '$lib/icons';
 	import { useWorkspacesList } from '../api';
-	import NewProjectDialog from '../components/NewProjectDialog.svelte';
 	import ProjectCard from '../components/ProjectCard.svelte';
 	import type { Workspace } from '../types';
 
@@ -15,7 +15,7 @@
 	);
 	const projects = $derived<Workspace[]>(list.data?.pages.flatMap((p) => p.items) ?? []);
 
-	let dialogOpen = $state(false);
+	const newProjectHref = resolve('/app/(product)/projects/new');
 </script>
 
 <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 overflow-y-auto px-6 py-8">
@@ -24,7 +24,7 @@
 			<h1 class="font-heading text-2xl font-bold">Proyek</h1>
 			<p class="text-sm text-muted-foreground">Semua karya tulismu, dari ide sampai selesai.</p>
 		</div>
-		<Button type="button" onclick={() => (dialogOpen = true)}>
+		<Button href={newProjectHref}>
 			<Icon icon={PlusIcon} class="size-4" />
 			Proyek baru
 		</Button>
@@ -45,7 +45,7 @@
 				Skripsi, artikel jurnal, atau ide yang masih mentah — mulai dari satu proyek, judulnya bisa
 				menyusul.
 			</p>
-			<Button type="button" onclick={() => (dialogOpen = true)}>Buat proyek pertama</Button>
+			<Button href={newProjectHref}>Buat proyek pertama</Button>
 		</div>
 	{:else}
 		<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -60,5 +60,3 @@
 		{/if}
 	{/if}
 </div>
-
-<NewProjectDialog open={dialogOpen} onOpenChange={(open) => (dialogOpen = open)} />

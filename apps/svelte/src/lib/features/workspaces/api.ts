@@ -8,13 +8,7 @@ import { toast } from 'svelte-sonner';
 import { getApiClient } from '$lib/api';
 import { readableApiErrorMessage } from '$lib/errors';
 import { queryKeys, unwrap } from '$lib/query';
-import type {
-	SectionStatus,
-	Workspace,
-	WorkspaceKind,
-	WorkspaceSection,
-	WorkspaceStage
-} from './types';
+import type { Workspace, WorkspaceKind, WorkspaceKindInfo } from './types';
 
 /**
  * Workspace query/mutation hooks. Reactive scalar inputs (`id`, `workspaceId`) are getters
@@ -87,6 +81,7 @@ export function useCreateWorkspace() {
 		mutationFn: async (input: {
 			name?: string;
 			kind: WorkspaceKind;
+			kindInfo?: WorkspaceKindInfo;
 			topicNote?: string;
 			deadline?: number;
 		}) => unwrap(await api.workspaces.post(input)),
@@ -104,7 +99,7 @@ export function useUpdateWorkspace() {
 			name?: string;
 			emoji?: string;
 			description?: string | null;
-			stage?: WorkspaceStage;
+			kindInfo?: WorkspaceKindInfo | null;
 			deadline?: number | null;
 			topicNote?: string | null;
 		}) =>
@@ -113,7 +108,7 @@ export function useUpdateWorkspace() {
 					name: input.name,
 					emoji: input.emoji,
 					description: input.description,
-					stage: input.stage,
+					kindInfo: input.kindInfo,
 					deadline: input.deadline,
 					topicNote: input.topicNote
 				})
@@ -125,7 +120,7 @@ export function useUpdateWorkspace() {
 				name?: string;
 				emoji?: string;
 				description?: string | null;
-				stage?: WorkspaceStage;
+				kindInfo?: WorkspaceKindInfo | null;
 				deadline?: number | null;
 				topicNote?: string | null;
 			}
@@ -205,78 +200,5 @@ export function useDeleteFolder() {
 		onSuccess: (_d: unknown, input: { id: string; workspaceId: string }) =>
 			qc.invalidateQueries({ queryKey: queryKeys.folders.list(input.workspaceId) }),
 		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menghapus folder.'))
-	}));
-}
-
-// ── Kerangka bab (workspace_sections) ────────────────────────────────────────
-
-export function useSections(workspaceId: () => string, enabled: () => boolean = alwaysTrue) {
-	const api = getApiClient();
-	return createQuery(() => ({
-		queryKey: queryKeys.workspaces.sections(workspaceId()),
-		enabled: enabled() && Boolean(workspaceId()),
-		queryFn: async () =>
-			unwrap(await api.workspaces({ id: workspaceId() }).sections.get()) as WorkspaceSection[]
-	}));
-}
-
-export function useCreateSection() {
-	const api = getApiClient();
-	const qc = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: async (input: { workspaceId: string; title: string }) =>
-			unwrap(await api.workspaces({ id: input.workspaceId }).sections.post({ title: input.title })),
-		onSuccess: (_d: unknown, input: { workspaceId: string; title: string }) =>
-			qc.invalidateQueries({ queryKey: queryKeys.workspaces.sections(input.workspaceId) }),
-		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menambah bab.'))
-	}));
-}
-
-export function useUpdateSection() {
-	const api = getApiClient();
-	const qc = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: async (input: {
-			id: string;
-			workspaceId: string;
-			title?: string;
-			status?: SectionStatus;
-		}) =>
-			unwrap(
-				await api.sections({ id: input.id }).patch({ title: input.title, status: input.status })
-			),
-		onSuccess: (
-			_d: unknown,
-			input: { id: string; workspaceId: string; title?: string; status?: SectionStatus }
-		) => qc.invalidateQueries({ queryKey: queryKeys.workspaces.sections(input.workspaceId) }),
-		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal memperbarui bab.'))
-	}));
-}
-
-export function useDeleteSection() {
-	const api = getApiClient();
-	const qc = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: async (input: { id: string; workspaceId: string }) =>
-			unwrap(await api.sections({ id: input.id }).delete()),
-		onSuccess: (_d: unknown, input: { id: string; workspaceId: string }) =>
-			qc.invalidateQueries({ queryKey: queryKeys.workspaces.sections(input.workspaceId) }),
-		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menghapus bab.'))
-	}));
-}
-
-export function useReorderSections() {
-	const api = getApiClient();
-	const qc = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: async (input: { workspaceId: string; orderedIds: string[] }) =>
-			unwrap(
-				await api
-					.workspaces({ id: input.workspaceId })
-					.sections.reorder.post({ orderedIds: input.orderedIds })
-			),
-		onSuccess: (_d: unknown, input: { workspaceId: string; orderedIds: string[] }) =>
-			qc.invalidateQueries({ queryKey: queryKeys.workspaces.sections(input.workspaceId) }),
-		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal mengubah urutan bab.'))
 	}));
 }

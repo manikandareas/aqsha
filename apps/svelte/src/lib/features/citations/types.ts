@@ -153,7 +153,6 @@ export type WorkspaceCitationItem = {
 	updatedAt: number;
 	deletedAt: number | null;
 	linkId: string;
-	sectionId: string | null;
 };
 
 export const CITATION_STYLE_OPTIONS: Array<{ id: CitationStyleId; label: string }> = [

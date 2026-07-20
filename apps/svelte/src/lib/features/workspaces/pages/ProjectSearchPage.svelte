@@ -17,12 +17,12 @@
 		type SearchPaper
 	} from '$lib/features/discovery/api';
 	import { useSaveSource } from '$lib/features/citations/api';
-	import { useSections, useWorkspace } from '../api';
+	import { useWorkspace } from '../api';
 	import { projectDisplayTitle } from '../types';
 
 	/**
 	 * Pencarian sumber sadar-konteks: hasil disimpan langsung ke perpustakaan akun
-	 * + auto-link ke proyek ini (dan bab bila datang dari aksi per-bab).
+	 * + auto-link ke proyek ini.
 	 */
 	let { workspaceId }: { workspaceId: string } = $props();
 
@@ -30,18 +30,10 @@
 	const enabled = $derived(clerk.isLoaded && Boolean(clerk.auth.userId));
 
 	const q = $derived(page.url.searchParams.get('q') ?? '');
-	const sectionId = $derived(page.url.searchParams.get('section'));
 
 	const workspace = useWorkspace(
 		() => workspaceId,
 		() => enabled
-	);
-	const sections = useSections(
-		() => workspaceId,
-		() => enabled
-	);
-	const section = $derived(
-		sectionId ? (sections.data?.find((s) => s.id === sectionId) ?? null) : null
 	);
 
 	const search = usePaperSearch(
@@ -68,8 +60,7 @@
 					year: paper.year ?? null,
 					venue: paper.venue ?? null
 				},
-				workspaceId,
-				sectionId
+				workspaceId
 			},
 			{
 				onSuccess: () => {
@@ -88,13 +79,11 @@
 		void goto(url, { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
-	// Saran query awal dari konteks proyek/bab — pencarian belum dimulai.
+	// Saran query awal dari konteks proyek — pencarian belum dimulai.
 	const suggestions = $derived(
-		[
-			section?.title ?? null,
-			workspace.data?.topicNote?.trim() || null,
-			workspace.data?.name.trim() || null
-		].filter((s, i, all): s is string => Boolean(s) && all.indexOf(s) === i)
+		[workspace.data?.topicNote?.trim() || null, workspace.data?.name.trim() || null].filter(
+			(s, i, all): s is string => Boolean(s) && all.indexOf(s) === i
+		)
 	);
 </script>
 
@@ -114,13 +103,8 @@
 			{#if workspace.data}
 				<Badge variant="outline">{projectDisplayTitle(workspace.data)}</Badge>
 			{/if}
-			{#if section}
-				<Badge variant="secondary">{section.title}</Badge>
-			{/if}
 		</div>
-		<h1 class="font-heading text-2xl font-bold">
-			Cari sumber {section ? `untuk ${section.title}` : 'untuk proyek ini'}
-		</h1>
+		<h1 class="font-heading text-2xl font-bold">Cari sumber untuk proyek ini</h1>
 		<ExploreAskBar value={q} onSubmit={submitQuery} />
 	</header>
 

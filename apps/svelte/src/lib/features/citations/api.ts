@@ -541,21 +541,6 @@ export function useUnlinkCitation() {
 	}));
 }
 
-export function useAssignCitationSection() {
-	const api = getApiClient();
-	const qc = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: async (input: { linkId: string; workspaceId: string; sectionId: string | null }) =>
-			unwrap(
-				await api['citation-links']({ linkId: input.linkId }).patch({ sectionId: input.sectionId })
-			),
-		onSuccess: (
-			_d: unknown,
-			input: { linkId: string; workspaceId: string; sectionId: string | null }
-		) => qc.invalidateQueries({ queryKey: queryKeys.citations.links(input.workspaceId) }),
-		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menandai bab untuk sumber.'))
-	}));
-}
 
 // ── Simpan citation-first dari pencarian/feed ────────────────────────────────
 
