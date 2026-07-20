@@ -232,7 +232,6 @@ describe("api citations — link perpustakaan ↔ proyek", () => {
     const linked = inProject.items.find((i: { id: string }) => i.id === manualId);
     expect(linked).toBeDefined();
     expect(linked.linkId).toBeString();
-    expect(linked.sectionId).toBeNull();
 
     // Idempotent: link ulang tidak menggandakan.
     await req("POST", `/workspaces/${workspaceId}/citations/${manualId}/link`, tok(OWNER), {});

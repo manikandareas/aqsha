@@ -52,10 +52,10 @@ function readJson(res: Response): Promise<any> {
 async function cleanup() {
   if (!DATABASE_URL) return;
   const { client } = createDb(DATABASE_URL);
-  // workspace_sections.document_artifact_id has no cascade, so it must be cleared
-  // before artifacts are deleted (FK-safe order) — defensive against any leftover link.
+  // Clear the workspace→document artifact pointer before deleting artifacts (FK-safe order).
   await client`delete from document_citation_usages where owner_user_id like 'user_itest_ws_%'`;
-  await client`update workspace_sections set document_artifact_id = null where workspace_id in (select id from workspaces where owner_user_id like 'user_itest_ws_%')`;
+  await client`delete from document_revisions where owner_user_id like 'user_itest_ws_%'`;
+  await client`update workspaces set document_artifact_id = null where owner_user_id like 'user_itest_ws_%'`;
   await client`delete from artifact_contents where owner_user_id like 'user_itest_ws_%'`;
   await client`delete from artifacts where owner_user_id like 'user_itest_ws_%'`;
   await client`delete from workspace_folders where owner_user_id like 'user_itest_ws_%'`;
@@ -108,6 +108,7 @@ describe("api workspaces — CRUD round-trip (admin owner, no capacity cap)", ()
     const blank = await req("POST", "/workspaces", tok(OWNER_NAME), {
       name: "   ",
       kind: "undergraduate_thesis",
+      kindInfo: { university: "Universitas Contoh", faculty: "Fakultas Teknik" },
       topicNote: "pengaruh media sosial",
     });
     expect(blank.status).toBe(200);
@@ -115,24 +116,21 @@ describe("api workspaces — CRUD round-trip (admin owner, no capacity cap)", ()
     const w = await readJson(await get(`/workspaces/${blankId}`, tok(OWNER_NAME)));
     expect(w.name).toBe("");
     expect(w.kind).toBe("undergraduate_thesis");
-    expect(w.stage).toBe("exploration");
+    expect(w.stage).toBeUndefined();
+    expect(w.kindInfo?.university).toBe("Universitas Contoh");
     expect(w.topicNote).toBe("pengaruh media sosial");
-    // Kerangka bab ter-seed dari template skripsi (5 bab + Daftar Pustaka).
-    const sections = await readJson(await get(`/workspaces/${blankId}/sections`, tok(OWNER_NAME)));
-    expect(sections.length).toBe(6);
-    expect(sections[5].role).toBe("bibliography");
-    // Status bab + stage proyek bisa diubah.
-    const sec = sections[0];
-    const st = await req("PATCH", `/sections/${sec.id}`, tok(OWNER_NAME), { status: "draft" });
-    expect(st.status).toBe(200);
-    const stg = await req("PATCH", `/workspaces/${blankId}`, tok(OWNER_NAME), { stage: "proposal" });
-    expect(stg.status).toBe(200);
-    // Reorder mismatch → 409.
-    const bad = await req("POST", `/workspaces/${blankId}/sections/reorder`, tok(OWNER_NAME), {
-      orderedIds: [sec.id],
+    // Dokumen Typst ter-scaffold otomatis saat create (halaman judul thesis + heading bab).
+    const doc = await readJson(await get(`/workspaces/${blankId}/document`, tok(OWNER_NAME)));
+    expect(doc.contentVersion).toBe(1);
+    expect(doc.source).toContain("= Pendahuluan");
+    expect(doc.source).toContain("Universitas Contoh");
+    // kindInfo bisa diperbarui (kind sengaja tak bisa diubah).
+    const patched = await req("PATCH", `/workspaces/${blankId}`, tok(OWNER_NAME), {
+      kindInfo: { studyProgram: "Teknik Informatika" },
     });
-    expect(bad.status).toBe(409);
-    expect((await readJson(bad)).code).toBe("section_reorder_mismatch");
+    expect(patched.status).toBe(200);
+    const w2 = await readJson(await get(`/workspaces/${blankId}`, tok(OWNER_NAME)));
+    expect(w2.kindInfo?.studyProgram).toBe("Teknik Informatika");
   }, 20000);
 
   itest("GET /workspaces keyset pagination (limit=1) walks all 4 active", async () => {
@@ -268,8 +266,8 @@ describe("api workspaces — CRUD round-trip (admin owner, no capacity cap)", ()
   }, 20000);
 });
 
-// Route dokumen bab (GET/PUT /sections/:id/document, kontrak sumber LaTeX JSON) diuji
-// di apps/api/test/latex-routes.test.ts.
+// Route dokumen proyek (GET/PUT /workspaces/:id/document, kontrak sumber Typst JSON) diuji
+// di apps/api/test/document-routes.test.ts.
 
 describe("api workspaces — capacity (free plan)", () => {
   itest("free owner at cap (default ws) → POST 403 workspace_limit_reached", async () => {

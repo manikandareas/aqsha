@@ -1,17 +1,15 @@
-import type { WorkspaceKind, WorkspaceStage } from "@aqsha/db";
+import type { WorkspaceKind, WorkspaceKindInfo } from "@aqsha/db";
 import {
   AnnotationService,
   FolderService,
-  SectionLatexService,
-  SectionService,
-  SectionSynctexService,
+  WorkspaceDocumentService,
   WorkspaceService,
 } from "@aqsha/services";
 import {
-  LatexBuildService,
-  SectionProposalService,
-  WorkspaceDocxService,
-} from "@aqsha/services/latex";
+  DocumentProposalService,
+  WorkspaceDocxExportService,
+  WorkspacePdfExportService,
+} from "@aqsha/services/typst";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
@@ -19,7 +17,7 @@ import { rateLimitMacro } from "../plugins/rate-limit";
 
 // Literal arrays spelled out (not `WORKSPACE_KINDS.map(t.Literal)`): `.map` widens a readonly
 // tuple to a plain array, which collapses these fields to `never` when Eden Treaty infers the
-// client body type. Keep in sync with `WORKSPACE_KINDS`/`WORKSPACE_STAGES` in @aqsha/db.
+// client body type. Keep in sync with `WORKSPACE_KINDS` in @aqsha/db.
 const kindSchema = t.Union([
   t.Literal("undergraduate_thesis"),
   t.Literal("masters_thesis"),
@@ -29,20 +27,15 @@ const kindSchema = t.Union([
   t.Literal("paper"),
   t.Literal("freeform"),
 ]);
-const stageSchema = t.Union([
-  t.Literal("exploration"),
-  t.Literal("proposal"),
-  t.Literal("research"),
-  t.Literal("writing"),
-  t.Literal("revision"),
-  t.Literal("done"),
-]);
-const sectionStatusSchema = t.Union([
-  t.Literal("empty"),
-  t.Literal("draft"),
-  t.Literal("in_review"),
-  t.Literal("done"),
-]);
+// Superset flat field kind_info; service memvalidasi mana yang relevan per kind.
+const kindInfoSchema = t.Object({
+  university: t.Optional(t.Union([t.String(), t.Null()])),
+  faculty: t.Optional(t.Union([t.String(), t.Null()])),
+  studyProgram: t.Optional(t.Union([t.String(), t.Null()])),
+  targetJournal: t.Optional(t.Union([t.String(), t.Null()])),
+  affiliation: t.Optional(t.Union([t.String(), t.Null()])),
+  courseOrVenue: t.Optional(t.Union([t.String(), t.Null()])),
+});
 const annotationKindSchema = t.Union([t.Literal("highlight"), t.Literal("pin")]);
 const annotationRectSchema = t.Object({
   x: t.Number(),
@@ -52,11 +45,10 @@ const annotationRectSchema = t.Object({
 });
 
 /**
- * Route workspaces (proyek karya tulis) + kerangka bab (sections) + folder nested.
- * `/folders/:id` top-level ada di `./folders`; `/sections/:id` top-level di sini.
- * Tipis: auth → validasi `t` permisif → 1 service call. Validasi domain
- * (capacity/emoji/name/kind/stage/reorder) hidup di service → `appError`
- * terstruktur, di-map errorPlugin global.
+ * Route workspaces (proyek karya tulis) = satu dokumen Typst kontinu + anotasi + proposal
+ * Astra + ekspor, plus folder nested (legacy board artifact). Tipis: auth → validasi `t`
+ * permisif → 1 service call. Validasi domain (capacity/emoji/name/kind/kindInfo) hidup di
+ * service → `appError` terstruktur, di-map errorPlugin global.
  */
 export const workspaces = new Elysia()
   .use(authMacro)
@@ -97,6 +89,7 @@ export const workspaces = new Elysia()
         ownerEmail: email,
         name: body.name,
         kind: body.kind as WorkspaceKind,
+        kindInfo: body.kindInfo as WorkspaceKindInfo | undefined,
         topicNote: body.topicNote ?? null,
         deadline: body.deadline ?? null,
       });
@@ -107,6 +100,7 @@ export const workspaces = new Elysia()
       body: t.Object({
         name: t.Optional(t.String()),
         kind: kindSchema,
+        kindInfo: t.Optional(kindInfoSchema),
         topicNote: t.Optional(t.String()),
         deadline: t.Optional(t.Numeric()),
       }),
@@ -122,7 +116,7 @@ export const workspaces = new Elysia()
         name: body.name,
         emoji: body.emoji,
         description: body.description,
-        stage: body.stage as WorkspaceStage | undefined,
+        kindInfo: body.kindInfo as WorkspaceKindInfo | null | undefined,
         deadline: body.deadline,
         topicNote: body.topicNote,
       });
@@ -133,7 +127,7 @@ export const workspaces = new Elysia()
         name: t.Optional(t.String()),
         emoji: t.Optional(t.String()),
         description: t.Optional(t.Union([t.String(), t.Null()])),
-        stage: t.Optional(stageSchema),
+        kindInfo: t.Optional(t.Union([kindInfoSchema, t.Null()])),
         deadline: t.Optional(t.Union([t.Numeric(), t.Null()])),
         topicNote: t.Optional(t.Union([t.String(), t.Null()])),
       }),
@@ -147,92 +141,22 @@ export const workspaces = new Elysia()
     },
     { auth: true },
   )
-  // ── Kerangka bab ─────────────────────────────────────────────────────────
+  // ── Dokumen Typst tunggal ────────────────────────────────────────────────
   .get(
-    "/workspaces/:id/sections",
+    "/workspaces/:id/document",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
-      return SectionService.list(db, ownerUserId, params.id);
-    },
-    { auth: true },
-  )
-  .post(
-    "/workspaces/:id/sections",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return SectionService.create(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        title: body.title,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({ title: t.String() }),
-    },
-  )
-  .post(
-    "/workspaces/:id/sections/reorder",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return SectionService.reorder(db, {
-        ownerUserId,
-        workspaceId: params.id,
-        orderedIds: body.orderedIds,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({ orderedIds: t.Array(t.String()) }),
-    },
-  )
-  .patch(
-    "/sections/:id",
-    async ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      if (body.title !== undefined) {
-        await SectionService.rename(db, { ownerUserId, sectionId: params.id, title: body.title });
-      }
-      if (body.status !== undefined) {
-        await SectionService.setStatus(db, {
-          ownerUserId,
-          sectionId: params.id,
-          status: body.status,
-        });
-      }
-      return { ok: true as const };
-    },
-    {
-      auth: true,
-      body: t.Object({
-        title: t.Optional(t.String()),
-        status: t.Optional(sectionStatusSchema),
-      }),
-    },
-  )
-  .delete(
-    "/sections/:id",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return SectionService.remove(db, { ownerUserId, sectionId: params.id });
-    },
-    { auth: true },
-  )
-  .get(
-    "/sections/:id/document",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return SectionLatexService.getDocument(db, { ownerUserId, sectionId: params.id });
+      return WorkspaceDocumentService.getDocument(db, { ownerUserId, workspaceId: params.id });
     },
     { auth: true },
   )
   .put(
-    "/sections/:id/document",
+    "/workspaces/:id/document",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      return SectionLatexService.saveDocument(db, {
+      return WorkspaceDocumentService.saveDocument(db, {
         ownerUserId,
-        sectionId: params.id,
+        workspaceId: params.id,
         source: body.source,
         baseVersion: body.baseVersion,
         author: "user",
@@ -240,101 +164,46 @@ export const workspaces = new Elysia()
     },
     {
       auth: true,
-      // Tanpa rateLimit: dipanggil autosave debounced — limiter akan memutus penyimpanan.
+      // Tanpa rateLimit: dipanggil autosave debounced.
       body: t.Object({
         source: t.String(),
         baseVersion: t.Optional(t.Numeric()),
       }),
     },
   )
+  // ── Ekspor dokumen penuh ─────────────────────────────────────────────────
   .post(
-    "/sections/:id/compile",
+    "/workspaces/:id/export/pdf",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
-      return LatexBuildService.compileSection(db, { ownerUserId, sectionId: params.id });
+      return WorkspacePdfExportService.export(db, { ownerUserId, workspaceId: params.id });
     },
-    { auth: true, rateLimit: "latex:compile" },
-  )
-  .get(
-    "/sections/:id/build",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return LatexBuildService.getSectionBuild(db, { ownerUserId, sectionId: params.id });
-    },
-    { auth: true },
-  )
-  .post(
-    "/sections/:id/synctex/inverse",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return SectionSynctexService.inverse(db, {
-        ownerUserId,
-        sectionId: params.id,
-        page: body.page,
-        xPt: body.xPt,
-        yPt: body.yPt,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({ page: t.Numeric(), xPt: t.Numeric(), yPt: t.Numeric() }),
-    },
-  )
-  .post(
-    "/sections/:id/synctex/forward",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return SectionSynctexService.forward(db, {
-        ownerUserId,
-        sectionId: params.id,
-        line: body.line,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({ line: t.Numeric() }),
-    },
-  )
-  .post(
-    "/workspaces/:id/compile",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return LatexBuildService.compileWorkspace(db, { ownerUserId, workspaceId: params.id });
-    },
-    { auth: true, rateLimit: "latex:compile" },
-  )
-  .get(
-    "/workspaces/:id/build",
-    ({ ownerUserId, params }) => {
-      const { db } = getDb();
-      return LatexBuildService.getWorkspaceBuild(db, { ownerUserId, workspaceId: params.id });
-    },
-    { auth: true },
+    { auth: true, rateLimit: "typst:compile" },
   )
   .post(
     "/workspaces/:id/export/docx",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
-      return WorkspaceDocxService.export(db, { ownerUserId, workspaceId: params.id });
+      return WorkspaceDocxExportService.export(db, { ownerUserId, workspaceId: params.id });
     },
-    { auth: true, rateLimit: "latex:compile" },
+    { auth: true, rateLimit: "typst:compile" },
   )
-  // ── Anotasi PDF bab ──────────────────────────────────────────────────────
+  // ── Anotasi preview dokumen ──────────────────────────────────────────────
   .get(
-    "/sections/:id/annotations",
+    "/workspaces/:id/annotations",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
-      return AnnotationService.list(db, { ownerUserId, sectionId: params.id });
+      return AnnotationService.list(db, { ownerUserId, workspaceId: params.id });
     },
     { auth: true },
   )
   .post(
-    "/sections/:id/annotations",
+    "/workspaces/:id/annotations",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
       return AnnotationService.create(db, {
         ownerUserId,
-        sectionId: params.id,
+        workspaceId: params.id,
         kind: body.kind,
         page: body.page,
         rects: body.rects,
@@ -354,12 +223,12 @@ export const workspaces = new Elysia()
     },
   )
   .patch(
-    "/sections/:id/annotations/:aid",
+    "/workspaces/:id/annotations/:aid",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
       return AnnotationService.update(db, {
         ownerUserId,
-        sectionId: params.id,
+        workspaceId: params.id,
         annotationId: params.aid,
         note: body.note,
         status: body.status,
@@ -374,24 +243,24 @@ export const workspaces = new Elysia()
     },
   )
   .delete(
-    "/sections/:id/annotations/:aid",
+    "/workspaces/:id/annotations/:aid",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
       return AnnotationService.remove(db, {
         ownerUserId,
-        sectionId: params.id,
+        workspaceId: params.id,
         annotationId: params.aid,
       });
     },
     { auth: true },
   )
   .post(
-    "/sections/:id/annotations/mark-sent",
+    "/workspaces/:id/annotations/mark-sent",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
       return AnnotationService.markSent(db, {
         ownerUserId,
-        sectionId: params.id,
+        workspaceId: params.id,
         ids: body.ids,
         threadId: body.threadId,
         messageId: body.messageId ?? null,
@@ -408,18 +277,18 @@ export const workspaces = new Elysia()
   )
   // ── Proposal suntingan agen ──────────────────────────────────────────────
   .get(
-    "/sections/:id/proposals",
+    "/workspaces/:id/proposals",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
-      return SectionProposalService.getPending(db, { ownerUserId, sectionId: params.id });
+      return DocumentProposalService.getPending(db, { ownerUserId, workspaceId: params.id });
     },
     { auth: true },
   )
   .post(
-    "/sections/:id/proposals/:pid/accept",
+    "/workspaces/:id/proposals/:pid/accept",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();
-      return SectionProposalService.accept(db, {
+      return DocumentProposalService.accept(db, {
         ownerUserId,
         proposalId: params.pid,
         acceptedHunkIndexes: body?.acceptedHunkIndexes,
@@ -437,14 +306,14 @@ export const workspaces = new Elysia()
     },
   )
   .post(
-    "/sections/:id/proposals/:pid/reject",
+    "/workspaces/:id/proposals/:pid/reject",
     ({ ownerUserId, params }) => {
       const { db } = getDb();
-      return SectionProposalService.reject(db, { ownerUserId, proposalId: params.pid });
+      return DocumentProposalService.reject(db, { ownerUserId, proposalId: params.pid });
     },
     { auth: true },
   )
-  // ── Folder nested (legacy board) ─────────────────────────────────────────
+  // ── Folder nested (legacy board artifact) ────────────────────────────────
   .get(
     "/workspaces/:id/folders",
     ({ ownerUserId, params }) => {

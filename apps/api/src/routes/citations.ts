@@ -316,7 +316,7 @@ export const citations = new Elysia()
     },
     { auth: true, rateLimit: "citations:create" },
   )
-  // ── Koleksi per proyek (link perpustakaan↔proyek↔bab) ────────────────────
+  // ── Koleksi per proyek (link perpustakaan↔proyek) ────────────────────────
   .get(
     "/workspaces/:id/citations",
     ({ ownerUserId, params }) => {
@@ -327,19 +327,15 @@ export const citations = new Elysia()
   )
   .post(
     "/workspaces/:id/citations/:citationId/link",
-    ({ ownerUserId, params, body }) => {
+    ({ ownerUserId, params }) => {
       const { db } = getDb();
       return CitationLinkService.addToWorkspace(db, {
         ownerUserId,
         workspaceId: params.id,
         citationId: params.citationId,
-        sectionId: body.sectionId ?? null,
       });
     },
-    {
-      auth: true,
-      body: t.Object({ sectionId: t.Optional(t.Union([t.String(), t.Null()])) }),
-    },
+    { auth: true },
   )
   .delete(
     "/workspaces/:id/citations/:citationId/link",
@@ -352,21 +348,6 @@ export const citations = new Elysia()
       });
     },
     { auth: true },
-  )
-  .patch(
-    "/citation-links/:linkId",
-    ({ ownerUserId, params, body }) => {
-      const { db } = getDb();
-      return CitationLinkService.assignSection(db, {
-        ownerUserId,
-        linkId: params.linkId,
-        sectionId: body.sectionId,
-      });
-    },
-    {
-      auth: true,
-      body: t.Object({ sectionId: t.Union([t.String(), t.Null()]) }),
-    },
   )
   // ── Tetap workspace-scoped ───────────────────────────────────────────────
   .post(

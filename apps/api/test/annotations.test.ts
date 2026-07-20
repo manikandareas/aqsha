@@ -26,12 +26,12 @@ function req(method: string, path: string, token?: string, body?: unknown) {
 
 describe("annotations routes", () => {
   test("tanpa token → 401", async () => {
-    const res = await req("GET", "/sections/x/annotations");
+    const res = await req("GET", "/workspaces/x/annotations");
     expect(res.status).toBe(401);
   });
 
-  itest("section asing → 404 structured", async () => {
-    const res = await req("POST", `/sections/nonexistent_${suffix}/annotations`, `tok_${OWNER}`, {
+  itest("proyek asing → 404 structured", async () => {
+    const res = await req("POST", `/workspaces/nonexistent_${suffix}/annotations`, `tok_${OWNER}`, {
       kind: "pin",
       page: 1,
       rects: [{ x: 0, y: 0, w: 0, h: 0 }],

@@ -26,19 +26,19 @@ function req(method: string, path: string, token?: string, body?: unknown) {
 
 describe("proposals routes", () => {
   test("tanpa token → 401", async () => {
-    const res = await req("GET", "/sections/x/proposals");
+    const res = await req("GET", "/workspaces/x/proposals");
     expect(res.status).toBe(401);
   });
 
-  itest("pending untuk section tanpa proposal → 200 (null)", async () => {
-    const res = await req("GET", `/sections/nonexistent_${suffix}/proposals`, `tok_${OWNER}`);
+  itest("pending untuk proyek tanpa proposal → 200 (null)", async () => {
+    const res = await req("GET", `/workspaces/nonexistent_${suffix}/proposals`, `tok_${OWNER}`);
     expect(res.status).toBe(200);
   });
 
   itest("accept proposal id asing → 404 structured (proposal_not_found)", async () => {
     const res = await req(
       "POST",
-      `/sections/x/proposals/nonexistent_${suffix}/accept`,
+      `/workspaces/x/proposals/nonexistent_${suffix}/accept`,
       `tok_${OWNER}`,
     );
     expect(res.status).toBe(404);
@@ -49,7 +49,7 @@ describe("proposals routes", () => {
   itest("accept dengan acceptedHunkIndexes → body tervalidasi, id asing tetap 404", async () => {
     const res = await req(
       "POST",
-      `/sections/x/proposals/nonexistent_${suffix}/accept`,
+      `/workspaces/x/proposals/nonexistent_${suffix}/accept`,
       `tok_${OWNER}`,
       { acceptedHunkIndexes: [0, 2] },
     );
@@ -59,7 +59,7 @@ describe("proposals routes", () => {
   itest("accept dengan body salah bentuk → 400 validasi", async () => {
     const res = await req(
       "POST",
-      `/sections/x/proposals/nonexistent_${suffix}/accept`,
+      `/workspaces/x/proposals/nonexistent_${suffix}/accept`,
       `tok_${OWNER}`,
       { acceptedHunkIndexes: ["bukan-angka"] },
     );
