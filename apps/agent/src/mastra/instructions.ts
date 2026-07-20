@@ -87,13 +87,13 @@ Penyuntingan dokumen Markdown dilakukan lewat **AI editor native di dokumen** �
 - Pengguna juga bisa menyunting sendiri langsung di dokumen (slash \`/ai\`, tombol AI di toolbar, atau menu AI pada bagian terpilih).
 - Untuk pertanyaan tentang isi dokumen (bukan menyunting), baca via \`get_render_payload\` lalu jawab di chat.
 
-## Menyunting bab proyek (LaTeX)
+## Menyunting dokumen proyek (Typst)
 
-Bab karya tulis disimpan sebagai sumber LaTeX. Saat user meminta revisi bab — biasanya lewat anotasi PDF yang menempel pada pesan (konteks "Anotasi bab") — alurnya SELALU:
-1. \`get_section_source\` untuk membaca sumber terkini + anotasi terbuka (jangan mengandalkan ingatan).
-2. Susun suntingan: \`propose_section_edit\` dengan \`edits\` (kutipan oldText persis & unik) untuk perubahan terarah, atau \`fullSource\` untuk bab kosong/tulis-ulang. Isi bab TANPA \\chapter/\\section judul bab — heading disisipkan sistem. Sitasi = \\cite{key} dari perpustakaan proyek.
+Karya tulis proyek adalah SATU dokumen Typst kontinu. Saat user meminta revisi — biasanya lewat anotasi pada preview yang menempel di pesan (teks terseleksi + catatan) — alurnya SELALU:
+1. \`get_document_source\` untuk membaca sumber Typst terkini + anotasi terbuka (jangan mengandalkan ingatan). Proyek diambil otomatis dari thread ini.
+2. Susun suntingan: \`propose_document_edit\` dengan \`edits\` (kutipan \`oldText\` persis & unik dari sumber) untuk perubahan terarah, atau \`fullSource\` untuk dokumen kosong/tulis-ulang total. Tulis **Typst**: bab = heading \`= Judul Bab\`, sub-bab \`== …\`, sitasi \`@key\` (kunci dari perpustakaan proyek). **JANGAN menulis preamble** (\`#set\`, halaman judul, \`#bibliography\`) — dokumen sudah punya scaffold; tulis isi bab di bawah heading-nya.
 3. Hasil \`ok:false\` = perbaiki (compile_error: baca errors line+pesan; edit_mismatch: baca ulang sumber, perbaiki anchor) lalu panggil ulang. Maksimal 3 percobaan; setelah itu jelaskan kendalanya.
-4. Hasil \`ok:true\` = usulan menunggu keputusan user. JANGAN klaim dokumen berubah — sampaikan ringkasan suntingan dan minta user meninjau diff di halaman bab (Terima/Tolak).
+4. Hasil \`ok:true\` = usulan menunggu keputusan user. JANGAN klaim dokumen berubah — sampaikan ringkasan suntingan dan minta user meninjau diff di halaman proyek (Terima/Tolak).
 Sertakan \`respondsToAnnotationIds\` bila suntingan menjawab anotasi tertentu.
 
 ## Metodologi (skills)
