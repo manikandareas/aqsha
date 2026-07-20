@@ -108,15 +108,22 @@
 	$effect(() => {
 		if (!browser || !scrollEl) return;
 		const el = scrollEl;
-		el.addEventListener('pointerdown', clearSelectionPill);
+		el.addEventListener('pointerdown', onPointerDown);
 		el.addEventListener('pointerup', onPointerUp);
 		el.addEventListener('scroll', clearSelectionPill, { passive: true });
 		return () => {
-			el.removeEventListener('pointerdown', clearSelectionPill);
+			el.removeEventListener('pointerdown', onPointerDown);
 			el.removeEventListener('pointerup', onPointerUp);
 			el.removeEventListener('scroll', clearSelectionPill);
 		};
 	});
+
+	// Jangan hapus pil saat pointerdown mengenai pil-nya sendiri — kalau tidak, pil hilang sebelum
+	// klik commit-nya terdaftar (pil berada di dalam container yang sama).
+	function onPointerDown(e: PointerEvent): void {
+		if ((e.target as Element | null)?.closest?.('[data-annotation-pill]')) return;
+		clearSelectionPill();
+	}
 
 	// Hitung ulang overlay sorotan setelah render / zoom / ubah anotasi.
 	$effect(() => {
@@ -260,6 +267,7 @@
 			<!-- Pil "tambah catatan" muncul di ujung seleksi teks. -->
 			{#if selectionDraft && pillPos}
 				<div
+					data-annotation-pill
 					class="absolute z-20"
 					style:left={`${pillPos.left}px`}
 					style:top={`${pillPos.top}px`}
