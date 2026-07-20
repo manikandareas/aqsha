@@ -7,3 +7,5 @@ export {
   type TypstCompileInput,
   type TypstCompileResult,
 } from "./compile.service";
+export { scaffoldTypstDocument, type ScaffoldTypstOptions } from "./scaffold";
+export { scanTypstCiteKeys, stripTypstComments } from "./cite-scan";

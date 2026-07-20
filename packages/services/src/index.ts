@@ -18,6 +18,13 @@ export {
 } from "./section-latex.service";
 export { AnnotationService, type AnnotationView } from "./annotation.service";
 export { SectionSynctexService } from "./section-synctex.service";
+export {
+  DOCUMENT_REVISION_RETENTION as TYPST_DOCUMENT_REVISION_RETENTION,
+  type SaveWorkspaceDocumentResult,
+  TYPST_SOURCE_MAX_BYTES,
+  type WorkspaceDocumentPayload,
+  WorkspaceDocumentService,
+} from "./workspace-document.service";
 export { FolderService } from "./folder.service";
 export { ContextService, type HydratedContext } from "./context.service";
 export {
