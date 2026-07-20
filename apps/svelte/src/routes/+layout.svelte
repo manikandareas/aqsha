@@ -1,6 +1,8 @@
 <script lang="ts">
 	import '../app.css';
 	import type { Snippet } from 'svelte';
+	import { browser, dev } from '$app/environment';
+	import { Agentation } from 'sv-agentation';
 	import { ClerkProvider } from 'svelte-clerk';
 	import { shadcn } from '@clerk/themes';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
@@ -57,3 +59,8 @@
 		</AppProviders>
 	</QueryClientProvider>
 </ClerkProvider>
+
+{#if browser && dev}
+	<!-- Omit workspaceRoot: package defaults to null and resolves paths relative to the open editor. -->
+	<Agentation />
+{/if}

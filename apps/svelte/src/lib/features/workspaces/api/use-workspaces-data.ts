@@ -1,5 +1,4 @@
 import { getAuthState } from '$lib/auth/context.svelte';
-import { useProfile } from '$lib/features/settings/api';
 import {
 	useArtifact,
 	useArtifactRender,
@@ -9,70 +8,26 @@ import {
 	useRetryUrlExtraction,
 	useUpdateDocument
 } from '$lib/features/artifacts/api';
-import { useWorkspacesList } from '../api';
+import { useWorkspace } from '../api';
+import { isWorkspaceDetailQueryEnabled } from '../lib/query-gates';
 
 /**
- * Composite workspace data hooks for the artifact reader. Returns objects with **getter** properties so
- * accessing `.workspaces`/`.artifact` re-reads the underlying reactive svelte-query state. Mutations are
- * exposed as plain async functions.
+ * Composite workspace data hooks for the artifact reader. Returns getter properties so reactive query
+ * state is read on access. Mutations are exposed as plain async functions.
  *
  * Call these during component init (they call query/api-client context internally). The reactive
  * `artifactId` input flows as a getter into the leaf hooks.
  */
 
-function flattenWorkspaces(
-	pages:
-		| Array<{
-				items: Array<{
-					id: string;
-					name: string;
-					emoji: string | null;
-					updatedAt: number;
-				}>;
-		  }>
-		| undefined
+export function useArtifactDetailData(
+	artifactId: () => string,
+	workspaceId: () => string = () => ''
 ) {
-	return (pages ?? []).flatMap((page) =>
-		page.items.map((workspace) => ({
-			_id: workspace.id,
-			name: workspace.name,
-			emoji: workspace.emoji ?? undefined,
-			updatedAt: workspace.updatedAt
-		}))
+	const auth = getAuthState();
+	const ready = () => auth.isSignedIn;
+	const workspaceQuery = useWorkspace(workspaceId, () =>
+		isWorkspaceDetailQueryEnabled(ready(), workspaceId())
 	);
-}
-
-export function useWorkspaceIndexData() {
-	const auth = getAuthState();
-	// Gate queries on Clerk being signed-in: a hard-reload of a deep authed route
-	// fires these before clerk-js loads → 401 tokenless → transient empty. `isSignedIn` = isLoaded && userId.
-	const ready = () => auth.isSignedIn;
-	const profile = useProfile();
-	const workspacesQuery = useWorkspacesList(undefined, ready);
-
-	return {
-		get isAuthenticated() {
-			return auth.isLoaded && auth.isSignedIn;
-		},
-		get viewer() {
-			return profile.data
-				? {
-						name: profile.data.name,
-						email: profile.data.email,
-						image: profile.data.image
-					}
-				: undefined;
-		},
-		get workspaces() {
-			return flattenWorkspaces(workspacesQuery.data?.pages);
-		}
-	};
-}
-
-export function useArtifactDetailData(artifactId: () => string) {
-	const auth = getAuthState();
-	const ready = () => auth.isSignedIn;
-	const index = useWorkspaceIndexData();
 	const artifactQuery = useArtifact(artifactId, ready);
 	const renderQuery = useArtifactRender(artifactId, ready);
 	const updateDocumentMutation = useUpdateDocument(artifactId);
@@ -82,14 +37,8 @@ export function useArtifactDetailData(artifactId: () => string) {
 	const deleteArtifactMutation = useDeleteArtifact();
 
 	return {
-		get isAuthenticated() {
-			return index.isAuthenticated;
-		},
-		get viewer() {
-			return index.viewer;
-		},
-		get workspaces() {
-			return index.workspaces;
+		get workspaceName() {
+			return workspaceQuery.data?.name;
 		},
 		get artifact() {
 			return artifactQuery.data ?? (artifactQuery.isLoading ? undefined : null);

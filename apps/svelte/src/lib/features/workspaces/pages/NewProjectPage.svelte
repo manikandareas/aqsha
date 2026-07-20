@@ -7,10 +7,12 @@
 	import { Input } from '@aqsha/ui-svelte/components/input';
 	import { Textarea } from '@aqsha/ui-svelte/components/textarea';
 	import { PageTitle } from '$lib/seo';
+	import { getAuthState } from '$lib/auth/context.svelte';
 	import { Icon, ArrowLeftIcon, FileTextIcon, UploadIcon, XIcon } from '$lib/icons';
 	import { useUploadArtifact } from '$lib/features/artifacts/api';
 	import KindInfoFields from '../components/KindInfoFields.svelte';
 	import { useCreateWorkspace, useWorkspacesList } from '../api';
+	import { isClerkSignedInQueryEnabled } from '../lib/query-gates';
 	import { WORKSPACE_KIND_DESCRIPTIONS, WORKSPACE_KIND_LABELS } from '../labels';
 	import {
 		THESIS_FAMILY_KINDS,
@@ -30,8 +32,12 @@
 	);
 	const isThesisFamily = $derived(kind ? THESIS_FAMILY_KINDS.includes(kind) : false);
 
+	const auth = getAuthState();
 	const createWorkspace = useCreateWorkspace();
-	const list = useWorkspacesList();
+	const list = useWorkspacesList(
+		() => false,
+		() => isClerkSignedInQueryEnabled(auth.isLoaded, auth.userId)
+	);
 
 	let name = $state('');
 	let topicNote = $state('');
@@ -87,7 +93,9 @@
 				try {
 					await uploadGuideline.mutateAsync({ file: guidelineFile });
 				} catch {
-					toast.warning('Proyek dibuat, tapi pedoman gagal diunggah. Unggah lagi dari Detail proyek.');
+					toast.warning(
+						'Proyek dibuat, tapi pedoman gagal diunggah. Unggah lagi dari Detail proyek.'
+					);
 				}
 			}
 			await goto(resolve('/app/(product)/projects/[projectId]', { projectId: result.id }));

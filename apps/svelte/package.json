@@ -91,6 +91,7 @@
 		"mermaid": "^11.15.0",
 		"mode-watcher": "^1.1.0",
 		"pdfjs-dist": "5.4.296",
+		"sv-agentation": "^0.4.0",
 		"svelte-clerk": "1.1.10",
 		"svelte-dnd-action": "^0.9.61",
 		"svelte-sonner": "^1.1.1",

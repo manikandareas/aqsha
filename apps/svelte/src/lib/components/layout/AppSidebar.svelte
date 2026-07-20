@@ -1,9 +1,12 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { useClerkContext } from 'svelte-clerk';
+	import { SvelteSet } from 'svelte/reactivity';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
 	import * as Command from '@aqsha/ui-svelte/components/command';
 	import NavUser from './NavUser.svelte';
 	import SidebarSection from './sidebar/SidebarSection.svelte';
@@ -12,10 +15,14 @@
 	import {
 		Icon,
 		BookOpenIcon,
+		ChevronRightIcon,
+		FileText,
+		FolderIcon,
 		HomeIcon,
 		LayoutGridIcon,
 		PanelLeftIcon,
 		PlusIcon,
+		Quote,
 		SearchIcon,
 		SettingsIcon,
 		TrendingUpIcon,
@@ -40,6 +47,11 @@
 		);
 	}
 
+	// Sub-rows (main.typ, Referensi) mirror the parent project row's type: 12px label + muted ink,
+	// mint when active. `[&>svg]` overrides beat MenuSubButton's built-in direct-child icon color.
+	const sidebarSubItemBaseClass =
+		'gap-2 font-normal text-muted-foreground transition-[background-color,color] duration-150 ease-out [&>svg]:size-3.5 [&>svg]:text-muted-foreground hover:bg-muted/60 hover:text-foreground hover:[&>svg]:text-foreground active:bg-muted active:text-foreground data-active:bg-primary/10 data-active:text-foreground data-active:[&>svg]:text-primary';
+
 	const sidebar = Sidebar.useSidebar();
 	const clerk = useClerkContext();
 	const list = useWorkspacesList(
@@ -52,6 +64,24 @@
 
 	const pathname = $derived(page.url.pathname);
 	const selectedProjectId = $derived(page.params.projectId);
+
+	// Which project rows are expanded to reveal their children (main.typ + Referensi). The project
+	// you navigate into auto-expands; a manual collapse afterward sticks until you visit it again.
+	const expandedProjects = new SvelteSet<string>();
+	// Idempotent like a boolean $state: skip when already in the requested state. The controlled
+	// Collapsible can fire onOpenChange with its current value, and an unconditional SvelteSet
+	// add/delete would bump the set that `open` reads — re-entering and looping the reactive graph.
+	function setProjectExpanded(id: string, open: boolean) {
+		if (open === expandedProjects.has(id)) return;
+		if (open) expandedProjects.add(id);
+		else expandedProjects.delete(id);
+	}
+	// Auto-expand only in response to navigation. `untrack` keeps this effect from depending on the
+	// set it writes, so it runs on route change alone rather than on every expand/collapse.
+	$effect(() => {
+		const id = selectedProjectId;
+		if (id) untrack(() => setProjectExpanded(id, true));
+	});
 	const isHomeActive = $derived(pathname === '/app');
 	const isLibraryActive = $derived(pathname.startsWith('/app/library'));
 	const isExploreActive = $derived(pathname.startsWith('/app/explore'));
@@ -79,18 +109,6 @@
 </script>
 
 <svelte:window onkeydown={handleShortcut} />
-
-{#snippet projectEmojiGlyph(emoji: string | null, active: boolean)}
-	<span
-		aria-hidden="true"
-		class={cn(
-			'flex size-4 shrink-0 items-center justify-center rounded-sm text-[13px] leading-none',
-			active ? 'bg-background/70' : 'bg-muted/35'
-		)}
-	>
-		{emoji?.trim() || '📚'}
-	</span>
-{/snippet}
 
 {#snippet navItem(href: string, label: string, icon: IconSvgElement, active: boolean)}
 	<Sidebar.MenuItem class="min-w-0 overflow-hidden">
@@ -128,9 +146,24 @@
 
 		<Sidebar.Menu class="gap-1">
 			{@render navItem(resolve('/app/(product)'), 'Beranda', HomeIcon, isHomeActive)}
-			{@render navItem(resolve('/app/(product)/library'), 'Perpustakaan', BookOpenIcon, isLibraryActive)}
-			{@render navItem(resolve('/app/(product)/explore'), 'Jelajahi', TrendingUpIcon, isExploreActive)}
-			{@render navItem(resolve('/app/settings/overview'), 'Pengaturan', SettingsIcon, isSettingsActive)}
+			{@render navItem(
+				resolve('/app/(product)/library'),
+				'Perpustakaan',
+				BookOpenIcon,
+				isLibraryActive
+			)}
+			{@render navItem(
+				resolve('/app/(product)/explore'),
+				'Jelajahi',
+				TrendingUpIcon,
+				isExploreActive
+			)}
+			{@render navItem(
+				resolve('/app/settings/overview'),
+				'Pengaturan',
+				SettingsIcon,
+				isSettingsActive
+			)}
 		</Sidebar.Menu>
 	</Sidebar.Header>
 
@@ -150,25 +183,82 @@
 				<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
 					{#each projects as project (project.id)}
 						{@const active = project.id === selectedProjectId}
-						<Sidebar.MenuItem class="min-w-0 overflow-hidden">
-							<Sidebar.MenuButton
-								isActive={active}
-								size="rail"
-								class={cn(sidebarItemClass(active), 'w-full min-w-0 max-w-full overflow-hidden')}
-							>
-								{#snippet child({ props })}
-									<a
-										{...props}
-										href={resolve('/app/(product)/projects/[projectId]', { projectId: project.id })}
+						{@const detailHref = resolve('/app/(product)/projects/[projectId]', {
+							projectId: project.id
+						})}
+						{@const referencesHref = `${detailHref}/references`}
+						{@const open = expandedProjects.has(project.id)}
+						<Collapsible.Root {open} onOpenChange={(v) => setProjectExpanded(project.id, v)}>
+							<Sidebar.MenuItem class="min-w-0 overflow-hidden">
+								<div class="flex min-w-0 items-center gap-0.5">
+									<Sidebar.MenuButton
+										isActive={active}
+										size="rail"
+										class={cn(
+											sidebarItemClass(active),
+											'min-w-0 flex-1 overflow-hidden'
+										)}
 									>
-										{@render projectEmojiGlyph(project.emoji, active)}
-										<span class="min-w-0 flex-1 truncate font-normal">
-											{projectDisplayTitle(project)}
-										</span>
-									</a>
-								{/snippet}
-							</Sidebar.MenuButton>
-						</Sidebar.MenuItem>
+										{#snippet child({ props })}
+											<a {...props} href={detailHref}>
+												<Icon icon={FolderIcon} class="size-3.5 shrink-0" />
+												<span class="min-w-0 flex-1 truncate font-normal">
+													{projectDisplayTitle(project)}
+												</span>
+											</a>
+										{/snippet}
+									</Sidebar.MenuButton>
+									<button
+										type="button"
+										class="flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-[background-color,color,transform] duration-150 ease-out hover:bg-muted/60 hover:text-foreground"
+										aria-label={open ? 'Tutup isi proyek' : 'Buka isi proyek'}
+										aria-expanded={open}
+										onclick={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+											setProjectExpanded(project.id, !open);
+										}}
+									>
+										<Icon
+											icon={ChevronRightIcon}
+											class={cn('size-3.5 transition-transform duration-200 ease-out', open ? 'rotate-90' : '')}
+										/>
+									</button>
+								</div>
+								<Collapsible.Content>
+									<Sidebar.MenuSub class="mr-0">
+										<Sidebar.MenuSubItem>
+											<Sidebar.MenuSubButton
+												size="sm"
+												isActive={pathname === detailHref}
+												class={sidebarSubItemBaseClass}
+											>
+												{#snippet child({ props })}
+													<a {...props} href={detailHref}>
+														<Icon icon={FileText} class="shrink-0" />
+														<span>main.typ</span>
+													</a>
+												{/snippet}
+											</Sidebar.MenuSubButton>
+										</Sidebar.MenuSubItem>
+										<Sidebar.MenuSubItem>
+											<Sidebar.MenuSubButton
+												size="sm"
+												isActive={pathname === referencesHref}
+												class={sidebarSubItemBaseClass}
+											>
+												{#snippet child({ props })}
+													<a {...props} href={referencesHref}>
+														<Icon icon={Quote} class="shrink-0" />
+														<span>Referensi</span>
+													</a>
+												{/snippet}
+											</Sidebar.MenuSubButton>
+										</Sidebar.MenuSubItem>
+									</Sidebar.MenuSub>
+								</Collapsible.Content>
+							</Sidebar.MenuItem>
+						</Collapsible.Root>
 					{/each}
 				</Sidebar.Menu>
 			{:else}
@@ -249,7 +339,6 @@
 							goto(resolve('/app/(product)/projects/[projectId]', { projectId: project.id }));
 						}}
 					>
-						{@render projectEmojiGlyph(project.emoji, false)}
 						<span class="truncate">{projectDisplayTitle(project)}</span>
 					</Command.Item>
 				{/each}

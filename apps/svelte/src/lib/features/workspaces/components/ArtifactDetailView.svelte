@@ -78,9 +78,7 @@
 	);
 	const ready = $derived(Boolean(detail?.artifact) && !workspaceMismatch);
 	const isMarkdown = $derived(detailIsMarkdown);
-	const workspaceName = $derived(
-		data.workspaces.find((workspace) => workspace._id === resolvedWorkspaceId)?.name
-	);
+	const workspaceName = $derived(data.workspaceName);
 
 	const bodyColumnClass = $derived(
 		!activeRenderPayload || contentFirstTypes.includes(activeRenderPayload.artifactType)

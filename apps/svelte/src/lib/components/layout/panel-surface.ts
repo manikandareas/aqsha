@@ -50,7 +50,7 @@ export const panelBodyColumnClass = 'flex min-h-0 flex-1 flex-col overflow-hidde
 
 /** In-card toolbar — the compact top bar INSIDE the floating side-panel card. */
 export const panelCardToolbarClass =
-	'flex h-11 shrink-0 items-center justify-between gap-2 bg-background px-3.5';
+	'flex h-12 shrink-0 items-center justify-between gap-2 bg-background px-3.5 py-2';
 
 /** Scrollable library or transcript body below a panel header. */
 export const panelBodyPaddingClass = 'px-5 pb-8 pt-3 @2xl:px-6';

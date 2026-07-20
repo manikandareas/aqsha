@@ -6,12 +6,15 @@
 	/**
 	 * Standalone artifact reader page shell. Owns the fixed `h-svh` frame (so the reader's inner
 	 * `overflow-y-auto` works — see the DetailSplitLayout `h-svh`-ancestor gotcha), fetches the artifact
-	 * via `useArtifactDetailData(() => artifactId)`, and passes the data DOWN to `ArtifactDetailView`
+	 * via `useArtifactDetailData(() => artifactId, () => workspaceId)`, and passes the data DOWN to `ArtifactDetailView`
 	 * (variant="page"). Astra chat was removed here — research chat lives inside a project now.
 	 */
 	let { workspaceId, artifactId }: { workspaceId: string; artifactId: string } = $props();
 
-	const data = useArtifactDetailData(() => artifactId);
+	const data = useArtifactDetailData(
+		() => artifactId,
+		() => workspaceId
+	);
 
 	// Tab title: the loaded artifact title (nested one level under the composite), else "Workspaces".
 	const pageTitle = $derived(data.artifact?.artifact?.title ?? 'Workspaces');
