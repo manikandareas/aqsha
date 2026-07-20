@@ -4,9 +4,9 @@ import type { TypstRenderer } from '@myriaddreamin/typst.ts';
 
 /**
  * Renderer typst.ts (main thread) untuk menggambar artifact vektor hasil compile worker menjadi
- * SVG teks terseleksi. Singleton modul: WASM di-init sekali, reuse lintas mount + tahan HMR.
- * Font tidak dimuat di sini — glyph sudah tertanam di vektor oleh compiler. SSR: tak pernah dipakai
- * (pemanggil ber-guard `browser`).
+ * SVG teks terseleksi. Singleton modul: WASM di-init sekali, reuse lintas mount + tahan HMR. Font
+ * tidak dimuat di sini — glyph sudah tertanam di vektor oleh compiler; renderer hanya mengubah IR →
+ * SVG. SSR: tak pernah dipakai (pemanggil ber-guard `browser`).
  */
 let rendererPromise: Promise<TypstRenderer> | null = null;
 

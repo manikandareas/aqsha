@@ -66,15 +66,22 @@
 			try {
 				const renderer = await getTypstRenderer();
 				if (cancelled) return;
-				await renderer.renderToSvg({ container: host, format: 'vector', artifactContent: v });
+				// Render via sesi sementara (reset vektor → renderSvg string). Jalur by-content
+				// `renderToSvg` panik di render_svg untuk artifact ini; pola sesi = jalur resmi.
+				const svg = await renderer.runWithSession(async (session) => {
+					renderer.manipulateData({ renderSession: session, action: 'reset', data: v });
+					return renderer.renderSvg({ renderSession: session });
+				});
 				if (cancelled) return;
+				host.innerHTML = svg;
 				status = 'ready';
 				renderNonce += 1;
 				requestAnimationFrame(() => {
 					if (scrollEl && prevScroll > 0) scrollEl.scrollTop = prevScroll;
 				});
-			} catch {
+			} catch (err) {
 				// Pertahankan SVG terakhir; diagnostik ditangani di editor.
+				console.error('[typst-preview] render gagal', err);
 			}
 		})();
 		return () => {
