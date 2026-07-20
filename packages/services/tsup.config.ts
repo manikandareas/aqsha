@@ -30,6 +30,7 @@ export default defineConfig({
     "src/analysis/index.ts",
     "src/citations/index.ts",
     "src/latex/index.ts",
+    "src/typst/index.ts",
   ],
   outDir: "dist",
   format: ["esm"],

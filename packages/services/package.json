@@ -115,6 +115,13 @@
       "node": "./dist/latex/index.js",
       "import": "./dist/latex/index.js",
       "default": "./dist/latex/index.js"
+    },
+    "./typst": {
+      "types": "./src/typst/index.ts",
+      "bun": "./src/typst/index.ts",
+      "node": "./dist/typst/index.js",
+      "import": "./dist/typst/index.js",
+      "default": "./dist/typst/index.js"
     }
   },
   "scripts": {
