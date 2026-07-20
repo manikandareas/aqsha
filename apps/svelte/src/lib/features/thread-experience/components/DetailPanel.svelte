@@ -150,8 +150,8 @@
 			{:else if mode.kind === 'questions'}
 				{#if lookups.ask?.resolve && lookups.ask.skip}
 					{@const ask = lookups.ask}
-					{@const resolveAsk = ask.resolve}
-					{@const skipAsk = ask.skip}
+					{@const resolveAsk = ask.resolve!}
+					{@const skipAsk = ask.skip!}
 					<QuestionsForm
 						questions={ask.questions}
 						findings={ask.findings}

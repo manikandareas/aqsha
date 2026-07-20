@@ -8,6 +8,7 @@
 		themeReconfigureEffect,
 		editableReconfigureEffect,
 		ExternalSync,
+		type LatexEditorLayout,
 		type LatexEditorHandle
 	} from '../lib/latex-editor';
 
@@ -20,12 +21,14 @@
 		value,
 		docKey,
 		editable = true,
+		layout = 'fill',
 		onChange,
 		onReady
 	}: {
 		value: string;
 		docKey: string;
 		editable?: boolean;
+		layout?: LatexEditorLayout;
 		onChange: (next: string) => void;
 		onReady?: (handle: LatexEditorHandle) => void;
 	} = $props();
@@ -76,7 +79,8 @@
 			dark: isDark,
 			onChange,
 			editableCompartment,
-			themeCompartment
+			themeCompartment,
+			layout
 		});
 		view = new EditorView({ parent, state: EditorState.create({ doc: value, extensions }) });
 		onReady?.(handleOf(view));
@@ -103,7 +107,7 @@
 	// Reconfigure gelap/terang + editable tanpa membangun ulang state.
 	$effect(() => {
 		if (!view) return;
-		view.dispatch({ effects: themeReconfigureEffect(themeCompartment, isDark) });
+		view.dispatch({ effects: themeReconfigureEffect(themeCompartment, isDark, layout) });
 	});
 	$effect(() => {
 		if (!view) return;
@@ -116,4 +120,9 @@
 	});
 </script>
 
-<div bind:this={host} class="h-full min-h-0 overflow-hidden bg-card"></div>
+<div
+	bind:this={host}
+	class={layout === 'fill'
+		? 'h-full min-h-0 overflow-hidden bg-card'
+		: 'min-h-64 overflow-visible bg-card'}
+></div>

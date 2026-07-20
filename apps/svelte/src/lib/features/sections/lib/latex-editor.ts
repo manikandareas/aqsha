@@ -9,15 +9,25 @@ import { stex } from '@codemirror/legacy-modes/mode/stex';
 // supaya updateListener tidak melaporkannya sebagai edit user → autosave tidak ikut terpicu.
 export const ExternalSync = Annotation.define<boolean>();
 
-function latexTheme(dark: boolean): Extension {
+export type LatexEditorLayout = 'fill' | 'document';
+
+function latexTheme(dark: boolean, layout: LatexEditorLayout): Extension {
 	return EditorView.theme(
 		{
-			'&': { fontSize: '13px', height: '100%' },
+			'&': {
+				fontSize: '13px',
+				height: layout === 'fill' ? '100%' : 'auto',
+				...(layout === 'document' ? { minHeight: '16rem' } : {})
+			},
 			'.cm-scroller': {
 				fontFamily: "'JetBrains Mono Variable', ui-monospace, monospace",
-				lineHeight: '1.6'
+				lineHeight: '1.6',
+				...(layout === 'document' ? { overflow: 'visible' } : {})
 			},
-			'.cm-content': { padding: '12px 0' }
+			'.cm-content': {
+				padding: '12px 0',
+				...(layout === 'document' ? { minHeight: '16rem' } : {})
+			}
 		},
 		{ dark }
 	);
@@ -29,13 +39,14 @@ export function latexEditorExtensions(opts: {
 	onChange: (value: string) => void;
 	editableCompartment: Compartment;
 	themeCompartment: Compartment;
+	layout?: LatexEditorLayout;
 }): Extension[] {
 	return [
 		basicSetup,
 		StreamLanguage.define(stex),
 		keymap.of([indentWithTab]),
 		EditorView.lineWrapping,
-		opts.themeCompartment.of(latexTheme(opts.dark)),
+		opts.themeCompartment.of(latexTheme(opts.dark, opts.layout ?? 'fill')),
 		opts.editableCompartment.of(EditorState.readOnly.of(!opts.editable)),
 		EditorView.updateListener.of((u) => {
 			if (!u.docChanged) return;
@@ -56,7 +67,13 @@ export type LatexEditorHandle = {
 
 export function mountLatexEditor(
 	parent: HTMLElement,
-	opts: { doc: string; editable: boolean; dark: boolean; onChange: (value: string) => void }
+	opts: {
+		doc: string;
+		editable: boolean;
+		dark: boolean;
+		onChange: (value: string) => void;
+		layout?: LatexEditorLayout;
+	}
 ): LatexEditorHandle {
 	const editableCompartment = new Compartment();
 	const themeCompartment = new Compartment();
@@ -69,7 +86,8 @@ export function mountLatexEditor(
 				dark: opts.dark,
 				onChange: opts.onChange,
 				editableCompartment,
-				themeCompartment
+				themeCompartment,
+				layout: opts.layout
 			})
 		})
 	});
@@ -107,8 +125,12 @@ export function mountLatexEditor(
 // Reconfigure helper theme/editable untuk komponen (dipakai saat mode gelap/terang atau
 // editable berubah tanpa membangun ulang state).
 export { Compartment };
-export function themeReconfigureEffect(themeCompartment: Compartment, dark: boolean) {
-	return themeCompartment.reconfigure(latexTheme(dark));
+export function themeReconfigureEffect(
+	themeCompartment: Compartment,
+	dark: boolean,
+	layout: LatexEditorLayout = 'fill'
+) {
+	return themeCompartment.reconfigure(latexTheme(dark, layout));
 }
 export function editableReconfigureEffect(editableCompartment: Compartment, editable: boolean) {
 	return editableCompartment.reconfigure(EditorState.readOnly.of(!editable));

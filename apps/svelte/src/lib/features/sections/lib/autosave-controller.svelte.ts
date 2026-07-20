@@ -17,6 +17,7 @@ export class AutosaveController {
 	#timer: ReturnType<typeof setTimeout> | null = null;
 	#pending: string | null = null;
 	#inFlight = false;
+	#idleWaiters: Array<() => void> = [];
 
 	constructor(opts: {
 		initialVersion: number;
@@ -40,7 +41,19 @@ export class AutosaveController {
 			clearTimeout(this.#timer);
 			this.#timer = null;
 		}
-		await this.#run();
+		while (this.#inFlight) {
+			await new Promise<void>((resolve) => this.#idleWaiters.push(resolve));
+		}
+		while (this.#pending !== null && this.status !== 'stale') {
+			if (this.#timer) {
+				clearTimeout(this.#timer);
+				this.#timer = null;
+			}
+			await this.#run();
+			while (this.#inFlight) {
+				await new Promise<void>((resolve) => this.#idleWaiters.push(resolve));
+			}
+		}
 	}
 
 	reset(version: number): void {
@@ -82,6 +95,7 @@ export class AutosaveController {
 			this.status = 'error';
 		} finally {
 			this.#inFlight = false;
+			for (const resolve of this.#idleWaiters.splice(0)) resolve();
 			// Ada edit menumpuk saat in-flight → jadwalkan simpan lagi.
 			if (this.#pending !== null && this.status !== 'stale') {
 				this.edit(this.#pending);

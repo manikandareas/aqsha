@@ -39,9 +39,10 @@ describe('AutosaveController', () => {
 	});
 
 	it('menandai status stale saat server mengembalikan stale_write', async () => {
-		const save = vi.fn(
-			async (): Promise<SaveSectionDocumentResult> => ({ status: 'stale_write', currentVersion: 9 })
-		);
+		const save = vi.fn(async (): Promise<SaveSectionDocumentResult> => ({
+			status: 'stale_write',
+			currentVersion: 9
+		}));
 		const c = new AutosaveController({ initialVersion: 3, debounceMs: 10, save });
 		c.edit('x');
 		await vi.advanceTimersByTimeAsync(10);
@@ -56,6 +57,49 @@ describe('AutosaveController', () => {
 		await c.flush();
 		expect(save).toHaveBeenCalledTimes(1);
 		expect(c.status).toBe('saved');
+	});
+
+	it('flush menunggu simpan aktif lalu menyimpan edit yang menumpuk', async () => {
+		let resolveFirst!: (result: SaveSectionDocumentResult) => void;
+		const firstSave = new Promise<SaveSectionDocumentResult>((resolve) => {
+			resolveFirst = resolve;
+		});
+		const save = vi
+			.fn<(i: { source: string; baseVersion: number }) => Promise<SaveSectionDocumentResult>>()
+			.mockImplementationOnce(() => firstSave)
+			.mockResolvedValueOnce(savedResult(5));
+		const c = new AutosaveController({ initialVersion: 3, debounceMs: 10, save });
+
+		c.edit('awal');
+		await vi.advanceTimersByTimeAsync(10);
+		c.edit('terbaru');
+		const flushed = c.flush();
+		resolveFirst(savedResult(4));
+		await flushed;
+
+		expect(save).toHaveBeenCalledTimes(2);
+		expect(save.mock.calls[1]![0]).toEqual({ source: 'terbaru', baseVersion: 4 });
+		expect(c.status).toBe('saved');
+	});
+
+	it('flush tidak menimpa perubahan remote setelah simpan aktif menjadi stale', async () => {
+		let resolveFirst!: (result: SaveSectionDocumentResult) => void;
+		const firstSave = new Promise<SaveSectionDocumentResult>((resolve) => {
+			resolveFirst = resolve;
+		});
+		const save = vi.fn(() => firstSave);
+		const c = new AutosaveController({ initialVersion: 3, debounceMs: 10, save });
+
+		c.edit('awal');
+		await vi.advanceTimersByTimeAsync(10);
+		c.edit('terbaru');
+		const flushed = c.flush();
+		resolveFirst({ status: 'stale_write', currentVersion: 9 });
+		await flushed;
+
+		expect(save).toHaveBeenCalledTimes(1);
+		expect(c.status).toBe('stale');
+		expect(c.version).toBe(9);
 	});
 
 	it('reset memulai ulang versi dan mengosongkan status kotor', async () => {
