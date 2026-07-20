@@ -70,7 +70,6 @@
 		"@clerk/themes": "2.4.57",
 		"@codemirror/commands": "^6.8.1",
 		"@codemirror/language": "^6.11.0",
-		"@codemirror/legacy-modes": "^6.5.1",
 		"@codemirror/lint": "^6.9.7",
 		"@codemirror/state": "^6.5.2",
 		"@codemirror/view": "^6.38.1",
