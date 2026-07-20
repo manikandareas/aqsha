@@ -1,0 +1,217 @@
+/**
+ * DocumentProposalService — DB + typst integration (skip tanpa DATABASE_URL / binary typst).
+ * Membuktikan: dry-run compile menyaring usulan gagal (compile_error union), anchored edits
+ * (edit_mismatch), persist pending + supersede, accept penuh/parsial (dry-run subset), stale,
+ * reject membuka anotasi.
+ */
+import { afterAll, describe, expect, test } from "bun:test";
+import { createDb, DocumentEditProposalRepo } from "@aqsha/db";
+import { isTypstAvailable } from "../src/typst/compile.service";
+import { DocumentProposalService } from "../src/typst/document-proposal.service";
+import { applyProposalEdits } from "../src/typst/document-proposal.service";
+import { WorkspaceDocumentService } from "../src/workspace-document.service";
+
+const DATABASE_URL = process.env.DATABASE_URL;
+const typst = await isTypstAvailable();
+const itest = DATABASE_URL && typst ? test : test.skip;
+const SUFFIX = Math.floor(Math.random() * 1e9);
+const OWNER = `itdp_${SUFFIX}`;
+const WS = `itdp_${SUFFIX}:ws`;
+const NOW = 1_700_000_000_000;
+const { db, client } = createDb(DATABASE_URL ?? "postgresql://x");
+
+async function seedWorkspace() {
+  await client`insert into users (owner_user_id, clerk_user_id, email, created_at, updated_at)
+    values (${OWNER}, ${OWNER}, ${`${OWNER}@test.local`}, ${NOW}, ${NOW})`;
+  await client`insert into workspaces (id, owner_user_id, name, kind, status, created_at, updated_at)
+    values (${WS}, ${OWNER}, ${"Skripsi Uji"}, ${"undergraduate_thesis"}, ${"active"}, ${NOW}, ${NOW})`;
+}
+
+async function resetDoc(source: string): Promise<number> {
+  const current = await WorkspaceDocumentService.getDocument(db, { ownerUserId: OWNER, workspaceId: WS });
+  const r = await WorkspaceDocumentService.saveDocument(db, {
+    ownerUserId: OWNER,
+    workspaceId: WS,
+    source,
+    ...(current ? { baseVersion: current.contentVersion } : {}),
+    author: "user",
+  });
+  if (r.status !== "saved") throw new Error("reset harus saved");
+  return r.contentVersion;
+}
+
+afterAll(async () => {
+  if (!DATABASE_URL) return;
+  await client`delete from document_edit_proposals where owner_user_id like 'itdp_%'`;
+  await client`delete from document_citation_usages where owner_user_id like 'itdp_%'`;
+  await client`delete from document_revisions where owner_user_id like 'itdp_%'`;
+  await client`update workspaces set document_artifact_id = null where owner_user_id like 'itdp_%'`;
+  await client`delete from artifact_contents where owner_user_id like 'itdp_%'`;
+  await client`delete from artifacts where owner_user_id like 'itdp_%'`;
+  await client`delete from workspaces where owner_user_id like 'itdp_%'`;
+  await client`delete from users where owner_user_id like 'itdp_%'`;
+  await client.end();
+});
+
+describe("applyProposalEdits (pure)", () => {
+  test("match unik → terapkan; tak ketemu / ambigu → union", () => {
+    expect(applyProposalEdits("halo dunia", [{ oldText: "dunia", newText: "typst" }])).toEqual({
+      ok: true,
+      source: "halo typst",
+    });
+    expect(applyProposalEdits("a a", [{ oldText: "a", newText: "b" }])).toEqual({
+      ok: false,
+      index: 0,
+      reason: "ambiguous",
+      matches: 2,
+    });
+    expect(applyProposalEdits("abc", [{ oldText: "zzz", newText: "x" }])).toEqual({
+      ok: false,
+      index: 0,
+      reason: "not_found",
+      matches: 0,
+    });
+  });
+});
+
+describe("DocumentProposalService", () => {
+  itest("propose fullSource valid → pending; getPending mengembalikan view + hunks", async () => {
+    await seedWorkspace();
+    await resetDoc("= Pendahuluan\n\nParagraf awal.\n");
+    const proposed = "= Pendahuluan\n\nParagraf awal yang direvisi Astra.\n";
+    const result = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: proposed,
+      summary: "Revisi pembuka",
+      enforceRateLimit: false,
+    });
+    if (!result.ok) throw new Error(`harus ok, dapat ${JSON.stringify(result)}`);
+    const pending = await DocumentProposalService.getPending(db, { ownerUserId: OWNER, workspaceId: WS });
+    expect(pending?.proposedSource).toBe(proposed);
+    expect(pending?.hunks.length).toBeGreaterThan(0);
+    expect(pending?.isStale).toBe(false);
+  });
+
+  itest("propose sumber yang gagal compile → compile_error union (tak tersimpan)", async () => {
+    const result = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: "= Bab\n\n#undefined_variable_xyz\n",
+      summary: "Rusak",
+      enforceRateLimit: false,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("compile_error");
+    // Pending sebelumnya tetap (usulan rusak tak men-supersede).
+    const pending = await DocumentProposalService.getPending(db, { ownerUserId: OWNER, workspaceId: WS });
+    expect(pending?.summary).toBe("Revisi pembuka");
+  });
+
+  itest("propose edits dengan anchor salah → edit_mismatch", async () => {
+    const result = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      edits: [{ oldText: "kalimat yang tidak ada", newText: "x" }],
+      summary: "Anchor salah",
+      enforceRateLimit: false,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("edit_mismatch");
+  });
+
+  itest("accept penuh → saved v+1, proposal accepted", async () => {
+    const version = await resetDoc("= Pendahuluan\n\nSatu.\n");
+    const proposed = "= Pendahuluan\n\nSatu diperbaiki.\n";
+    const p = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: proposed,
+      summary: "Perbaiki",
+      enforceRateLimit: false,
+    });
+    if (!p.ok) throw new Error("propose harus ok");
+    const accepted = await DocumentProposalService.accept(db, {
+      ownerUserId: OWNER,
+      proposalId: p.proposalId,
+      enforceRateLimit: false,
+    });
+    expect(accepted).toEqual({ status: "accepted", contentVersion: version + 1 });
+    const doc = await WorkspaceDocumentService.getDocument(db, { ownerUserId: OWNER, workspaceId: WS });
+    expect(doc?.source).toBe(proposed);
+    const row = await DocumentEditProposalRepo.findById(db, OWNER, p.proposalId);
+    expect(row?.status).toBe("accepted");
+  });
+
+  itest("accept parsial (subset hunk) → dry-run compile → hanya hunk terpilih diterapkan", async () => {
+    // Filler >2×context(3) baris di antara dua perubahan supaya hunk tak menyatu.
+    await resetDoc(
+      "= Pendahuluan\n\nBaris A.\n\nFiller satu.\n\nFiller dua.\n\nFiller tiga.\n\n= Metode\n\nBaris B.\n",
+    );
+    const proposed =
+      "= Pendahuluan\n\nBaris A diubah.\n\nFiller satu.\n\nFiller dua.\n\nFiller tiga.\n\n= Metode\n\nBaris B diubah.\n";
+    const p = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: proposed,
+      summary: "Dua perubahan",
+      enforceRateLimit: false,
+    });
+    if (!p.ok) throw new Error("propose harus ok");
+    const pending = await DocumentProposalService.getPending(db, { ownerUserId: OWNER, workspaceId: WS });
+    expect(pending!.hunks.length).toBeGreaterThanOrEqual(2);
+    const accepted = await DocumentProposalService.accept(db, {
+      ownerUserId: OWNER,
+      proposalId: p.proposalId,
+      acceptedHunkIndexes: [0],
+      enforceRateLimit: false,
+    });
+    expect(accepted.status).toBe("accepted");
+    const doc = await WorkspaceDocumentService.getDocument(db, { ownerUserId: OWNER, workspaceId: WS });
+    expect(doc?.source).toContain("Baris A diubah.");
+    expect(doc?.source).toContain("Baris B.\n");
+    expect(doc?.source).not.toContain("Baris B diubah.");
+  });
+
+  itest("accept parsial saat versi bergeser → stale", async () => {
+    const v = await resetDoc("= Bab\n\nAsli.\n");
+    const p = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: "= Bab\n\nUsulan.\n",
+      summary: "x",
+      enforceRateLimit: false,
+    });
+    if (!p.ok) throw new Error("propose harus ok");
+    // Geser versi dokumen di belakang proposal.
+    await WorkspaceDocumentService.saveDocument(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      source: "= Bab\n\nUser menulis lain.\n",
+      baseVersion: v,
+      author: "user",
+    });
+    const accepted = await DocumentProposalService.accept(db, {
+      ownerUserId: OWNER,
+      proposalId: p.proposalId,
+      acceptedHunkIndexes: [0],
+      enforceRateLimit: false,
+    });
+    expect(accepted.status).toBe("stale");
+  });
+
+  itest("reject → proposal rejected", async () => {
+    await resetDoc("= Bab\n\nHalo.\n");
+    const p = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: "= Bab\n\nHalo revisi.\n",
+      summary: "y",
+      enforceRateLimit: false,
+    });
+    if (!p.ok) throw new Error("propose harus ok");
+    await DocumentProposalService.reject(db, { ownerUserId: OWNER, proposalId: p.proposalId });
+    const row = await DocumentEditProposalRepo.findById(db, OWNER, p.proposalId);
+    expect(row?.status).toBe("rejected");
+  });
+});

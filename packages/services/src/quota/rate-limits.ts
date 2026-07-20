@@ -22,7 +22,8 @@ export type RateLimitRule =
   | "waitlist:submit-ip"
   | "waitlist:submit-email"
   | "waitlist:verify-ip"
-  | "latex:compile";
+  | "latex:compile"
+  | "typst:compile";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
@@ -53,6 +54,9 @@ const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number
   // Compile LaTeX sinkron memakan CPU detik-an per panggilan; 10/menit/user cukup untuk
   // loop edit manusia + agen, sekaligus mencegah antrean compile menumpuk.
   "latex:compile": { points: 10, duration: 60 },
+  // Compile/ekspor Typst server-side (dry-run proposal + ekspor PDF/DOCX) — bucket bersama
+  // agen+user; 10/menit cukup untuk loop edit sekaligus mencegah antrean compile menumpuk.
+  "typst:compile": { points: 10, duration: 60 },
 };
 
 /** Konfigurasi rule (points/duration) — dipakai `getSendStatus` untuk hitung cooldown. */

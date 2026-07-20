@@ -9,3 +9,17 @@ export {
 } from "./compile.service";
 export { scaffoldTypstDocument, type ScaffoldTypstOptions } from "./scaffold";
 export { scanTypstCiteKeys, stripTypstComments } from "./cite-scan";
+export { composeProjectBib } from "./project-bib";
+export {
+  applyHunkSelection,
+  computeProposalHunks,
+  type ProposalHunk,
+} from "./hunks";
+export {
+  applyProposalEdits,
+  DocumentProposalService,
+  type AcceptProposalResult,
+  type PendingProposalView,
+  type ProposalEdit,
+  type ProposeDocumentEditResult,
+} from "./document-proposal.service";
