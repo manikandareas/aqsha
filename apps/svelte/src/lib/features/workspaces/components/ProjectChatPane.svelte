@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { useClerkContext } from 'svelte-clerk';
@@ -11,11 +12,14 @@
 
 	let {
 		workspaceId,
+		leading,
 		getExtraClientContext,
 		onTurnSent,
 		onAgentSettled
 	}: {
 		workspaceId: string;
+		/** Rendered on the toolbar's left — the page's chat/editor panel toggle. */
+		leading?: Snippet;
 		getExtraClientContext?: () => string[];
 		onTurnSent?: (threadId: string) => void;
 		onAgentSettled?: (threadId: string) => void;
@@ -55,14 +59,7 @@
 <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
 	<PanelCardToolbar>
 		{#snippet title()}
-			<ThreadRecentSwitcher
-				title={activeThreadId ? 'Thread' : 'Chat baru'}
-				threads={recentThreads.data}
-				onSelectThread={(id) => selectThread(id)}
-				onNewThread={() => selectThread(null)}
-				newLabel="Chat baru"
-				emptyLabel="Belum ada thread di proyek ini"
-			/>
+			{#if leading}{@render leading()}{/if}
 		{/snippet}
 		{#snippet actions()}
 			{#if activeThreadId}
@@ -77,6 +74,14 @@
 					<Icon icon={ExternalLinkIcon} class="size-3.5" />
 				</Button>
 			{/if}
+			<ThreadRecentSwitcher
+				title={activeThreadId ? 'Thread' : 'Chat baru'}
+				threads={recentThreads.data}
+				onSelectThread={(id) => selectThread(id)}
+				onNewThread={() => selectThread(null)}
+				newLabel="Chat baru"
+				emptyLabel="Belum ada thread di proyek ini"
+			/>
 			<Button
 				type="button"
 				variant="ghost"

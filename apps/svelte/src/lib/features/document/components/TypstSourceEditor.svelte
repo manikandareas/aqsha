@@ -102,7 +102,7 @@
 	}
 </script>
 
-<div class="relative h-full min-h-0 overflow-hidden bg-card">
+<div class="relative h-full min-h-0 overflow-hidden bg-background">
 	<div bind:this={host} class="h-full min-h-0"></div>
 	{#if browser && !handle}
 		<div

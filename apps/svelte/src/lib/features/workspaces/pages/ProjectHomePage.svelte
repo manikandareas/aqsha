@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { browser } from '$app/environment';
-	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { useClerkContext } from 'svelte-clerk';
 	import { useQueryClient } from '@tanstack/svelte-query';
@@ -11,10 +10,10 @@
 	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
 	import * as ToggleGroup from '@aqsha/ui-svelte/components/toggle-group';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
-	import { Badge } from '@aqsha/ui-svelte/components/badge';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { PageTitle } from '$lib/seo';
 	import { Spinner } from '$lib/components/ui/spinner';
+	import PanelCardToolbar from '$lib/components/layout/PanelCardToolbar.svelte';
 	import { queryKeys } from '$lib/query';
 	import { readableApiErrorMessage } from '$lib/errors/api-error';
 	import {
@@ -23,7 +22,6 @@
 	} from '$lib/features/threads/state/composer-mentions.svelte';
 	import {
 		Icon,
-		ArrowLeftIcon,
 		ChevronDownIcon,
 		Code2Icon,
 		DownloadIcon,
@@ -37,24 +35,24 @@
 	import ProjectSourcesPanel from '../components/ProjectSourcesPanel.svelte';
 	import { useWorkspace } from '../api';
 	import { projectDisplayTitle } from '../types';
-	import TypstSourceEditor from '$lib/features/document/components/TypstSourceEditor.svelte';
-	import TypstPreview from '$lib/features/document/components/TypstPreview.svelte';
 	import TocOverlay from '$lib/features/document/components/TocOverlay.svelte';
 	import ProposalReviewCard from '$lib/features/document/components/ProposalReviewCard.svelte';
 	import AnnotationQueuePanel from '$lib/features/document/components/AnnotationQueuePanel.svelte';
 	import AnnotationComposerDialog from '$lib/features/document/components/AnnotationComposerDialog.svelte';
-	import { TypstClient } from '$lib/features/document/typst/client';
-	import type { Cm6Diagnostic } from '$lib/features/document/typst/diagnostics';
-	import { parseDocumentOutline, type DocumentOutlineEntry } from '$lib/features/document/lib/outline';
 	import {
 		insertSection,
 		moveSection,
 		removeSection,
 		renameSection
 	} from '$lib/features/document/lib/section-transforms';
-	import { AutosaveController } from '$lib/features/document/lib/autosave-controller.svelte';
+	import { DocumentWorkspaceRuntime } from '$lib/features/document/lib/document-workspace-runtime.svelte';
 	import { buildAnnotationClientContext } from '$lib/features/document/lib/annotation-context';
 	import type { AnnotationDraft } from '$lib/features/document/lib/annotation-selection';
+	import {
+		initialProjectActivation,
+		reduceProjectActivation,
+		type ProjectActivationEvent
+	} from '../lib/project-activation';
 	import {
 		useWorkspaceDocument,
 		useSaveWorkspaceDocument,
@@ -82,6 +80,17 @@
 
 	const clerk = useClerkContext();
 	const enabled = $derived(clerk.isLoaded && Boolean(clerk.auth.userId));
+	let activation = $state.raw(initialProjectActivation());
+	// Dispatch di-untrack: beberapa pemanggil hidup di dalam `$effect` (mis. measure layout);
+	// membaca `activation` tracked lalu menulisnya kembali memicu effect_update_depth_exceeded.
+	function dispatchActivation(event: ProjectActivationEvent): void {
+		activation = reduceProjectActivation(
+			untrack(() => activation),
+			event
+		);
+	}
+	const backgroundQueriesActive = $derived(enabled && activation.shellPainted);
+	const documentQueriesActive = $derived(enabled && activation.documentRuntimeActive);
 	const qc = useQueryClient();
 
 	const mentions = new ComposerMentions();
@@ -93,16 +102,16 @@
 	);
 	const documentQuery = useWorkspaceDocument(
 		() => workspaceId,
-		() => enabled
+		() => documentQueriesActive
 	);
 	const bibQuery = useWorkspaceBib(
 		() => workspaceId,
-		() => enabled
+		() => documentQueriesActive
 	);
 	const saveDocument = useSaveWorkspaceDocument(() => workspaceId);
 	const annotations = useWorkspaceAnnotations(
 		() => workspaceId,
-		() => enabled
+		() => backgroundQueriesActive
 	);
 	const createAnnotation = useCreateAnnotation(() => workspaceId);
 	const updateAnnotation = useUpdateAnnotation(() => workspaceId);
@@ -110,12 +119,21 @@
 	const markSent = useMarkAnnotationsSent(() => workspaceId);
 	const proposal = usePendingProposal(
 		() => workspaceId,
-		() => enabled
+		() => backgroundQueriesActive
 	);
 	const acceptProposal = useAcceptProposal(() => workspaceId);
 	const rejectProposal = useRejectProposal(() => workspaceId);
 	const exportPdf = useExportPdf(() => workspaceId);
 	const exportDocx = useExportDocx(() => workspaceId);
+
+	const runtime = new DocumentWorkspaceRuntime({
+		workspaceId: () => workspaceId,
+		save: (input) => saveDocument.mutateAsync(input)
+	});
+	let editorRef = $state<{ applyUserEdit(next: string): void; scrollToLine(line: number): void } | null>(
+		null
+	);
+	let previewRef = $state<{ scrollToHeading(title: string): void } | null>(null);
 
 	$effect(() => {
 		const w = workspace.data;
@@ -125,109 +143,53 @@
 		]);
 	});
 
-	// ── Sumber + autosave + preview ──────────────────────────────────────────
-	let source = $state('');
-	let autosave = $state<AutosaveController | null>(null);
-	let reloadNonce = $state(0);
-	const docKey = $derived(`${workspaceId}:${reloadNonce}`);
-	let editorRef = $state<TypstSourceEditor | null>(null);
-	let previewRef = $state<TypstPreview | null>(null);
-
-	// Seed sekali saat dokumen termuat; setelah itu buffer editor = source-of-truth.
 	$effect(() => {
-		const doc = documentQuery.data;
-		if (!doc || autosave) return;
-		source = doc.source;
-		autosave = new AutosaveController({
-			initialVersion: doc.contentVersion,
-			save: (input) => saveDocument.mutateAsync(input)
-		});
+		if (!activation.documentRuntimeActive) return;
+		void runtime.loadModules();
 	});
 
-	// Worker preview: satu client per halaman; hasil compile → vektor + diagnostik lint.
-	let typstClient = $state<TypstClient | null>(null);
-	let previewVector = $state<Uint8Array | null>(null);
-	let diagnostics = $state<Cm6Diagnostic[]>([]);
 	$effect(() => {
-		if (!browser) return;
-		const client = new TypstClient();
-		client.onCompiled((r) => {
-			if (r.vector) previewVector = r.vector;
-			diagnostics = r.diagnostics;
-		});
-		typstClient = client;
-		return () => {
-			client.dispose();
-			typstClient = null;
-		};
+		runtime.seedIfNeeded(documentQuery.data, documentQuery.isSuccess);
 	});
 
-	// Dorong sumber terbaru + bib ke worker (client men-debounce). Reaktif atas source/bib/client.
 	$effect(() => {
-		const s = source;
+		return runtime.mountClient(activation.documentRuntimeActive, documentQuery.isSuccess);
+	});
+
+	$effect(() => {
+		const s = runtime.source;
 		const b = bibQuery.data?.bib ?? '';
-		typstClient?.update(s, b);
+		void s;
+		runtime.pushSource(b);
 	});
-
-	const outline = $derived(parseDocumentOutline(source));
 
 	onDestroy(() => {
-		const controller = autosave;
-		if (controller) void controller.flush().finally(() => controller.dispose());
+		void runtime.flushAndDispose();
 	});
 
-	function onEditorChange(next: string): void {
-		source = next;
-		autosave?.edit(next);
-	}
-
-	// Terapkan hasil transformasi bab: lewat editor (edit user) bila termuat; jika belum, ubah buffer
-	// langsung supaya editor menyeratkan sumber terbaru saat mount.
-	function applyTransform(next: string): void {
-		if (editorRef) editorRef.applyUserEdit(next);
-		else {
-			source = next;
-			autosave?.edit(next);
-		}
-	}
-
-	function navigateOutline(entry: DocumentOutlineEntry): void {
-		previewRef?.scrollToHeading(entry.title);
-		editorRef?.scrollToLine(entry.sourceLine);
-	}
-
-	const saveStatusLabel = $derived.by(() => {
-		switch (autosave?.status) {
-			case 'saving':
-				return 'Menyimpan…';
-			case 'saved':
-				return 'Tersimpan';
-			case 'dirty':
-				return 'Belum disimpan';
-			case 'stale':
-				return 'Berubah di tempat lain';
-			case 'error':
-				return 'Gagal menyimpan';
-			default:
-				return '';
-		}
-	});
-
-	// Muat ulang dokumen dari server (setelah proposal diterima / konflik stale): reseed buffer +
-	// reset controller + bump docKey supaya editor menampilkan sumber terbaru.
 	async function reloadFromServer(): Promise<void> {
 		const res = await documentQuery.refetch();
 		const doc = res.data;
 		if (!doc) return;
-		source = doc.source;
-		autosave?.reset(doc.contentVersion);
-		reloadNonce += 1;
+		runtime.applyServerDocument(doc);
 		void bibQuery.refetch();
+	}
+
+	async function retryDocumentRuntime(): Promise<void> {
+		await runtime.retryModules(
+			() => documentQuery.refetch(),
+			() => bibQuery.refetch()
+		);
+	}
+
+	function retryPreview(): void {
+		runtime.retryPreview(bibQuery.data?.bib ?? '', retryDocumentRuntime);
 	}
 
 	// ── Anotasi ────────────────────────────────────────────────────────────
 	const selectedAnnotationIds = new SvelteSet<string>();
 	let activeAnnotationId = $state<string | null>(null);
+	let activeTocIndex = $state(0);
 	let pendingDraft = $state<AnnotationDraft | null>(null);
 	let queueOpen = $state(false);
 	const openAnnotationCount = $derived(
@@ -375,6 +337,7 @@
 		const el = host;
 		const measure = () => {
 			wide = el.clientWidth >= 900;
+			dispatchActivation({ type: 'layout-measured', wide });
 			if (wide) previewVisited = true;
 			measured = true;
 		};
@@ -384,11 +347,36 @@
 		return () => ro.disconnect();
 	});
 
+	$effect(() => {
+		if (!browser || !workspace.data || !measured) return;
+		// Guard shellPainted di-untrack: dispatch frame pertama mengubah `activation`; bila tracked,
+		// effect re-run dan cleanup meng-cancel frame kedua sebelum `desktop-delay-complete` terkirim.
+		if (untrack(() => activation.shellPainted)) return;
+		let secondFrame = 0;
+		const firstFrame = requestAnimationFrame(() => {
+			dispatchActivation({ type: 'shell-painted' });
+			secondFrame = requestAnimationFrame(() => {
+				dispatchActivation({ type: 'desktop-delay-complete' });
+			});
+		});
+		return () => {
+			cancelAnimationFrame(firstFrame);
+			if (secondFrame) cancelAnimationFrame(secondFrame);
+		};
+	});
+
+	function activateDocumentRuntime(): void {
+		dispatchActivation({ type: 'open-document-surface' });
+	}
+
 	function selectLeftMode(value: string): void {
 		if (value !== 'chat' && value !== 'editor') return;
 		leftMode = value;
 		mobileMode = value;
-		if (value === 'editor') editorVisited = true;
+		if (value === 'editor') {
+			editorVisited = true;
+			activateDocumentRuntime();
+		}
 	}
 
 	function selectMobileMode(value: string): void {
@@ -397,13 +385,78 @@
 		if (value !== 'preview') leftMode = value;
 		if (value === 'editor') editorVisited = true;
 		if (value === 'preview') previewVisited = true;
+		if (value !== 'chat') activateDocumentRuntime();
 	}
-
-	const editable = $derived(autosave?.status !== 'stale');
 </script>
 
+{#snippet leftToggle()}
+	{@const toggleItemClass =
+		'h-6 gap-1 rounded-md px-2 text-label font-medium text-muted-foreground hover:bg-transparent hover:text-foreground data-[state=on]:bg-muted data-[state=on]:text-foreground data-[state=on]:hover:bg-muted'}
+	{#if wide}
+		<ToggleGroup.Root
+			type="single"
+			value={leftMode}
+			onValueChange={selectLeftMode}
+			size="sm"
+			spacing={0}
+			class="border-0 bg-transparent p-0"
+			aria-label="Panel kerja kiri"
+		>
+			<ToggleGroup.Item value="chat" class={toggleItemClass}>
+				<Icon icon={MessageSquareIcon} class="size-3" /> Chat
+			</ToggleGroup.Item>
+			<ToggleGroup.Item
+				value="editor"
+				class={toggleItemClass}
+				onpointerenter={() => runtime.preloadModules()}
+				onfocus={() => runtime.preloadModules()}
+			>
+				<Icon icon={Code2Icon} class="size-3" /> Editor
+				{#if proposal.data}
+					<span
+						aria-hidden="true"
+						class="ml-1 size-1.5 rounded-full bg-primary"
+						title="Usulan Astra menunggu"
+					></span>
+				{/if}
+			</ToggleGroup.Item>
+		</ToggleGroup.Root>
+	{:else}
+		<ToggleGroup.Root
+			type="single"
+			value={mobileMode}
+			onValueChange={selectMobileMode}
+			size="sm"
+			spacing={0}
+			class="border-0 bg-transparent p-0"
+			aria-label="Panel workspace"
+		>
+			<ToggleGroup.Item value="chat" class={toggleItemClass}>
+				<Icon icon={MessageSquareIcon} class="size-3" /> Chat
+			</ToggleGroup.Item>
+			<ToggleGroup.Item
+				value="editor"
+				class={toggleItemClass}
+				onpointerenter={() => runtime.preloadModules()}
+				onfocus={() => runtime.preloadModules()}
+			>
+				<Icon icon={Code2Icon} class="size-3" /> Editor
+			</ToggleGroup.Item>
+			<ToggleGroup.Item
+				value="preview"
+				class={toggleItemClass}
+				onpointerenter={() => runtime.preloadModules()}
+				onfocus={() => runtime.preloadModules()}
+			>
+				<Icon icon={FileTextIcon} class="size-3" /> Preview
+			</ToggleGroup.Item>
+		</ToggleGroup.Root>
+	{/if}
+{/snippet}
+
 {#snippet chatPanel()}
-	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+	<!-- pl-3 sama dengan editorPanel — toolbar tidak bergeser saat ganti mode Chat|Editor. -->
+	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background pl-3">
 		{#if openAnnotationCount > 0}
 			<div class="shrink-0 border-b border-border px-3 py-1.5">
 				<Collapsible.Root open={queueOpen} onOpenChange={(v) => (queueOpen = v)}>
@@ -416,7 +469,9 @@
 						/>
 						<span class="font-medium">Anotasi ({openAnnotationCount})</span>
 						{#if selectedAnnotationIds.size > 0}
-							<span class="text-micro">· {selectedAnnotationIds.size} akan dikirim bersama pesan</span>
+							<span class="text-micro"
+								>· {selectedAnnotationIds.size} akan dikirim bersama pesan</span
+							>
 						{/if}
 					</Collapsible.Trigger>
 					<Collapsible.Content>
@@ -437,6 +492,7 @@
 		<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
 			<ProjectChatPane
 				{workspaceId}
+				leading={leftToggle}
 				getExtraClientContext={annotationContextParts}
 				onTurnSent={handleTurnSent}
 				onAgentSettled={handleAgentSettled}
@@ -446,7 +502,8 @@
 {/snippet}
 
 {#snippet editorPanel()}
-	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background pl-3">
+		<PanelCardToolbar title={leftToggle} />
 		{#if proposal.data}
 			<div class="shrink-0 border-b border-border p-3">
 				<ProposalReviewCard
@@ -458,7 +515,7 @@
 				/>
 			</div>
 		{/if}
-		{#if autosave?.status === 'stale'}
+		{#if runtime.autosave?.status === 'stale'}
 			<div
 				class="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-lemon/20 px-3 py-2 text-label"
 				role="status"
@@ -470,23 +527,39 @@
 			</div>
 		{/if}
 		<div class="min-h-0 flex-1">
-			<TypstSourceEditor
-				bind:this={editorRef}
-				value={source}
-				{docKey}
-				{editable}
-				{diagnostics}
-				onChange={onEditorChange}
-			/>
+			{#if runtime.loadError || runtime.previewError || documentQuery.isError}
+				<div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+					<p class="text-sm text-destructive">
+						{runtime.loadError ?? 'Dokumen gagal dimuat.'}
+					</p>
+					<Button type="button" size="sm" variant="outline" onclick={retryDocumentRuntime}>
+						Coba lagi
+					</Button>
+				</div>
+			{:else if !documentQuery.isSuccess || !runtime.Editor}
+				<div class="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+					<Spinner class="size-4" /> Menyiapkan editor…
+				</div>
+			{:else}
+				{@const Editor = runtime.Editor}
+				<Editor
+					bind:this={editorRef}
+					value={runtime.source}
+					docKey={runtime.docKey}
+					editable={runtime.editable}
+					diagnostics={runtime.diagnostics}
+					onChange={(next) => runtime.onEditorChange(next)}
+				/>
+			{/if}
 		</div>
-		{#if saveStatusLabel}
+		{#if runtime.saveStatusLabel}
 			<div
 				class="shrink-0 border-t border-border px-3 py-1 text-right text-micro text-muted-foreground"
-				aria-live={autosave?.status === 'error' || autosave?.status === 'stale'
+				aria-live={runtime.autosave?.status === 'error' || runtime.autosave?.status === 'stale'
 					? 'assertive'
 					: 'polite'}
 			>
-				{saveStatusLabel}
+				{runtime.saveStatusLabel}
 			</div>
 		{/if}
 	</div>
@@ -494,22 +567,79 @@
 
 {#snippet previewPanel()}
 	<div class="relative flex h-full min-h-0 flex-col overflow-hidden">
-		<TypstPreview
-			bind:this={previewRef}
-			vector={previewVector}
-			annotations={annotations.data ?? []}
-			{activeAnnotationId}
-			onAnnotate={onPreviewAnnotate}
-			onSelectAnnotation={(id) => (activeAnnotationId = id)}
-		/>
-		<TocOverlay
-			{outline}
-			onNavigate={navigateOutline}
-			onInsert={(afterIndex, title) => applyTransform(insertSection(source, afterIndex, title))}
-			onMove={(from, to) => applyTransform(moveSection(source, from, to))}
-			onRename={(index, title) => applyTransform(renameSection(source, index, title))}
-			onRemove={(index) => applyTransform(removeSection(source, index))}
-		/>
+		<PanelCardToolbar>
+			{#snippet title()}
+				{#if !wide}{@render leftToggle()}{/if}
+			{/snippet}
+			{#snippet actions()}
+				<Button type="button" variant="outline" size="sm" onclick={() => (sourcesOpen = true)}>
+					<Icon icon={Library} class="size-4" />
+					<span class="hidden sm:inline">Sumber</span>
+				</Button>
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button {...props} type="button" variant="ghost" size="icon" aria-label="Menu proyek">
+								<Icon icon={MoreHorizontalIcon} class="size-4" />
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="end">
+						<DropdownMenu.Item disabled={exportPdf.isPending} onSelect={downloadPdf}>
+							<Icon icon={DownloadIcon} class="size-4" /> Unduh PDF
+						</DropdownMenu.Item>
+						<DropdownMenu.Item disabled={exportDocx.isPending} onSelect={downloadDocx}>
+							<Icon icon={DownloadIcon} class="size-4" /> Unduh DOCX
+						</DropdownMenu.Item>
+						<DropdownMenu.Separator />
+						<DropdownMenu.Item onSelect={() => (detailsOpen = true)}
+							>Detail proyek</DropdownMenu.Item
+						>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			{/snippet}
+		</PanelCardToolbar>
+		<div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+			{#if runtime.loadError || documentQuery.isError}
+				<div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+					<p class="text-sm text-destructive">
+						{runtime.loadError ?? runtime.previewError ?? 'Preview dokumen gagal dimuat.'}
+					</p>
+					<Button type="button" size="sm" variant="outline" onclick={retryPreview}>
+						Coba lagi
+					</Button>
+				</div>
+			{:else if !activation.documentRuntimeActive || !documentQuery.isSuccess || !runtime.Preview}
+				<div class="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+					<Spinner class="size-4" /> Menyiapkan preview…
+				</div>
+			{:else}
+				{@const Preview = runtime.Preview}
+				<Preview
+					bind:this={previewRef}
+					svg={runtime.previewSvg}
+					annotations={annotations.data ?? []}
+					{activeAnnotationId}
+					outlineTitles={runtime.outline.map((entry) => entry.title)}
+					onAnnotate={onPreviewAnnotate}
+					onSelectAnnotation={(id: string) => (activeAnnotationId = id)}
+					onActiveHeading={(index: number) => (activeTocIndex = index)}
+				/>
+				<TocOverlay
+					outline={runtime.outline}
+					activeIndex={activeTocIndex}
+					onNavigate={(entry) => runtime.navigateOutline(entry, editorRef, previewRef)}
+					onInsert={(afterIndex, title) =>
+						runtime.applyTransform(insertSection(runtime.source, afterIndex, title), editorRef)}
+					onMove={(from, to) =>
+						runtime.applyTransform(moveSection(runtime.source, from, to), editorRef)}
+					onRename={(index, title) =>
+						runtime.applyTransform(renameSection(runtime.source, index, title), editorRef)}
+					onRemove={(index) =>
+						runtime.applyTransform(removeSection(runtime.source, index), editorRef)}
+				/>
+			{/if}
+		</div>
 	</div>
 {/snippet}
 
@@ -517,104 +647,21 @@
 	<PageTitle title={projectDisplayTitle(workspace.data)} />
 {/if}
 
-{#if workspace.isPending || documentQuery.isPending}
-	<div class="flex h-svh flex-1 items-center justify-center gap-2 text-muted-foreground">
+{#if workspace.isPending}
+	<div
+		class="flex h-svh flex-1 items-center justify-center gap-2 text-muted-foreground md:h-[calc(100svh-1rem)]"
+	>
 		<Spinner class="size-4" />
 		<span class="text-sm">Memuat proyek…</span>
 	</div>
 {:else if !workspace.data}
-	<div class="flex h-svh flex-1 items-center justify-center text-muted-foreground">
+	<div
+		class="flex h-svh flex-1 items-center justify-center text-muted-foreground md:h-[calc(100svh-1rem)]"
+	>
 		<p>Proyek tidak ditemukan.</p>
 	</div>
 {:else}
-	<div bind:this={host} class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
-		<header
-			class="flex shrink-0 flex-wrap items-center gap-2 border-b-2 border-border bg-card px-3 py-2"
-		>
-			<Button
-				href={resolve('/app/(product)')}
-				variant="ghost"
-				size="icon"
-				aria-label="Kembali ke daftar proyek"
-			>
-				<Icon icon={ArrowLeftIcon} class="size-4" />
-			</Button>
-			<span aria-hidden="true" class="text-lg leading-none">
-				{workspace.data.emoji?.trim() || '📚'}
-			</span>
-			<div class="mr-auto min-w-0">
-				<h1 class="max-w-72 truncate font-heading text-base font-bold">
-					{projectDisplayTitle(workspace.data)}
-				</h1>
-			</div>
-
-			{#if measured}
-				{#if wide}
-					<ToggleGroup.Root
-						type="single"
-						value={leftMode}
-						onValueChange={selectLeftMode}
-						aria-label="Panel kerja kiri"
-					>
-						<ToggleGroup.Item value="chat">
-							<Icon icon={MessageSquareIcon} class="size-3.5" /> Chat
-						</ToggleGroup.Item>
-						<ToggleGroup.Item value="editor">
-							<Icon icon={Code2Icon} class="size-3.5" /> Editor
-							{#if proposal.data}
-								<span
-									aria-hidden="true"
-									class="ml-1 size-2 rounded-full bg-primary"
-									title="Usulan Astra menunggu"
-								></span>
-							{/if}
-						</ToggleGroup.Item>
-					</ToggleGroup.Root>
-				{:else}
-					<ToggleGroup.Root
-						type="single"
-						value={mobileMode}
-						onValueChange={selectMobileMode}
-						aria-label="Panel workspace"
-					>
-						<ToggleGroup.Item value="chat">
-							<Icon icon={MessageSquareIcon} class="size-3.5" /> Chat
-						</ToggleGroup.Item>
-						<ToggleGroup.Item value="editor">
-							<Icon icon={Code2Icon} class="size-3.5" /> Editor
-						</ToggleGroup.Item>
-						<ToggleGroup.Item value="preview">
-							<Icon icon={FileTextIcon} class="size-3.5" /> Preview
-						</ToggleGroup.Item>
-					</ToggleGroup.Root>
-				{/if}
-			{/if}
-
-			<Button type="button" variant="outline" size="sm" onclick={() => (sourcesOpen = true)}>
-				<Icon icon={Library} class="size-4" />
-				<span class="hidden sm:inline">Sumber</span>
-			</Button>
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} type="button" variant="ghost" size="icon" aria-label="Menu proyek">
-							<Icon icon={MoreHorizontalIcon} class="size-4" />
-						</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end">
-					<DropdownMenu.Item disabled={exportPdf.isPending} onSelect={downloadPdf}>
-						<Icon icon={DownloadIcon} class="size-4" /> Unduh PDF
-					</DropdownMenu.Item>
-					<DropdownMenu.Item disabled={exportDocx.isPending} onSelect={downloadDocx}>
-						<Icon icon={DownloadIcon} class="size-4" /> Unduh DOCX
-					</DropdownMenu.Item>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item onSelect={() => (detailsOpen = true)}>Detail proyek</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		</header>
-
+	<div bind:this={host} class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background md:h-[calc(100svh-1rem)]">
 		{#if !measured}
 			<div class="flex min-h-0 flex-1 items-center justify-center gap-2 text-muted-foreground">
 				<Spinner class="size-4" />
@@ -647,7 +694,10 @@
 			</Resizable.PaneGroup>
 		{:else}
 			<div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-				<div class={mobileMode === 'chat' ? 'contents' : 'hidden'} aria-hidden={mobileMode !== 'chat'}>
+				<div
+					class={mobileMode === 'chat' ? 'contents' : 'hidden'}
+					aria-hidden={mobileMode !== 'chat'}
+				>
 					{@render chatPanel()}
 				</div>
 				{#if editorVisited}

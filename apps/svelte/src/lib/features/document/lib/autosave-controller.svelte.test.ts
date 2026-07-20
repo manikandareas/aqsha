@@ -10,6 +10,25 @@ function savedResult(version: number): SaveWorkspaceDocumentResult {
 }
 
 describe('AutosaveController', () => {
+	it('lazy-create starts at version zero and adopts the created document version', async () => {
+		const save = vi
+			.fn<(i: { source: string; baseVersion: number }) => Promise<SaveWorkspaceDocumentResult>>()
+			.mockResolvedValueOnce(savedResult(1))
+			.mockResolvedValueOnce(savedResult(2));
+		const c = new AutosaveController({ initialVersion: 0, debounceMs: 100, save });
+
+		c.edit('draft pertama');
+		await vi.advanceTimersByTimeAsync(100);
+		c.edit('draft berikutnya');
+		await vi.advanceTimersByTimeAsync(100);
+
+		expect(save.mock.calls).toEqual([
+			[{ source: 'draft pertama', baseVersion: 0 }],
+			[{ source: 'draft berikutnya', baseVersion: 1 }]
+		]);
+		expect(c.version).toBe(2);
+	});
+
 	it('men-debounce edit lalu menyimpan sekali dengan baseVersion awal', async () => {
 		const save = vi.fn(async () => savedResult(4));
 		const c = new AutosaveController({ initialVersion: 3, debounceMs: 500, save });
