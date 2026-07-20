@@ -58,36 +58,55 @@
 	// Render tiap vektor baru; pertahankan scroll lintas swap SVG. Vektor null = compile gagal → simpan render lama.
 	$effect(() => {
 		const v = vector;
-		if (!browser || !v || !svgHost) return;
-		const host = svgHost;
-		let cancelled = false;
-		const prevScroll = scrollEl?.scrollTop ?? 0;
-		(async () => {
-			try {
-				const renderer = await getTypstRenderer();
-				if (cancelled) return;
-				// Render via sesi sementara (reset vektor → renderSvg string). Jalur by-content
-				// `renderToSvg` panik di render_svg untuk artifact ini; pola sesi = jalur resmi.
-				const svg = await renderer.runWithSession(async (session) => {
-					renderer.manipulateData({ renderSession: session, action: 'reset', data: v });
-					return renderer.renderSvg({ renderSession: session });
-				});
-				if (cancelled) return;
-				host.innerHTML = svg;
-				status = 'ready';
-				renderNonce += 1;
-				requestAnimationFrame(() => {
-					if (scrollEl && prevScroll > 0) scrollEl.scrollTop = prevScroll;
-				});
-			} catch (err) {
-				// Pertahankan SVG terakhir; diagnostik ditangani di editor.
-				console.error('[typst-preview] render gagal', err);
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
+		if (!browser || !v) return;
+		void enqueueRender(v);
 	});
+
+	// Renderer WASM single-thread: `runWithSession` yang tumpang tindih memicu panik reentrancy
+	// ("recursive use / unsafe aliasing"). Serialkan — hanya vektor TERBARU yang di-render setelah
+	// render berjalan selesai (latest-wins).
+	let rendering = false;
+	let pendingVector: Uint8Array | null = null;
+
+	async function enqueueRender(v: Uint8Array): Promise<void> {
+		if (rendering) {
+			pendingVector = v;
+			return;
+		}
+		rendering = true;
+		try {
+			await renderVector(v);
+		} finally {
+			rendering = false;
+			const next = pendingVector;
+			pendingVector = null;
+			if (next) void enqueueRender(next);
+		}
+	}
+
+	async function renderVector(v: Uint8Array): Promise<void> {
+		const host = svgHost;
+		if (!host) return;
+		const prevScroll = scrollEl?.scrollTop ?? 0;
+		try {
+			const renderer = await getTypstRenderer();
+			// Render via sesi sementara (reset vektor → renderSvg string). Jalur by-content
+			// `renderToSvg` panik di render_svg untuk artifact ini; pola sesi = jalur resmi.
+			const svg = await renderer.runWithSession(async (session) => {
+				renderer.manipulateData({ renderSession: session, action: 'reset', data: v });
+				return renderer.renderSvg({ renderSession: session });
+			});
+			host.innerHTML = svg;
+			status = 'ready';
+			renderNonce += 1;
+			requestAnimationFrame(() => {
+				if (scrollEl && prevScroll > 0) scrollEl.scrollTop = prevScroll;
+			});
+		} catch (err) {
+			// Pertahankan SVG terakhir; diagnostik ditangani di editor.
+			console.error('[typst-preview] render gagal', err);
+		}
+	}
 
 	// Ukur lebar kolom baca (pola viewer existing).
 	$effect(() => {
