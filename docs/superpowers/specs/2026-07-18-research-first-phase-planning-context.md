@@ -75,6 +75,18 @@ CodeMirror LaTeX (opt-in, sekunder); surface diff Accept/Reject.
 - **Editor precedent**: komponen editor `apps/svelte` (chapter-editor) + `svelte-code-writer` untuk komponen.
 - **Skill/tool**: `find-docs` (CodeMirror 6 + bahasa LaTeX), `impeccable`, `svelte-code-writer`.
 
+## Fase 9 — Redesign Typst dokumen-tunggal (menggantikan pipeline LaTeX)
+
+Pivot kedua: LaTeX → **Typst**; dokumen per-section → **satu dokumen kontinu** (bab =
+heading, `workspace_sections` dihapus); UI de-granularisasi (tanpa status/stage/tombol
+compile; tab Chat|Editor + preview WASM realtime + TOC overlay).
+
+- **Spec**: `2026-07-20-research-first-phase9-typst-single-document-design.md` (13 keputusan
+  terkunci; risiko source-mapping typst.ts + verdict riset typst.ts/CM6/pandoc).
+- **Plan**: `docs/superpowers/plans/2026-07-20-research-first-phase9-typst-single-document.md`.
+- Catatan supersede: peta fase 5–8 di bawah tetap sebagai sejarah; pipeline LaTeX yang
+  dibangun Fase 4–8b digantikan penuh oleh fase ini (branch belum shipped, tanpa migrasi).
+
 ## Fase 8 — Thesis-class per-kampus + ekspor DOCX best-effort
 
 Adopsi/sesuaikan `.cls` "persis pedoman kampus"; jaring pengaman kampus wajib-Word.
