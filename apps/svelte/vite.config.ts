@@ -16,6 +16,9 @@ const sentrySourcemapUpload = Boolean(
 );
 
 export default defineConfig({
+	optimizeDeps: {
+		include: ['@myriaddreamin/typst.ts', '@myriaddreamin/typst.ts/renderer']
+	},
 	plugins: [
 		tailwindcss(),
 		// Content Collections (blog/changelog) — generate `.content-collections/generated` saat
@@ -69,7 +72,10 @@ export default defineConfig({
 				test: {
 					name: 'server',
 					environment: 'node',
-					include: ['src/**/*.{test,spec}.{js,ts}', '../../packages/ui-svelte/src/**/*.{test,spec}.{js,ts}'],
+					include: [
+						'src/**/*.{test,spec}.{js,ts}',
+						'../../packages/ui-svelte/src/**/*.{test,spec}.{js,ts}'
+					],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 				}
 			}

@@ -11,16 +11,15 @@ export type TypstRawDiagnostic = {
 
 /** Pesan main → worker. */
 export type TypstWorkerRequest =
-	| { type: 'update'; seq: number; source: string; bib: string | null }
-	| { type: 'dispose' };
+	{ type: 'update'; seq: number; source: string; bib: string | null } | { type: 'dispose' };
 
-/** Pesan worker → main. `vector` = artifact vektor typst (di-render renderer di main thread). */
+/** Pesan worker → main. SVG sudah selesai dirender agar WASM tidak memblokir main thread. */
 export type TypstWorkerResponse =
 	| { type: 'ready' }
 	| {
 			type: 'compiled';
 			seq: number;
-			vector: Uint8Array | null;
+			svg: string | null;
 			diagnostics: TypstRawDiagnostic[];
 	  }
 	| { type: 'error'; seq: number; message: string };

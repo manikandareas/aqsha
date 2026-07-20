@@ -3,8 +3,8 @@ import { type Cm6Diagnostic, mapTypstDiagnostics } from './diagnostics';
 import type { TypstWorkerRequest, TypstWorkerResponse } from './types';
 
 export type TypstCompiledResult = {
-	/** Artifact vektor typst untuk di-render (null bila compile gagal total). */
-	vector: Uint8Array | null;
+	/** SVG siap-DOM dari worker (null bila compile gagal total). */
+	svg: string | null;
 	diagnostics: Cm6Diagnostic[];
 };
 
@@ -18,6 +18,7 @@ export class TypstClient {
 	#seq = 0;
 	#lastSource = '';
 	#onCompiled: ((r: TypstCompiledResult) => void) | null = null;
+	#onError: ((message: string) => void) | null = null;
 	#debounceMs: number;
 	#timer: ReturnType<typeof setTimeout> | null = null;
 	#pending: { source: string; bib: string | null } | null = null;
@@ -31,15 +32,21 @@ export class TypstClient {
 			// Buang respons basi: hanya render hasil dari update terakhir yang dikirim.
 			if (msg.type === 'compiled' && msg.seq === this.#seq) {
 				this.#onCompiled?.({
-					vector: msg.vector,
+					svg: msg.svg,
 					diagnostics: mapTypstDiagnostics(msg.diagnostics, this.#lastSource)
 				});
+			} else if (msg.type === 'error' && msg.seq === this.#seq) {
+				this.#onError?.(msg.message);
 			}
 		};
 	}
 
 	onCompiled(cb: (r: TypstCompiledResult) => void): void {
 		this.#onCompiled = cb;
+	}
+
+	onError(cb: (message: string) => void): void {
+		this.#onError = cb;
 	}
 
 	/** Kirim sumber terbaru (debounced). `bib` selalu string (kosong = tanpa sitasi). */

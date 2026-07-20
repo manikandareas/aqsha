@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { browser } from '$app/environment';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, Loader2Icon, MinusIcon, PlusIcon, MessageSquareIcon } from '$lib/icons';
@@ -11,12 +12,11 @@
 		overlayBoxes,
 		pageElements
 	} from '../lib/annotation-selection';
-	import { getTypstRenderer } from '../typst/renderer';
 
 	/**
-	 * Preview dokumen Typst: menggambar artifact vektor (hasil compile worker) menjadi SVG teks
-	 * terseleksi via renderer typst.ts. Seleksi teks → draft anotasi (`onAnnotate`). Sorotan anotasi
-	 * digambar sebagai overlay ternormalisasi. `vector` null (compile gagal total) mempertahankan
+	 * Preview dokumen Typst: memasang SVG terseleksi yang sudah selesai di-compile dan dirender worker.
+	 * Seleksi teks → draft anotasi (`onAnnotate`). Sorotan anotasi digambar sebagai overlay
+	 * ternormalisasi. `svg` null (compile gagal total) mempertahankan
 	 * render terakhir supaya baca tak terlempar.
 	 */
 	type PreviewAnnotation = {
@@ -27,17 +27,21 @@
 	};
 
 	let {
-		vector,
+		svg,
 		annotations = [],
 		activeAnnotationId = null,
+		outlineTitles = [],
 		onAnnotate,
-		onSelectAnnotation
+		onSelectAnnotation,
+		onActiveHeading
 	}: {
-		vector: Uint8Array | null;
+		svg: string | null;
 		annotations?: PreviewAnnotation[];
 		activeAnnotationId?: string | null;
+		outlineTitles?: string[];
 		onAnnotate?: (draft: AnnotationDraft) => void;
 		onSelectAnnotation?: (id: string) => void;
+		onActiveHeading?: (index: number) => void;
 	} = $props();
 
 	const MAX_WIDTH = 860;
@@ -55,58 +59,19 @@
 
 	const stageWidth = $derived(fitWidth > 0 ? Math.max(280, Math.round(fitWidth * zoom)) : 0);
 
-	// Render tiap vektor baru; pertahankan scroll lintas swap SVG. Vektor null = compile gagal → simpan render lama.
+	// SVG null = compile gagal; pertahankan render terakhir agar pembaca tidak terlempar.
 	$effect(() => {
-		const v = vector;
-		if (!browser || !v) return;
-		void enqueueRender(v);
-	});
-
-	// Renderer WASM single-thread: `runWithSession` yang tumpang tindih memicu panik reentrancy
-	// ("recursive use / unsafe aliasing"). Serialkan — hanya vektor TERBARU yang di-render setelah
-	// render berjalan selesai (latest-wins).
-	let rendering = false;
-	let pendingVector: Uint8Array | null = null;
-
-	async function enqueueRender(v: Uint8Array): Promise<void> {
-		if (rendering) {
-			pendingVector = v;
-			return;
-		}
-		rendering = true;
-		try {
-			await renderVector(v);
-		} finally {
-			rendering = false;
-			const next = pendingVector;
-			pendingVector = null;
-			if (next) void enqueueRender(next);
-		}
-	}
-
-	async function renderVector(v: Uint8Array): Promise<void> {
+		const nextSvg = svg;
 		const host = svgHost;
-		if (!host) return;
+		if (!browser || !nextSvg || !host) return;
 		const prevScroll = scrollEl?.scrollTop ?? 0;
-		try {
-			const renderer = await getTypstRenderer();
-			// Render via sesi sementara (reset vektor → renderSvg string). Jalur by-content
-			// `renderToSvg` panik di render_svg untuk artifact ini; pola sesi = jalur resmi.
-			const svg = await renderer.runWithSession(async (session) => {
-				renderer.manipulateData({ renderSession: session, action: 'reset', data: v });
-				return renderer.renderSvg({ renderSession: session });
-			});
-			host.innerHTML = svg;
-			status = 'ready';
-			renderNonce += 1;
-			requestAnimationFrame(() => {
-				if (scrollEl && prevScroll > 0) scrollEl.scrollTop = prevScroll;
-			});
-		} catch (err) {
-			// Pertahankan SVG terakhir; diagnostik ditangani di editor.
-			console.error('[typst-preview] render gagal', err);
-		}
-	}
+		host.innerHTML = nextSvg;
+		status = 'ready';
+		renderNonce = untrack(() => renderNonce) + 1;
+		requestAnimationFrame(() => {
+			if (scrollEl && prevScroll > 0) scrollEl.scrollTop = prevScroll;
+		});
+	});
 
 	// Ukur lebar kolom baca (pola viewer existing).
 	$effect(() => {
@@ -130,12 +95,78 @@
 		el.addEventListener('pointerdown', onPointerDown);
 		el.addEventListener('pointerup', onPointerUp);
 		el.addEventListener('scroll', clearSelectionPill, { passive: true });
+		el.addEventListener('scroll', onScrollActiveHeading, { passive: true });
 		return () => {
 			el.removeEventListener('pointerdown', onPointerDown);
 			el.removeEventListener('pointerup', onPointerUp);
 			el.removeEventListener('scroll', clearSelectionPill);
+			el.removeEventListener('scroll', onScrollActiveHeading);
 		};
 	});
+
+	// Bab aktif untuk ruler TOC: ukur offset tiap heading sekali per render/zoom, lalu saat scroll
+	// cukup binary-scan array offset (tanpa tree-walk per scroll).
+	let headingOffsets: number[] = [];
+	let lastActiveHeading = -1;
+	let activeRaf = 0;
+
+	$effect(() => {
+		void renderNonce;
+		void zoom;
+		void outlineTitles;
+		if (!browser) return;
+		requestAnimationFrame(() => {
+			measureHeadingOffsets();
+			reportActiveHeading();
+		});
+	});
+
+	function measureHeadingOffsets(): void {
+		headingOffsets = [];
+		if (!svgHost || !scrollEl || outlineTitles.length === 0) return;
+		const scrollBox = scrollEl.getBoundingClientRect();
+		const base = scrollEl.scrollTop;
+		for (const title of outlineTitles) {
+			const target = findHeadingElement(title);
+			if (!target) {
+				// Heading belum ter-render (mis. compile menyusul) — pakai offset bab sebelumnya
+				// supaya indeks tetap sinkron dengan outline.
+				headingOffsets.push(headingOffsets[headingOffsets.length - 1] ?? 0);
+				continue;
+			}
+			const box = target.getBoundingClientRect();
+			headingOffsets.push(box.top - scrollBox.top + base);
+		}
+	}
+
+	function onScrollActiveHeading(): void {
+		if (activeRaf) return;
+		activeRaf = requestAnimationFrame(() => {
+			activeRaf = 0;
+			reportActiveHeading();
+		});
+	}
+
+	function reportActiveHeading(): void {
+		if (!scrollEl || headingOffsets.length === 0) return;
+		const el = scrollEl;
+		// Garis baca di sepertiga atas viewport; mentok bawah = bab terakhir.
+		const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+		const line = el.scrollTop + el.clientHeight * 0.3;
+		let active = 0;
+		if (atBottom) {
+			active = headingOffsets.length - 1;
+		} else {
+			for (let i = 0; i < headingOffsets.length; i += 1) {
+				if (headingOffsets[i]! <= line) active = i;
+				else break;
+			}
+		}
+		if (active !== lastActiveHeading) {
+			lastActiveHeading = active;
+			onActiveHeading?.(active);
+		}
+	}
 
 	// Jangan hapus pil saat pointerdown mengenai pil-nya sendiri — kalau tidak, pil hilang sebelum
 	// klik commit-nya terdaftar (pil berada di dalam container yang sama).
@@ -181,8 +212,7 @@
 			return;
 		}
 		const sel = window.getSelection();
-		const rects =
-			sel && sel.rangeCount > 0 ? Array.from(sel.getRangeAt(0).getClientRects()) : [];
+		const rects = sel && sel.rangeCount > 0 ? Array.from(sel.getRangeAt(0).getClientRects()) : [];
 		const last = rects[rects.length - 1];
 		const stageBox = stageEl.getBoundingClientRect();
 		pillPos = last
@@ -204,15 +234,20 @@
 
 	/** Lompat preview ke bab berjudul `title` (cari teks di SVG; nav level-heading). */
 	export function scrollToHeading(title: string): void {
-		if (!svgHost || !scrollEl) return;
+		if (!scrollEl) return;
+		const target = findHeadingElement(title);
+		if (target) scrollTargetIntoView(target);
+	}
+
+	function findHeadingElement(title: string): Element | null {
+		if (!svgHost) return null;
 		const needle = normalizeHeadingText(title);
-		if (!needle) return;
+		if (!needle) return null;
 		for (const page of pageElements(svgHost)) {
 			if (!normalizeHeadingText(page.textContent ?? '').includes(needle)) continue;
-			const target = headingTarget(page, needle) ?? page;
-			scrollTargetIntoView(target);
-			return;
+			return headingTarget(page, needle) ?? page;
 		}
+		return null;
 	}
 
 	function headingTarget(page: Element, needle: string): Element | null {
@@ -246,7 +281,7 @@
 </script>
 
 <div class="relative flex min-h-0 flex-1 flex-col bg-paper-rail/40">
-	<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4 py-6">
+	<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-6">
 		{#if status === 'loading'}
 			<div
 				class="flex min-h-[280px] items-center justify-center gap-2 text-sm text-muted-foreground"
@@ -256,9 +291,8 @@
 		{/if}
 		<div
 			bind:this={stageEl}
-			class="relative mx-auto"
+			class={['relative mx-auto', { invisible: status === 'loading' }]}
 			style:width={stageWidth > 0 ? `${stageWidth}px` : '100%'}
-			class:invisible={status === 'loading'}
 		>
 			<div
 				bind:this={svgHost}
@@ -291,7 +325,12 @@
 					style:left={`${pillPos.left}px`}
 					style:top={`${pillPos.top}px`}
 				>
-					<Button type="button" size="sm" class="gap-1.5 shadow-soft-card" onclick={commitAnnotation}>
+					<Button
+						type="button"
+						size="sm"
+						class="gap-1.5 shadow-soft-card"
+						onclick={commitAnnotation}
+					>
 						<Icon icon={MessageSquareIcon} class="size-3.5" /> Tambah catatan
 					</Button>
 				</div>
