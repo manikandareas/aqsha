@@ -38,30 +38,16 @@ export const DocumentEditProposalRepo = {
     return rows[0] ?? null;
   },
 
-  async insert(db: DbOrTx, row: NewDocumentEditProposal): Promise<void> {
-    await db.insert(documentEditProposals).values(row);
+  async insertPendingIfAbsent(db: DbOrTx, row: NewDocumentEditProposal): Promise<boolean> {
+    const inserted = await db
+      .insert(documentEditProposals)
+      .values(row)
+      .onConflictDoNothing()
+      .returning({ id: documentEditProposals.id });
+    return inserted.length === 1;
   },
 
   async updateById(db: DbOrTx, id: string, patch: Partial<NewDocumentEditProposal>): Promise<void> {
     await db.update(documentEditProposals).set(patch).where(eq(documentEditProposals.id, id));
-  },
-
-  /** Supersede pending lama sebuah proyek (dipanggil sebelum insert proposal baru). */
-  async supersedePendingByWorkspace(
-    db: DbOrTx,
-    ownerUserId: string,
-    workspaceId: string,
-    decidedAt: number,
-  ): Promise<void> {
-    await db
-      .update(documentEditProposals)
-      .set({ status: "superseded", decidedAt })
-      .where(
-        and(
-          eq(documentEditProposals.ownerUserId, ownerUserId),
-          eq(documentEditProposals.workspaceId, workspaceId),
-          eq(documentEditProposals.status, "pending"),
-        ),
-      );
   },
 };

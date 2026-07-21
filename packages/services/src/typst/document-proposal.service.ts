@@ -20,7 +20,14 @@ export type ProposalEdit = { oldText: string; newText: string };
 export type ProposeDocumentEditResult =
   | { ok: true; proposalId: string; summary: string }
   | { ok: false; reason: "compile_error"; compileErrors: TypstDiagnostic[] }
-  | { ok: false; reason: "edit_mismatch"; message: string };
+  | { ok: false; reason: "edit_mismatch"; message: string }
+  | {
+      ok: false;
+      reason: "pending_proposal";
+      proposalId: string;
+      summary: string;
+      isStale: boolean;
+    };
 
 export type AcceptProposalResult =
   | { status: "accepted"; contentVersion: number }
@@ -33,6 +40,7 @@ export type PendingProposalView = {
   baseVersion: number;
   proposedSource: string;
   summary: string;
+  resubmitInstruction: string;
   annotationIds: string[];
   threadId: string | null;
   createdAt: number;
@@ -113,12 +121,26 @@ async function assertPendingProposal(
   return row;
 }
 
+function pendingProposalResult(
+  pending: DocumentEditProposal,
+  currentVersion: number,
+): ProposeDocumentEditResult {
+  return {
+    ok: false,
+    reason: "pending_proposal",
+    proposalId: pending.id,
+    summary: pending.summary,
+    isStale: pending.baseVersion !== currentVersion,
+  };
+}
+
 export const DocumentProposalService = {
   /**
    * Usulan suntingan agen atas dokumen Typst proyek: apply edits → dry-run compile CLI (sumber
    * usulan + refs.bib proyek, TANPA menyimpan apa pun) → hanya usulan yang compile bersih
-   * dipersist sebagai `pending` (supersede pending lama). Error compile dikembalikan sebagai
-   * union supaya agen ber-self-repair. Satu bucket rate-limit (`typst:compile`) dengan compile user.
+   * dipersist sebagai `pending`. Proposal aktif tetap utuh sampai user menerima atau menolaknya;
+   * proposal baru dikembalikan sebagai union supaya agen ber-self-repair. Satu bucket rate-limit
+   * (`typst:compile`) dengan compile user.
    */
   async propose(
     db: Db,
@@ -128,19 +150,27 @@ export const DocumentProposalService = {
       edits?: ProposalEdit[];
       fullSource?: string;
       summary: string;
+      resubmitInstruction?: string;
       respondsToAnnotationIds?: string[];
       threadId?: string | null;
       enforceRateLimit?: boolean;
     },
   ): Promise<ProposeDocumentEditResult> {
-    if (input.enforceRateLimit !== false) {
-      await consumeCompileQuota(input.ownerUserId);
-    }
-
     const doc = await WorkspaceDocumentService.getDocument(db, {
       ownerUserId: input.ownerUserId,
       workspaceId: input.workspaceId,
     });
+    const currentVersion = doc?.contentVersion ?? 0;
+    const pending = await DocumentEditProposalRepo.findPendingByWorkspace(
+      db,
+      input.ownerUserId,
+      input.workspaceId,
+    );
+    if (pending) return pendingProposalResult(pending, currentVersion);
+
+    if (input.enforceRateLimit !== false) {
+      await consumeCompileQuota(input.ownerUserId);
+    }
 
     let candidate: string;
     if (input.fullSource !== undefined) {
@@ -194,27 +224,34 @@ export const DocumentProposalService = {
 
     const now = Date.now();
     const proposalId = crypto.randomUUID();
-    await db.transaction(async (tx) => {
-      await DocumentEditProposalRepo.supersedePendingByWorkspace(
-        tx,
+    const inserted = await DocumentEditProposalRepo.insertPendingIfAbsent(db, {
+      id: proposalId,
+      ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId,
+      threadId: input.threadId ?? null,
+      baseVersion: currentVersion,
+      proposedSource: candidate,
+      summary: input.summary,
+      resubmitInstruction: input.resubmitInstruction ?? "",
+      annotationIds: input.respondsToAnnotationIds ?? [],
+      status: "pending",
+      createdAt: now,
+      decidedAt: null,
+    });
+    if (!inserted) {
+      const concurrentPending = await DocumentEditProposalRepo.findPendingByWorkspace(
+        db,
         input.ownerUserId,
         input.workspaceId,
-        now,
       );
-      await DocumentEditProposalRepo.insert(tx, {
-        id: proposalId,
-        ownerUserId: input.ownerUserId,
-        workspaceId: input.workspaceId,
-        threadId: input.threadId ?? null,
-        baseVersion: doc?.contentVersion ?? 0,
-        proposedSource: candidate,
-        summary: input.summary,
-        annotationIds: input.respondsToAnnotationIds ?? [],
-        status: "pending",
-        createdAt: now,
-        decidedAt: null,
+      if (concurrentPending) return pendingProposalResult(concurrentPending, currentVersion);
+      throwAppError({
+        message: "Proposal belum dapat disimpan. Coba lagi.",
+        code: "proposal_conflict",
+        severity: "warning",
+        status: 409,
       });
-    });
+    }
     return { ok: true, proposalId, summary: input.summary };
   },
 
@@ -352,6 +389,7 @@ export const DocumentProposalService = {
       baseVersion: row.baseVersion,
       proposedSource: row.proposedSource,
       summary: row.summary,
+      resubmitInstruction: row.resubmitInstruction,
       annotationIds: row.annotationIds,
       threadId: row.threadId,
       createdAt: row.createdAt,

@@ -11,7 +11,7 @@ export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
  * HANYA yang sudah lolos dry-run compile (usulan gagal compile tak pernah menyentuh tabel
  * ini). `base_version` = contentVersion saat agen membaca; accept memakai CAS `saveDocument`
  * sehingga tak pernah menimpa tulisan yang lebih baru. Maksimal satu `pending` per proyek
- * (unique parsial) — proposal baru men-supersede pending lama.
+ * (unique parsial) agar review aktif tidak dapat tertimpa proposal baru.
  */
 export const documentEditProposals = pgTable(
   "document_edit_proposals",
@@ -27,6 +27,7 @@ export const documentEditProposals = pgTable(
     baseVersion: integer("base_version").notNull(),
     proposedSource: text("proposed_source").notNull(),
     summary: text("summary").notNull(),
+    resubmitInstruction: text("resubmit_instruction").notNull().default(""),
     annotationIds: jsonb("annotation_ids").$type<string[]>().notNull(),
     status: text("status").notNull().default("pending"),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),

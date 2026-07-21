@@ -40,6 +40,14 @@ async function resetDoc(source: string): Promise<number> {
   return r.contentVersion;
 }
 
+async function rejectPendingProposal(): Promise<void> {
+  const pending = await DocumentProposalService.getPending(db, {
+    ownerUserId: OWNER,
+    workspaceId: WS,
+  });
+  if (pending) await DocumentProposalService.reject(db, { ownerUserId: OWNER, proposalId: pending.id });
+}
+
 afterAll(async () => {
   if (!DATABASE_URL) return;
   await client`delete from document_edit_proposals where owner_user_id like 'itdp_%'`;
@@ -91,9 +99,48 @@ describe("DocumentProposalService", () => {
     expect(pending?.proposedSource).toBe(proposed);
     expect(pending?.hunks.length).toBeGreaterThan(0);
     expect(pending?.isStale).toBe(false);
+    await rejectPendingProposal();
+  });
+
+  itest("proposal pending menyimpan instruksi susun ulang dan menolak proposal kedua", async () => {
+    await rejectPendingProposal();
+    await resetDoc("= Pendahuluan\n\nVersi awal.\n");
+    const first = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: "= Pendahuluan\n\nVersi revisi.\n",
+      summary: "Perbaiki pembuka",
+      resubmitInstruction: "Perbaiki paragraf pembuka agar lebih jelas.",
+      enforceRateLimit: false,
+    });
+    if (!first.ok) throw new Error("proposal pertama harus tersimpan");
+
+    const pending = await DocumentProposalService.getPending(db, { ownerUserId: OWNER, workspaceId: WS });
+    expect(pending?.resubmitInstruction).toBe("Perbaiki paragraf pembuka agar lebih jelas.");
+
+    const second = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: "= Pendahuluan\n\nVersi lain.\n",
+      summary: "Jangan mengganti proposal pertama",
+      resubmitInstruction: "Instruksi lain.",
+      enforceRateLimit: false,
+    });
+    expect(second).toEqual({
+      ok: false,
+      reason: "pending_proposal",
+      proposalId: first.proposalId,
+      summary: "Perbaiki pembuka",
+      isStale: false,
+    });
+
+    const row = await DocumentEditProposalRepo.findById(db, OWNER, first.proposalId);
+    expect(row?.status).toBe("pending");
+    await DocumentProposalService.reject(db, { ownerUserId: OWNER, proposalId: first.proposalId });
   });
 
   itest("propose sumber yang gagal compile → compile_error union (tak tersimpan)", async () => {
+    await rejectPendingProposal();
     const result = await DocumentProposalService.propose(db, {
       ownerUserId: OWNER,
       workspaceId: WS,
@@ -103,12 +150,12 @@ describe("DocumentProposalService", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("compile_error");
-    // Pending sebelumnya tetap (usulan rusak tak men-supersede).
     const pending = await DocumentProposalService.getPending(db, { ownerUserId: OWNER, workspaceId: WS });
-    expect(pending?.summary).toBe("Revisi pembuka");
+    expect(pending).toBeNull();
   });
 
   itest("propose edits dengan anchor salah → edit_mismatch", async () => {
+    await rejectPendingProposal();
     const result = await DocumentProposalService.propose(db, {
       ownerUserId: OWNER,
       workspaceId: WS,
@@ -121,6 +168,7 @@ describe("DocumentProposalService", () => {
   });
 
   itest("accept penuh → saved v+1, proposal accepted", async () => {
+    await rejectPendingProposal();
     const version = await resetDoc("= Pendahuluan\n\nSatu.\n");
     const proposed = "= Pendahuluan\n\nSatu diperbaiki.\n";
     const p = await DocumentProposalService.propose(db, {
@@ -144,6 +192,7 @@ describe("DocumentProposalService", () => {
   });
 
   itest("accept parsial (subset hunk) → dry-run compile → hanya hunk terpilih diterapkan", async () => {
+    await rejectPendingProposal();
     // Filler >2×context(3) baris di antara dua perubahan supaya hunk tak menyatu.
     await resetDoc(
       "= Pendahuluan\n\nBaris A.\n\nFiller satu.\n\nFiller dua.\n\nFiller tiga.\n\n= Metode\n\nBaris B.\n",
@@ -174,6 +223,7 @@ describe("DocumentProposalService", () => {
   });
 
   itest("accept parsial saat versi bergeser → stale", async () => {
+    await rejectPendingProposal();
     const v = await resetDoc("= Bab\n\nAsli.\n");
     const p = await DocumentProposalService.propose(db, {
       ownerUserId: OWNER,
@@ -201,6 +251,7 @@ describe("DocumentProposalService", () => {
   });
 
   itest("reject → proposal rejected", async () => {
+    await rejectPendingProposal();
     await resetDoc("= Bab\n\nHalo.\n");
     const p = await DocumentProposalService.propose(db, {
       ownerUserId: OWNER,
