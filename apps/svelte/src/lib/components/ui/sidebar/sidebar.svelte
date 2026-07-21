@@ -91,7 +91,7 @@
 				'group-data-[collapsible=offcanvas]:w-0',
 				'group-data-[side=right]:rotate-180',
 				variant === 'floating' || variant === 'inset'
-					? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]'
+					? 'group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(1)))]'
 					: 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)'
 			)}
 		></div>
@@ -104,7 +104,7 @@
 					: 'end-0 group-data-[collapsible=offcanvas]:end-[calc(var(--sidebar-width)*-1)]',
 				// Adjust the padding for floating and inset variants.
 				variant === 'floating' || variant === 'inset'
-					? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]'
+					? 'p-2 group-data-[collapsible=icon]:p-0.5 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(1))+2px)]'
 					: 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)',
 				variant === 'sidebar' && 'group-data-[side=left]:border-e group-data-[side=right]:border-s',
 				className

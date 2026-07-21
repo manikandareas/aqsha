@@ -1,28 +1,36 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import AppSidebar from './AppSidebar.svelte';
 
-	/**
-	 * Persistent shell for every authenticated product surface. Hoists the left navigation so it stays mounted
-	 * across navigations (no remount/flicker). Pages render into `Sidebar.Inset`, which is
-	 * `relative` so a route-level loading overlay (variant="absolute") fills just the content
-	 * area, not the nav. `open` is the cookie-persisted initial state (read server-side in
-	 * `routes/app/+layout.server.ts`); `Sidebar.Provider` writes the `sidebar_state` cookie on
-	 * toggle. `--sidebar-width*` overrides set the rail width (16.5rem / 17.5rem mobile).
-	 */
 	let { open = true, children }: { open?: boolean; children: Snippet } = $props();
+
+	const mobilePageLabel = $derived.by(() => {
+		const { pathname } = page.url;
+		if (pathname.startsWith('/app/projects/new')) return 'Proyek baru';
+		if (pathname.startsWith('/app/projects')) return 'Proyek';
+		if (pathname.startsWith('/app/library')) return 'Perpustakaan';
+		if (pathname.startsWith('/app/explore')) return 'Jelajahi';
+		return 'Beranda';
+	});
 </script>
 
 <Sidebar.Provider
 	{open}
-	style="--sidebar-width: 16.5rem; --sidebar-width-mobile: 17.5rem;"
+	style="--sidebar-width: 16.5rem; --sidebar-width-mobile: 17.5rem; --sidebar-width-icon: 3rem;"
 	class="min-h-svh"
 >
 	<AppSidebar />
-	<!-- No min-h here: the inset variant adds m-2, so the pane stretches to the provider's
-	     min-h-svh row instead (margin-aware), avoiding a 100svh+margin overflow. -->
 	<Sidebar.Inset class="relative bg-background text-foreground">
-		{@render children()}
+		<header
+			class="z-10 flex h-12 shrink-0 items-center gap-2 border-b border-border/60 bg-background/80 px-4 backdrop-blur md:hidden"
+		>
+			<Sidebar.Trigger class="-ml-1.5 size-8 text-muted-foreground" aria-label="Buka navigasi" />
+			<span class="min-w-0 truncate text-[13px] font-medium text-foreground">
+				{mobilePageLabel}
+			</span>
+		</header>
+		<div class="flex min-h-0 flex-1 flex-col">{@render children()}</div>
 	</Sidebar.Inset>
 </Sidebar.Provider>
