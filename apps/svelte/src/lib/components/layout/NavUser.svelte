@@ -27,7 +27,7 @@
 	}
 </script>
 
-<Sidebar.Menu>
+<Sidebar.Menu class="group-data-[collapsible=icon]:items-center">
 	<Sidebar.MenuItem>
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>
@@ -35,7 +35,7 @@
 					<Sidebar.MenuButton
 						{...props}
 						size="lg"
-						class="h-10 min-w-0 rounded-sm border border-sidebar-border/70 bg-muted/15 p-2.5 text-muted-foreground transition-[background-color,border-color,color] duration-150 ease-out hover:border-primary/20 hover:bg-primary/5 hover:text-foreground data-[state=open]:border-primary/25 data-[state=open]:bg-primary/8 data-[state=open]:text-foreground"
+						class="h-10 min-w-0 rounded-sm border border-sidebar-border/70 bg-muted/15 p-2.5 text-muted-foreground transition-[background-color,border-color,color] duration-150 ease-out hover:border-primary/20 hover:bg-primary/5 hover:text-foreground data-[state=open]:border-primary/25 data-[state=open]:bg-primary/8 data-[state=open]:text-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center"
 					>
 						<Avatar.Root class="size-6 shrink-0 rounded-full ring-1 ring-sky-soft-border">
 							{#if display.image}
@@ -47,10 +47,15 @@
 								{display.initials}
 							</Avatar.Fallback>
 						</Avatar.Root>
-						<span class="min-w-0 flex-1 truncate text-left text-[12px] font-medium">
+						<span
+							class="min-w-0 flex-1 truncate text-left text-[12px] font-medium group-data-[collapsible=icon]:hidden"
+						>
 							{display.name}
 						</span>
-						<Icon icon={MoreVerticalIcon} class="size-3.5 shrink-0 text-muted-foreground" />
+						<Icon
+							icon={MoreVerticalIcon}
+							class="size-3.5 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden"
+						/>
 					</Sidebar.MenuButton>
 				{/snippet}
 			</DropdownMenu.Trigger>

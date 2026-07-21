@@ -40,8 +40,16 @@
 	const labelClass = 'text-label font-medium text-muted-foreground';
 </script>
 
-<div class="min-w-0 overflow-hidden">
-	<div class={cn('flex items-center justify-between gap-1 px-0.5 pb-1.5', first ? 'pt-0' : 'pt-1')}>
+<!-- shrink-0 keeps the section at its natural height inside the overflow-auto sidebar content, so a
+long list overflows into a scroll instead of being compressed and clipped by this wrapper. -->
+<div class="min-w-0 shrink-0 overflow-hidden">
+	<!-- The label + action row is meaningless in the icon rail (no room for text) — hide it there. -->
+	<div
+		class={cn(
+			'flex items-center justify-between gap-1 px-0.5 pb-1.5 group-data-[collapsible=icon]:hidden',
+			first ? 'pt-0' : 'pt-1'
+		)}
+	>
 		{#if collapsible}
 			<button
 				type="button"
