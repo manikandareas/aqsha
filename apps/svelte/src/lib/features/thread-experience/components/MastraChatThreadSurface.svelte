@@ -232,6 +232,7 @@
 				{ambientWorkspaceId}
 				{errorDraft}
 				showSuggestions={!compact}
+				showLandingSuggestions={compact}
 				recentThreads={recentThreads.data}
 				{initialContent}
 			/>

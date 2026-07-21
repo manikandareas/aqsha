@@ -2,6 +2,7 @@
 	import { Icon, MessageSquareIcon, ArrowUpRightIcon } from '$lib/icons';
 	import { takeRecentThreads } from '$lib/features/threads/lib/recent-thread-summaries';
 	import type { RecentThreadSummary } from '$lib/features/threads/types';
+	import ComposerSuggestionList from './ComposerSuggestionList.svelte';
 
 	let {
 		recentThreads,
@@ -12,29 +13,6 @@
 		onSelectThread: (threadId: string) => void;
 		onSelectSuggestion: (prompt: string) => void;
 	} = $props();
-
-	const composerSuggestions = [
-		{
-			emoji: '🔎',
-			label: 'Cari sumber akademik',
-			prompt: 'Cari sumber akademik terbaru tentang dampak AI pada pembelajaran mandiri.'
-		},
-		{
-			emoji: '🧭',
-			label: 'Buat peta riset',
-			prompt: 'Buat peta riset awal untuk topik literasi digital siswa SMA.'
-		},
-		{
-			emoji: '🧪',
-			label: 'Susun metodologi',
-			prompt: 'Susun rancangan metodologi penelitian kualitatif untuk evaluasi chatbot belajar.'
-		},
-		{
-			emoji: '📝',
-			label: 'Buat outline tulisan',
-			prompt: 'Buat outline artikel ilmiah tentang penggunaan AI sebagai tutor personal.'
-		}
-	] as const;
 
 	const sortedThreads = $derived(takeRecentThreads(recentThreads));
 
@@ -111,23 +89,6 @@
 		<h2 class="px-1 text-left text-label font-semibold tracking-normal text-muted-foreground">
 			Saran
 		</h2>
-		<div class="grid gap-1.5">
-			{#each composerSuggestions as item (item.label)}
-				<button
-					type="button"
-					onclick={() => onSelectSuggestion(item.prompt)}
-					aria-label={`Gunakan suggestion: ${item.label}`}
-					class="group flex min-h-8 items-center gap-2 rounded-lg px-2.5 text-left text-label font-medium text-muted-foreground transition-colors duration-150 hover:bg-card hover:text-foreground"
-				>
-					<span
-						class="grid size-5 shrink-0 place-items-center rounded-md bg-muted/55 text-label transition-colors group-hover:bg-muted"
-						aria-hidden="true"
-					>
-						{item.emoji}
-					</span>
-					<span class="min-w-0 truncate">{item.label}</span>
-				</button>
-			{/each}
-		</div>
+		<ComposerSuggestionList {onSelectSuggestion} />
 	</section>
 </div>

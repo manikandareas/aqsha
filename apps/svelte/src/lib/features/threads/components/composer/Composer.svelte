@@ -41,6 +41,7 @@
 	import { useComposerAgentSelection } from './agent-selection.svelte';
 	import AgentSelector from './AgentSelector.svelte';
 	import ComposerStartPanel from './ComposerStartPanel.svelte';
+	import ComposerSuggestionList from './ComposerSuggestionList.svelte';
 	import FileChip from './FileChip.svelte';
 	import TokenizedPromptInput from './TokenizedPromptInput.svelte';
 	import type { ComposerAttachment, ComposerNotice, ComposerSendPayload } from './composer-types';
@@ -65,6 +66,7 @@
 		ambientWorkspaceId = null,
 		errorDraft = null,
 		showSuggestions = false,
+		showLandingSuggestions = false,
 		recentThreads = [],
 		initialContent,
 		placeholder
@@ -80,6 +82,8 @@
 		errorDraft?: string | null;
 		/** Landing hero: roomier collapsed row + start-panel suggestions below. */
 		showSuggestions?: boolean;
+		/** Initial project-chat rail: four prompts above the unchanged composer shell. */
+		showLandingSuggestions?: boolean;
 		recentThreads?: RecentThreadSummary[];
 		initialContent?: string;
 		placeholder?: ComposerPlaceholder;
@@ -354,7 +358,17 @@
 	}
 </script>
 
-<div class="flex w-full flex-col gap-8">
+<div class={cn('flex w-full flex-col', showLandingSuggestions ? 'gap-3' : 'gap-8')}>
+	{#if showLandingSuggestions && !disabled}
+		<ComposerSuggestionList
+			landing
+			onSelectSuggestion={(prompt) => {
+				commands = [];
+				content = prompt;
+			}}
+		/>
+	{/if}
+
 	<div
 		bind:this={composerShellEl}
 		class="aqsha-composer-shell @container/composer w-full text-foreground"
