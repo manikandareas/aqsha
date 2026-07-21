@@ -4,8 +4,9 @@
  * (edit_mismatch), persist pending tanpa tertimpa, accept penuh/parsial (dry-run subset), stale,
  * reject membuka anotasi.
  */
-import { afterAll, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createDb, DocumentEditProposalRepo } from "@aqsha/db";
+import { AnnotationService } from "../src/annotation.service";
 import { isTypstAvailable, TypstCompileService } from "../src/typst/compile.service";
 import { DocumentProposalService } from "../src/typst/document-proposal.service";
 import { applyProposalEdits } from "../src/typst/document-proposal.service";
@@ -83,8 +84,9 @@ describe("applyProposalEdits (pure)", () => {
 });
 
 describe("DocumentProposalService", () => {
+  beforeAll(seedWorkspace);
+
   itest("propose fullSource valid → pending; getPending mengembalikan view + hunks", async () => {
-    await seedWorkspace();
     await resetDoc("= Pendahuluan\n\nParagraf awal.\n");
     const proposed = "= Pendahuluan\n\nParagraf awal yang direvisi Astra.\n";
     const result = await DocumentProposalService.propose(db, {
@@ -318,5 +320,76 @@ describe("DocumentProposalService", () => {
     await DocumentProposalService.reject(db, { ownerUserId: OWNER, proposalId: p.proposalId });
     const row = await DocumentEditProposalRepo.findById(db, OWNER, p.proposalId);
     expect(row?.status).toBe("rejected");
+  });
+
+  itest("accept tidak menimpa anotasi proposal yang sudah dismissed", async () => {
+    await rejectPendingProposal();
+    await resetDoc("= Bab\n\nSebelum diterima.\n");
+    const annotation = await AnnotationService.create(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      kind: "pin",
+      page: 1,
+      rects: [{ x: 1, y: 1, w: 0, h: 0 }],
+    });
+    const p = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: "= Bab\n\nSesudah diterima.\n",
+      summary: "Terima tanpa membuka ulang anotasi",
+      respondsToAnnotationIds: [annotation.id],
+      enforceRateLimit: false,
+    });
+    if (!p.ok) throw new Error("propose harus ok");
+
+    await AnnotationService.dismissMany(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      ids: [annotation.id],
+    });
+    const accepted = await DocumentProposalService.accept(db, {
+      ownerUserId: OWNER,
+      proposalId: p.proposalId,
+      enforceRateLimit: false,
+    });
+
+    expect(accepted.status).toBe("accepted");
+    const row = (await AnnotationService.list(db, { ownerUserId: OWNER, workspaceId: WS })).find(
+      (item) => item.id === annotation.id,
+    );
+    expect(row?.status).toBe("dismissed");
+  });
+
+  itest("reject tidak menimpa anotasi proposal yang sudah dismissed", async () => {
+    await rejectPendingProposal();
+    await resetDoc("= Bab\n\nSebelum ditolak.\n");
+    const annotation = await AnnotationService.create(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      kind: "pin",
+      page: 1,
+      rects: [{ x: 2, y: 2, w: 0, h: 0 }],
+    });
+    const p = await DocumentProposalService.propose(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      fullSource: "= Bab\n\nSesudah ditolak.\n",
+      summary: "Tolak tanpa membuka ulang anotasi",
+      respondsToAnnotationIds: [annotation.id],
+      enforceRateLimit: false,
+    });
+    if (!p.ok) throw new Error("propose harus ok");
+
+    await AnnotationService.dismissMany(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      ids: [annotation.id],
+    });
+    await DocumentProposalService.reject(db, { ownerUserId: OWNER, proposalId: p.proposalId });
+
+    const row = (await AnnotationService.list(db, { ownerUserId: OWNER, workspaceId: WS })).find(
+      (item) => item.id === annotation.id,
+    );
+    expect(row?.status).toBe("dismissed");
   });
 });

@@ -352,7 +352,7 @@ export const DocumentProposalService = {
       status: "accepted",
       decidedAt: now,
     });
-    await DocumentAnnotationRepo.updateStatusByIds(
+    await DocumentAnnotationRepo.updateProposalStatusByIds(
       db,
       input.ownerUserId,
       proposal.workspaceId,
@@ -373,7 +373,7 @@ export const DocumentProposalService = {
       status: "rejected",
       decidedAt: now,
     });
-    await DocumentAnnotationRepo.updateStatusByIds(
+    await DocumentAnnotationRepo.updateProposalStatusByIds(
       db,
       input.ownerUserId,
       proposal.workspaceId,

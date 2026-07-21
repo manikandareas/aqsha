@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import {
   type DocumentAnnotation,
   documentAnnotations,
@@ -46,7 +46,7 @@ export const DocumentAnnotationRepo = {
     await db.delete(documentAnnotations).where(eq(documentAnnotations.id, id));
   },
 
-  /** Transisi status massal (mark-sent / resolve / reopen) dibatasi owner, workspace, dan daftar id. */
+  /** Transisi status massal reguler dibatasi owner, workspace, dan daftar id. */
   async updateStatusByIds(
     db: DbOrTx,
     ownerUserId: string,
@@ -63,6 +63,28 @@ export const DocumentAnnotationRepo = {
           eq(documentAnnotations.ownerUserId, ownerUserId),
           eq(documentAnnotations.workspaceId, workspaceId),
           inArray(documentAnnotations.id, ids),
+        ),
+      );
+  },
+
+  /** Proposal boleh mengubah lifecycle anotasi, kecuali clear eksplisit oleh user. */
+  async updateProposalStatusByIds(
+    db: DbOrTx,
+    ownerUserId: string,
+    workspaceId: string,
+    ids: string[],
+    patch: Partial<NewDocumentAnnotation>,
+  ): Promise<void> {
+    if (ids.length === 0) return;
+    await db
+      .update(documentAnnotations)
+      .set(patch)
+      .where(
+        and(
+          eq(documentAnnotations.ownerUserId, ownerUserId),
+          eq(documentAnnotations.workspaceId, workspaceId),
+          inArray(documentAnnotations.id, ids),
+          ne(documentAnnotations.status, "dismissed"),
         ),
       );
   },
