@@ -1,3 +1,4 @@
+import type { ContextRef } from '@aqsha/chat-core';
 import type { ComposerAgentKind } from './agent-selection.svelte';
 
 /** Send-block notice (Slice 6.2) — billing return-union / cooldown rate-limit. */
@@ -14,11 +15,14 @@ export type ComposerNotice = {
  * PERSIST as pills (present only when the message has a mention; the agent gets clean `text`).
  * `command:"deep"` → run the deep-research Workflow (not a chat turn); `text` = the research question.
  * `attachmentIds` map EXACTLY onto the live user bubble (no time-window guessing).
+ * `contextRefs` = snapshot pin yang ikut terkirim — composer men-clear state pin SEBELUM `onSend`,
+ * jadi callback pasca-kirim (mis. mark-sent anotasi) harus membaca dari payload, bukan state.
  */
 export type ComposerSendPayload = {
 	text: string;
 	richText?: string;
 	clientContext?: string[];
+	contextRefs?: ContextRef[];
 	agentKind: ComposerAgentKind;
 	command?: 'deep';
 	attachmentIds?: string[];

@@ -81,6 +81,14 @@ export class ComposerMentions {
 		this.#selectionEpoch += 1;
 	}
 
+	/** Hapus satu pin selection berdasar identitas `contextRefKey` (back-prop hapus-chip generik). */
+	removeSelectionRefByKey(key: string): void {
+		const next = this.#selectionRefs.filter((ref) => contextRefKey(ref) !== key);
+		if (next.length === this.#selectionRefs.length) return;
+		this.#selectionRefs = next;
+		this.#selectionEpoch += 1;
+	}
+
 	removeSelectionArtifact(artifactId: string): void {
 		const next = this.#selectionRefs.filter(
 			(ref) => !(ref.kind === 'paper' && ref.artifactId === artifactId)

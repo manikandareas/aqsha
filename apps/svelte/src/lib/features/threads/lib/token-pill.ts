@@ -51,12 +51,12 @@ export const TOKEN_PILL_LABEL_CLASS = 'min-w-0 truncate';
 
 /**
  * Split the prefix glyph from the label text (`/matriks` → `/` + `matriks`, `@Skripsi` → `@` +
- * `Skripsi`, `❝ 3 blok` → `❝` + ` 3 blok`). A label with no known prefix → empty prefix (the prefix
- * span render is skipped).
+ * `Skripsi`, `❝ 3 blok` → `❝` + ` 3 blok`, `✎ judul: …` → `✎` + ` judul: …`). A label with no known
+ * prefix → empty prefix (the prefix span render is skipped).
  */
 export function splitTokenLabel(label: string): { prefix: string; text: string } {
 	const first = label.charAt(0);
-	if (first === '/' || first === '@' || first === '❝') {
+	if (first === '/' || first === '@' || first === '❝' || first === '✎') {
 		return { prefix: first, text: label.slice(1) };
 	}
 	return { prefix: '', text: label };

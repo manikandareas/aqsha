@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import type { ContextRef } from '@aqsha/chat-core';
 	import { useClerkContext } from 'svelte-clerk';
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { Spinner } from '$lib/components/ui/spinner';
@@ -28,7 +29,7 @@
 		activeThreadId: string | null;
 		workspaceId?: string | null;
 		getExtraClientContext?: () => string[];
-		onTurnSent?: (threadId: string) => void;
+		onTurnSent?: (threadId: string, sentContextRefs: ContextRef[]) => void;
 		onAgentSettled?: (threadId: string) => void;
 	} = $props();
 

@@ -33,8 +33,9 @@ type PreviewComponent = Component<
 			status: string;
 		}>;
 		activeAnnotationId?: string | null;
+		selectedAnnotationIds?: ReadonlySet<string>;
 		outlineTitles?: string[];
-		onAnnotate?: (draft: AnnotationDraft) => void;
+		onCreateAnnotation?: (draft: AnnotationDraft, note: string, elementLabel: string) => void;
 		onSelectAnnotation?: (id: string) => void;
 		onActiveHeading?: (index: number) => void;
 	},
@@ -62,17 +63,11 @@ export class DocumentWorkspaceRuntime {
 	#client = $state<TypstClient | null>(null);
 	#moduleLoadPromise: Promise<void> | null = null;
 	#workspaceId: () => string;
-	#save: (input: {
-		source: string;
-		baseVersion: number;
-	}) => Promise<SaveWorkspaceDocumentResult>;
+	#save: (input: { source: string; baseVersion: number }) => Promise<SaveWorkspaceDocumentResult>;
 
 	constructor(opts: {
 		workspaceId: () => string;
-		save: (input: {
-			source: string;
-			baseVersion: number;
-		}) => Promise<SaveWorkspaceDocumentResult>;
+		save: (input: { source: string; baseVersion: number }) => Promise<SaveWorkspaceDocumentResult>;
 	}) {
 		this.#workspaceId = opts.workspaceId;
 		this.#save = opts.save;

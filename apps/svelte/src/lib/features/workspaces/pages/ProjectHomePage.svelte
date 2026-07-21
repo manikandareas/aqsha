@@ -4,10 +4,13 @@
 	import { toast } from 'svelte-sonner';
 	import { useClerkContext } from 'svelte-clerk';
 	import { useQueryClient } from '@tanstack/svelte-query';
-	import { SvelteSet } from 'svelte/reactivity';
+	import {
+		buildDocumentAnnotationMentionLabel,
+		type ContextRef,
+		MAX_CONTEXT_ANNOTATIONS
+	} from '@aqsha/chat-core';
 	import * as Resizable from '@aqsha/ui-svelte/components/resizable';
 	import * as Sheet from '@aqsha/ui-svelte/components/sheet';
-	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
 	import * as ToggleGroup from '@aqsha/ui-svelte/components/toggle-group';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import { Button } from '@aqsha/ui-svelte/components/button';
@@ -22,7 +25,6 @@
 	} from '$lib/features/threads/state/composer-mentions.svelte';
 	import {
 		Icon,
-		ChevronDownIcon,
 		Code2Icon,
 		DownloadIcon,
 		FileTextIcon,
@@ -37,8 +39,6 @@
 	import { projectDisplayTitle } from '../types';
 	import TocOverlay from '$lib/features/document/components/TocOverlay.svelte';
 	import ProposalReviewCard from '$lib/features/document/components/ProposalReviewCard.svelte';
-	import AnnotationQueuePanel from '$lib/features/document/components/AnnotationQueuePanel.svelte';
-	import AnnotationComposerDialog from '$lib/features/document/components/AnnotationComposerDialog.svelte';
 	import {
 		insertSection,
 		moveSection,
@@ -46,7 +46,6 @@
 		renameSection
 	} from '$lib/features/document/lib/section-transforms';
 	import { DocumentWorkspaceRuntime } from '$lib/features/document/lib/document-workspace-runtime.svelte';
-	import { buildAnnotationClientContext } from '$lib/features/document/lib/annotation-context';
 	import type { AnnotationDraft } from '$lib/features/document/lib/annotation-selection';
 	import {
 		initialProjectActivation,
@@ -61,8 +60,6 @@
 		useExportDocx,
 		useWorkspaceAnnotations,
 		useCreateAnnotation,
-		useUpdateAnnotation,
-		useDeleteAnnotation,
 		useMarkAnnotationsSent,
 		usePendingProposal,
 		useAcceptProposal,
@@ -114,8 +111,6 @@
 		() => backgroundQueriesActive
 	);
 	const createAnnotation = useCreateAnnotation(() => workspaceId);
-	const updateAnnotation = useUpdateAnnotation(() => workspaceId);
-	const deleteAnnotation = useDeleteAnnotation(() => workspaceId);
 	const markSent = useMarkAnnotationsSent(() => workspaceId);
 	const proposal = usePendingProposal(
 		() => workspaceId,
@@ -187,48 +182,50 @@
 	}
 
 	// ── Anotasi ────────────────────────────────────────────────────────────
-	const selectedAnnotationIds = new SvelteSet<string>();
+	// Anotasi hidup sebagai chip di composer (selection channel), bukan antrian panel: buat dari
+	// mode anotasi preview → chip; hapus chip = batal ikut kirim (anotasi tetap `open` di server).
 	let activeAnnotationId = $state<string | null>(null);
 	let activeTocIndex = $state(0);
-	let pendingDraft = $state<AnnotationDraft | null>(null);
-	let queueOpen = $state(false);
-	const openAnnotationCount = $derived(
-		(annotations.data ?? []).filter((a) => a.status === 'open').length
+
+	const selectedAnnotationIds = $derived(
+		new Set(
+			mentions.selectionRefs.flatMap((r) =>
+				r.kind === 'document-annotation' ? [r.annotationId] : []
+			)
+		)
 	);
 
-	function onPreviewAnnotate(draft: AnnotationDraft): void {
-		pendingDraft = draft;
-	}
-
-	function submitAnnotation(note: string): void {
-		const draft = pendingDraft;
-		if (!draft) return;
-		pendingDraft = null;
+	function handleCreateAnnotation(draft: AnnotationDraft, note: string, elementLabel: string): void {
+		const pinned = mentions.selectionRefs.filter((r) => r.kind === 'document-annotation').length;
+		if (pinned >= MAX_CONTEXT_ANNOTATIONS) {
+			toast.error(`Maksimal ${MAX_CONTEXT_ANNOTATIONS} anotasi per pesan.`);
+			return;
+		}
 		createAnnotation.mutate(
 			{
-				kind: 'highlight',
+				kind: 'pin',
 				page: draft.page,
 				rects: draft.rects,
 				selectedText: draft.selectedText,
-				note: note || undefined
+				note
 			},
-			{ onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menyimpan anotasi.')) }
+			{
+				onSuccess: (a) => {
+					const selectedText = a.selectedText ?? draft.selectedText;
+					mentions.addSelectionRef({
+						kind: 'document-annotation',
+						workspaceId,
+						annotationId: a.id,
+						page: a.page,
+						selectedText,
+						note: a.note ?? note,
+						elementLabel,
+						label: buildDocumentAnnotationMentionLabel(elementLabel, selectedText)
+					});
+				},
+				onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menyimpan anotasi.'))
+			}
 		);
-	}
-
-	function toggleSelected(id: string): void {
-		if (selectedAnnotationIds.has(id)) selectedAnnotationIds.delete(id);
-		else selectedAnnotationIds.add(id);
-	}
-
-	function dismissAnnotation(id: string): void {
-		selectedAnnotationIds.delete(id);
-		updateAnnotation.mutate({ annotationId: id, status: 'dismissed' });
-	}
-
-	function removeAnnotation(id: string): void {
-		selectedAnnotationIds.delete(id);
-		deleteAnnotation.mutate(id);
 	}
 
 	function focusAnnotation(id: string): void {
@@ -237,18 +234,11 @@
 		if (target?.selectedText) previewRef?.scrollToHeading(target.selectedText);
 	}
 
-	function annotationContextParts(): string[] {
-		const chosen = (annotations.data ?? []).filter(
-			(a) => a.status === 'open' && selectedAnnotationIds.has(a.id)
+	function handleTurnSent(threadId: string, sentRefs: ContextRef[]): void {
+		const ids = sentRefs.flatMap((r) =>
+			r.kind === 'document-annotation' ? [r.annotationId] : []
 		);
-		if (chosen.length === 0) return [];
-		return [buildAnnotationClientContext({ annotations: chosen })];
-	}
-
-	function handleTurnSent(threadId: string): void {
-		const ids = [...selectedAnnotationIds];
 		if (ids.length === 0) return;
-		selectedAnnotationIds.clear();
 		markSent.mutate({ ids, threadId });
 	}
 
@@ -455,45 +445,11 @@
 {/snippet}
 
 {#snippet chatPanel()}
-	<!-- pl-3 sama dengan editorPanel — toolbar tidak bergeser saat ganti mode Chat|Editor. -->
-	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background pl-3">
-		{#if openAnnotationCount > 0}
-			<div class="shrink-0 border-b border-border px-3 py-1.5">
-				<Collapsible.Root open={queueOpen} onOpenChange={(v) => (queueOpen = v)}>
-					<Collapsible.Trigger
-						class="flex w-full items-center gap-2 rounded-md py-1 text-label text-muted-foreground transition-colors hover:text-foreground"
-					>
-						<Icon
-							icon={ChevronDownIcon}
-							class="size-3.5 transition-transform {queueOpen ? 'rotate-180' : ''}"
-						/>
-						<span class="font-medium">Anotasi ({openAnnotationCount})</span>
-						{#if selectedAnnotationIds.size > 0}
-							<span class="text-micro"
-								>· {selectedAnnotationIds.size} akan dikirim bersama pesan</span
-							>
-						{/if}
-					</Collapsible.Trigger>
-					<Collapsible.Content>
-						<div class="pb-2 pt-1">
-							<AnnotationQueuePanel
-								annotations={annotations.data ?? []}
-								selectedIds={selectedAnnotationIds}
-								onToggle={toggleSelected}
-								onDismiss={dismissAnnotation}
-								onDelete={removeAnnotation}
-								onFocus={focusAnnotation}
-							/>
-						</div>
-					</Collapsible.Content>
-				</Collapsible.Root>
-			</div>
-		{/if}
+	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
 		<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
 			<ProjectChatPane
 				{workspaceId}
 				leading={leftToggle}
-				getExtraClientContext={annotationContextParts}
 				onTurnSent={handleTurnSent}
 				onAgentSettled={handleAgentSettled}
 			/>
@@ -502,7 +458,7 @@
 {/snippet}
 
 {#snippet editorPanel()}
-	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background pl-3">
+	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
 		<PanelCardToolbar title={leftToggle} />
 		{#if proposal.data}
 			<div class="shrink-0 border-b border-border p-3">
@@ -620,9 +576,10 @@
 					svg={runtime.previewSvg}
 					annotations={annotations.data ?? []}
 					{activeAnnotationId}
+					{selectedAnnotationIds}
 					outlineTitles={runtime.outline.map((entry) => entry.title)}
-					onAnnotate={onPreviewAnnotate}
-					onSelectAnnotation={(id: string) => (activeAnnotationId = id)}
+					onCreateAnnotation={handleCreateAnnotation}
+					onSelectAnnotation={focusAnnotation}
 					onActiveHeading={(index: number) => (activeTocIndex = index)}
 				/>
 				<TocOverlay
@@ -743,11 +700,4 @@
 			</div>
 		</Sheet.Content>
 	</Sheet.Root>
-
-	<AnnotationComposerDialog
-		open={pendingDraft !== null}
-		excerpt={pendingDraft?.selectedText ?? null}
-		onSubmit={submitAnnotation}
-		onCancel={() => (pendingDraft = null)}
-	/>
 {/if}

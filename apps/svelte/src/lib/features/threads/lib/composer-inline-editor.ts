@@ -177,6 +177,14 @@ export function createContextChipElement(ref: ContextRef) {
 			span.dataset.blockIds = ref.blockIds.join(',');
 			span.dataset.excerpt = ref.excerpt;
 			break;
+		case 'document-annotation':
+			span.dataset.workspaceId = ref.workspaceId;
+			span.dataset.annotationId = ref.annotationId;
+			span.dataset.page = String(ref.page);
+			span.dataset.selectedText = ref.selectedText;
+			span.dataset.note = ref.note;
+			span.dataset.elementLabel = ref.elementLabel;
+			break;
 		default: {
 			// Exhaustiveness: a new ContextRef kind becomes a compile error here.
 			const _exhaustive: never = ref;
@@ -242,6 +250,22 @@ export function extractContextRefsFromEditor(root: HTMLElement): ContextRef[] {
 				artifactId,
 				blockIds,
 				excerpt: chip.dataset.excerpt ?? '',
+				label
+			});
+			return;
+		}
+		if (kind === 'document-annotation') {
+			const workspaceId = chip.dataset.workspaceId;
+			const annotationId = chip.dataset.annotationId;
+			if (!workspaceId || !annotationId) return;
+			push({
+				kind: 'document-annotation',
+				workspaceId,
+				annotationId,
+				page: Number(chip.dataset.page) || 1,
+				selectedText: chip.dataset.selectedText ?? '',
+				note: chip.dataset.note ?? '',
+				elementLabel: chip.dataset.elementLabel ?? 'paragraf',
 				label
 			});
 		}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import type { ContextRef } from '@aqsha/chat-core';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { useClerkContext } from 'svelte-clerk';
@@ -21,7 +22,7 @@
 		/** Rendered on the toolbar's left — the page's chat/editor panel toggle. */
 		leading?: Snippet;
 		getExtraClientContext?: () => string[];
-		onTurnSent?: (threadId: string) => void;
+		onTurnSent?: (threadId: string, sentContextRefs: ContextRef[]) => void;
 		onAgentSettled?: (threadId: string) => void;
 	} = $props();
 

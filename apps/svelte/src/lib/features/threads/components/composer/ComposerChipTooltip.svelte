@@ -15,7 +15,8 @@
 		paper: 'Paper',
 		'explore-paper': 'Paper Explore',
 		news: 'Berita',
-		'artifact-selection': 'Pilihan blok editor'
+		'artifact-selection': 'Pilihan blok editor',
+		'document-annotation': 'Anotasi dokumen'
 	};
 
 	type ChipTooltipContent = { title: string; description?: string };
@@ -29,6 +30,17 @@
 		const kind = el.dataset.kind ?? '';
 		const label = el.dataset.label ?? el.textContent ?? '';
 		const { text } = splitTokenLabel(label);
+		// Anotasi dokumen: detail lengkap (elemen + kutipan + catatan + halaman) dari dataset chip.
+		if (kind === 'document-annotation') {
+			const selectedText = (el.dataset.selectedText ?? '').replace(/\s+/g, ' ').trim();
+			const quote = selectedText.length > 160 ? `${selectedText.slice(0, 159)}…` : selectedText;
+			const note = (el.dataset.note ?? '').trim();
+			const pageInfo = `hal. ${el.dataset.page ?? '?'}`;
+			return {
+				title: `${el.dataset.elementLabel ?? 'anotasi'}: "${quote}"`,
+				description: note ? `Catatan: ${note} · ${pageInfo}` : `Anotasi dokumen · ${pageInfo}`
+			};
+		}
 		// Paper label = "workspace:title" — split so the full title becomes the main line.
 		if (kind === 'paper') {
 			const separator = text.indexOf(':');

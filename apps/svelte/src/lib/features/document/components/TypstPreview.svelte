@@ -2,22 +2,23 @@
 	import { untrack } from 'svelte';
 	import { browser } from '$app/environment';
 	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Icon, Loader2Icon, MinusIcon, PlusIcon, MessageSquareIcon } from '$lib/icons';
+	import { Icon, Loader2Icon, MinusIcon, PlusIcon, MessageSquarePlusIcon } from '$lib/icons';
 	import { normalizeHeadingText } from '../lib/outline';
 	import {
 		type AnnotationDraft,
 		type AnnotationRect,
 		type OverlayBox,
-		captureSelectionDraft,
 		overlayBoxes,
 		pageElements
 	} from '../lib/annotation-selection';
+	import { AnnotationAgentation } from '../lib/annotation-agentation.svelte';
+	import AnnotationModeLayer from './AnnotationModeLayer.svelte';
 
 	/**
 	 * Preview dokumen Typst: memasang SVG terseleksi yang sudah selesai di-compile dan dirender worker.
-	 * Seleksi teks → draft anotasi (`onAnnotate`). Sorotan anotasi digambar sebagai overlay
-	 * ternormalisasi. `svg` null (compile gagal total) mempertahankan
-	 * render terakhir supaya baca tak terlempar.
+	 * Mode anotasi (toggle kanan-bawah) → hover blok semantik → popover komentar inline
+	 * (`onCreateAnnotation`). Sorotan anotasi digambar sebagai overlay ternormalisasi.
+	 * `svg` null (compile gagal total) mempertahankan render terakhir supaya baca tak terlempar.
 	 */
 	type PreviewAnnotation = {
 		id: string;
@@ -30,16 +31,18 @@
 		svg,
 		annotations = [],
 		activeAnnotationId = null,
+		selectedAnnotationIds,
 		outlineTitles = [],
-		onAnnotate,
+		onCreateAnnotation,
 		onSelectAnnotation,
 		onActiveHeading
 	}: {
 		svg: string | null;
 		annotations?: PreviewAnnotation[];
 		activeAnnotationId?: string | null;
+		selectedAnnotationIds?: ReadonlySet<string>;
 		outlineTitles?: string[];
-		onAnnotate?: (draft: AnnotationDraft) => void;
+		onCreateAnnotation?: (draft: AnnotationDraft, note: string, elementLabel: string) => void;
 		onSelectAnnotation?: (id: string) => void;
 		onActiveHeading?: (index: number) => void;
 	} = $props();
@@ -53,11 +56,18 @@
 	let fitWidth = $state(0);
 	let zoom = $state(1);
 	let renderNonce = $state(0);
-	let overlayItems = $state<Array<{ id: string; active: boolean; boxes: OverlayBox[] }>>([]);
-	let selectionDraft = $state<AnnotationDraft | null>(null);
-	let pillPos = $state<{ left: number; top: number } | null>(null);
+	let overlayItems = $state<
+		Array<{ id: string; active: boolean; selected: boolean; boxes: OverlayBox[] }>
+	>([]);
 
 	const stageWidth = $derived(fitWidth > 0 ? Math.max(280, Math.round(fitWidth * zoom)) : 0);
+
+	const agentation = new AnnotationAgentation({
+		svgHost: () => svgHost,
+		stageEl: () => stageEl,
+		outlineTitles: () => outlineTitles,
+		onCreate: (draft, note, elementLabel) => onCreateAnnotation?.(draft, note, elementLabel)
+	});
 
 	// SVG null = compile gagal; pertahankan render terakhir agar pembaca tidak terlempar.
 	$effect(() => {
@@ -87,20 +97,25 @@
 		return () => ro.disconnect();
 	});
 
-	// Seleksi teks → draft anotasi. Listener manual (bukan handler inline) supaya elemen baca tetap
-	// semantik dokumen tanpa role interaktif palsu.
+	// Listener manual (bukan handler inline) supaya elemen baca tetap semantik dokumen tanpa
+	// role interaktif palsu. pointermove/click menghidupkan mode anotasi; controller sendiri
+	// yang menolak event saat mode off.
 	$effect(() => {
 		if (!browser || !scrollEl) return;
 		const el = scrollEl;
-		el.addEventListener('pointerdown', onPointerDown);
-		el.addEventListener('pointerup', onPointerUp);
-		el.addEventListener('scroll', clearSelectionPill, { passive: true });
+		const onMove = (e: PointerEvent) => agentation.onPointerMove(e);
+		const onLeave = () => agentation.onPointerLeave();
+		const onClick = (e: MouseEvent) => agentation.onStageClick(e);
+		el.addEventListener('pointermove', onMove, { passive: true });
+		el.addEventListener('pointerleave', onLeave);
+		el.addEventListener('click', onClick, true);
 		el.addEventListener('scroll', onScrollActiveHeading, { passive: true });
 		return () => {
-			el.removeEventListener('pointerdown', onPointerDown);
-			el.removeEventListener('pointerup', onPointerUp);
-			el.removeEventListener('scroll', clearSelectionPill);
+			el.removeEventListener('pointermove', onMove);
+			el.removeEventListener('pointerleave', onLeave);
+			el.removeEventListener('click', onClick, true);
 			el.removeEventListener('scroll', onScrollActiveHeading);
+			agentation.dispose();
 		};
 	});
 
@@ -168,12 +183,13 @@
 		}
 	}
 
-	// Jangan hapus pil saat pointerdown mengenai pil-nya sendiri — kalau tidak, pil hilang sebelum
-	// klik commit-nya terdaftar (pil berada di dalam container yang sama).
-	function onPointerDown(e: PointerEvent): void {
-		if ((e.target as Element | null)?.closest?.('[data-annotation-pill]')) return;
-		clearSelectionPill();
-	}
+	// Geometri fragmen berubah saat render/zoom/resize → indeks blok hover di-invalidasi.
+	$effect(() => {
+		void renderNonce;
+		void stageWidth;
+		if (!browser) return;
+		agentation.invalidateIndex();
+	});
 
 	// Hitung ulang overlay sorotan setelah render / zoom / ubah anotasi.
 	$effect(() => {
@@ -181,6 +197,7 @@
 		void zoom;
 		void annotations;
 		void activeAnnotationId;
+		void selectedAnnotationIds;
 		if (!browser) return;
 		requestAnimationFrame(refreshOverlays);
 	});
@@ -190,42 +207,20 @@
 			overlayItems = [];
 			return;
 		}
-		const items: Array<{ id: string; active: boolean; boxes: OverlayBox[] }> = [];
+		const items: typeof overlayItems = [];
 		for (const a of annotations) {
 			if (a.status === 'resolved' || a.status === 'dismissed') continue;
 			const boxes = overlayBoxes(svgHost, stageEl, a.page, a.rects);
-			if (boxes.length > 0) items.push({ id: a.id, active: a.id === activeAnnotationId, boxes });
+			if (boxes.length > 0) {
+				items.push({
+					id: a.id,
+					active: a.id === activeAnnotationId,
+					selected: selectedAnnotationIds?.has(a.id) ?? false,
+					boxes
+				});
+			}
 		}
 		overlayItems = items;
-	}
-
-	function clearSelectionPill(): void {
-		selectionDraft = null;
-		pillPos = null;
-	}
-
-	function onPointerUp(): void {
-		if (!svgHost || !stageEl) return;
-		const draft = captureSelectionDraft(svgHost);
-		if (!draft) {
-			clearSelectionPill();
-			return;
-		}
-		const sel = window.getSelection();
-		const rects = sel && sel.rangeCount > 0 ? Array.from(sel.getRangeAt(0).getClientRects()) : [];
-		const last = rects[rects.length - 1];
-		const stageBox = stageEl.getBoundingClientRect();
-		pillPos = last
-			? { left: last.right - stageBox.left, top: last.bottom - stageBox.top + 8 }
-			: null;
-		selectionDraft = draft;
-	}
-
-	function commitAnnotation(): void {
-		if (!selectionDraft) return;
-		onAnnotate?.(selectionDraft);
-		clearSelectionPill();
-		window.getSelection()?.removeAllRanges();
 	}
 
 	function setZoom(next: number): void {
@@ -281,7 +276,13 @@
 </script>
 
 <div class="relative flex min-h-0 flex-1 flex-col bg-paper-rail/40">
-	<div bind:this={scrollEl} class="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-6">
+	<div
+		bind:this={scrollEl}
+		class={[
+			'min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-6',
+			{ 'cursor-crosshair': agentation.enabled }
+		]}
+	>
 		{#if status === 'loading'}
 			<div
 				class="flex min-h-[280px] items-center justify-center gap-2 text-sm text-muted-foreground"
@@ -296,7 +297,10 @@
 		>
 			<div
 				bind:this={svgHost}
-				class="typst-preview-svg overflow-hidden rounded-md border border-line bg-white"
+				class={[
+					'typst-preview-svg overflow-hidden rounded-md border border-line bg-white',
+					{ 'select-none': agentation.enabled }
+				]}
 			></div>
 
 			<!-- Overlay sorotan anotasi. -->
@@ -305,9 +309,11 @@
 					<button
 						type="button"
 						aria-label="Buka anotasi"
-						class={`absolute rounded-[3px] transition-colors ${
-							item.active ? 'bg-lemon/50 ring-2 ring-lemon' : 'bg-lemon/25 hover:bg-lemon/40'
-						}`}
+						class={[
+							'absolute z-10 rounded-[3px] transition-colors',
+							item.active ? 'bg-lemon/50 ring-2 ring-lemon' : 'bg-lemon/25 hover:bg-lemon/40',
+							item.selected && 'ring-2 ring-mint'
+						]}
 						style:left={`${box.left}px`}
 						style:top={`${box.top}px`}
 						style:width={`${box.width}px`}
@@ -317,24 +323,7 @@
 				{/each}
 			{/each}
 
-			<!-- Pil "tambah catatan" muncul di ujung seleksi teks. -->
-			{#if selectionDraft && pillPos}
-				<div
-					data-annotation-pill
-					class="absolute z-20"
-					style:left={`${pillPos.left}px`}
-					style:top={`${pillPos.top}px`}
-				>
-					<Button
-						type="button"
-						size="sm"
-						class="gap-1.5 shadow-soft-card"
-						onclick={commitAnnotation}
-					>
-						<Icon icon={MessageSquareIcon} class="size-3.5" /> Tambah catatan
-					</Button>
-				</div>
-			{/if}
+			<AnnotationModeLayer {agentation} {svgHost} {stageEl} {scrollEl} />
 		</div>
 	</div>
 
@@ -371,6 +360,26 @@
 				onclick={() => setZoom(zoom + 0.2)}
 			>
 				<Icon icon={PlusIcon} class="size-4" />
+			</Button>
+		</div>
+
+		<!-- Toggle mode anotasi (gaya agentation): hover blok dokumen → klik → catatan inline. -->
+		<div class="absolute right-4 bottom-4 z-30" data-annotation-ui>
+			<Button
+				type="button"
+				size="icon"
+				variant="outline"
+				aria-label={agentation.enabled ? 'Matikan mode anotasi' : 'Nyalakan mode anotasi'}
+				aria-pressed={agentation.enabled}
+				class={[
+					'rounded-full border-2',
+					agentation.enabled
+						? 'border-mint-strong bg-mint text-mint-foreground hover:bg-mint'
+						: 'bg-card'
+				]}
+				onclick={() => agentation.toggle()}
+			>
+				<Icon icon={MessageSquarePlusIcon} class="size-4" />
 			</Button>
 		</div>
 	{/if}

@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
+	import type { ContextRef } from '@aqsha/chat-core';
 	import type { StatsGroup } from '@aqsha/chat-core/stats-viz';
 	import { queryKeys } from '$lib/query';
 	import {
@@ -68,8 +69,12 @@
 		ambientWorkspaceId?: string | null;
 		/** Konteks tambahan yang digabung ke tiap kirim (mis. antrian anotasi bab). */
 		getExtraClientContext?: () => string[];
-		/** Dipanggil segera setelah turn berangkat — antrian ikut turn ini, lepas dari hasil stream. */
-		onTurnSent?: (threadId: string) => void;
+		/**
+		 * Dipanggil segera setelah turn berangkat — lepas dari hasil stream. `sentContextRefs` =
+		 * snapshot pin yang ikut turn ini (composer men-clear state-nya sebelum callback jalan),
+		 * dipakai mis. untuk mark-sent anotasi dokumen.
+		 */
+		onTurnSent?: (threadId: string, sentContextRefs: ContextRef[]) => void;
 		/** Older-history pager owned by the shell; null when the surface has no persisted timeline. */
 		history?: ThreadHistoryControls | null;
 	} = $props();
@@ -192,7 +197,7 @@
 				? agent.sendDeep(payload.text, opts)
 				: agent.send(payload.text, opts);
 		// Fired immediately: the queue rides this turn; stream success/failure doesn't change "sent".
-		onTurnSent?.(threadId);
+		onTurnSent?.(threadId, payload.contextRefs ?? []);
 		void run.then(() => {
 			void qc.invalidateQueries({ queryKey: queryKeys.threads.sendStatus('normal_chat') });
 			void qc.invalidateQueries({ queryKey: queryKeys.threads.sendStatus('deep_research') });

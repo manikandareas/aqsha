@@ -6,6 +6,7 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import {
+		buildDocumentAnnotationClientContext,
 		type ContextRef,
 		contextRefKey,
 		DEEP_COMMAND_ID,
@@ -174,16 +175,15 @@
 		lastSeed = nextSeed;
 	});
 
-	// Two-way sync: a selection pill removed by the user in the editor → deselect the library card. Only
-	// fires from editor events (not programmatic injection), so a selected `paper` ref gone from `next`
-	// was genuinely removed by the user.
+	// Two-way sync: a selection pill removed by the user in the editor → drop it from the selection
+	// channel (deselects the library card / annotation highlight). Only fires from editor events (not
+	// programmatic injection), so a selection ref gone from `next` was genuinely removed by the user.
 	function handleContextRefsChange(next: ContextRef[]): void {
 		if (mentions.selectionRefs.length > 0) {
 			const nextKeys = new Set(next.map(contextRefKey));
 			for (const ref of mentions.selectionRefs) {
-				if (ref.kind === 'paper' && !nextKeys.has(contextRefKey(ref))) {
-					mentions.removeSelectionArtifact(ref.artifactId);
-				}
+				const key = contextRefKey(ref);
+				if (!nextKeys.has(key)) mentions.removeSelectionRefByKey(key);
 			}
 		}
 		contextRefs = next;
@@ -288,24 +288,47 @@
 		}
 
 		if (contextRefs.length > 0) {
-			const { workspaceIds, artifactIds, paperKeys, feedItemIds, workspaceCitations, selections } =
-				splitContextRefs(contextRefs);
-			try {
-				const hydrated = await hydrate.mutateAsync({
-					workspaceIds,
-					artifactIds,
-					paperKeys,
-					feedItemIds,
-					workspaceCitations,
-					selections
-				});
-				if (hydrated.note) parts.push(hydrated.note);
-			} catch {
-				// Hydrate failure (e.g. network) → send without the context note rather than block.
+			const {
+				workspaceIds,
+				artifactIds,
+				paperKeys,
+				feedItemIds,
+				workspaceCitations,
+				selections,
+				documentAnnotations
+			} = splitContextRefs(contextRefs);
+			// Chip anotasi membawa data lengkap → konteksnya diformat lokal, tanpa hydrate server.
+			if (documentAnnotations.length > 0) {
+				parts.push(buildDocumentAnnotationClientContext(documentAnnotations));
+			}
+			const needsHydrate =
+				workspaceIds.length +
+					artifactIds.length +
+					paperKeys.length +
+					feedItemIds.length +
+					workspaceCitations.length +
+					selections.length >
+				0;
+			if (needsHydrate) {
+				try {
+					const hydrated = await hydrate.mutateAsync({
+						workspaceIds,
+						artifactIds,
+						paperKeys,
+						feedItemIds,
+						workspaceCitations,
+						selections
+					});
+					if (hydrated.note) parts.push(hydrated.note);
+				} catch {
+					// Hydrate failure (e.g. network) → send without the context note rather than block.
+				}
 			}
 		}
 
 		const attachmentIds = attachments.map((a) => a.artifactId);
+		// Snapshot pin SEBELUM clearing — callback pasca-kirim (mark-sent anotasi) membacanya dari payload.
+		const sentRefs = contextRefs;
 		content = '';
 		richContent = '';
 		commands = [];
@@ -317,6 +340,7 @@
 			text: displayText,
 			richText: displayMarked.includes(MENTION_MARKER_OPEN) ? displayMarked : undefined,
 			clientContext: parts.length > 0 ? parts : undefined,
+			contextRefs: sentRefs.length > 0 ? sentRefs : undefined,
 			agentKind: agentSelection.agentKind,
 			command,
 			attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined
