@@ -5,6 +5,7 @@
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { Icon, SparklesIcon, AlertCircleIcon } from '$lib/icons';
 	import type { PendingProposalView, ProposalHunk, TypstCompileError } from '../api';
+	import { proposalHunkLabel } from '../lib/proposal-hunk-label';
 
 	/**
 	 * Kartu tinjau usulan suntingan Astra: diff per hunk dengan checkbox terima/tolak per segmen.
@@ -13,16 +14,22 @@
 	 */
 	let {
 		proposal,
+		source,
 		accepting,
 		acceptErrors,
 		onAccept,
-		onReject
+		onReject,
+		onExitReview,
+		onResubmit
 	}: {
 		proposal: NonNullable<PendingProposalView>;
+		source: string;
 		accepting: boolean;
 		acceptErrors: TypstCompileError[] | null;
 		onAccept: (acceptedHunkIndexes: number[] | undefined) => void;
 		onReject: () => void;
+		onExitReview: () => void;
+		onResubmit?: () => void;
 	} = $props();
 
 	// Indeks hunk yang TIDAK dicentang — kosong = terima utuh (fast-path tanpa compile ulang).
@@ -108,7 +115,7 @@
 						bind:checked={() => !deselected.has(hunk.index), (v) => toggleHunk(hunk.index, v)}
 						disabled={proposal.isStale || accepting}
 					/>
-					Baris {hunk.oldStart}–{hunk.oldStart + Math.max(hunk.oldLines, 1) - 1}
+					{proposalHunkLabel(source, hunk)}
 					{#if deselected.has(hunk.index)}
 						<span class="ml-auto">tidak diterapkan</span>
 					{/if}
@@ -151,16 +158,22 @@
 	{/if}
 
 	<div class="flex justify-end gap-2">
-		<Button type="button" variant="outline" onclick={onReject}>Tolak</Button>
-		<Button
-			type="button"
-			disabled={proposal.isStale || accepting || (total > 0 && selectedCount === 0)}
-			onclick={handleAccept}
-		>
-			{#if accepting}
-				<Spinner class="size-4" />
-			{/if}
-			{total > 1 ? `Terima (${selectedCount}/${total})` : 'Terima'}
-		</Button>
+		{#if proposal.isStale}
+			<Button type="button" variant="outline" onclick={onExitReview}>Kembali menyunting</Button>
+			<Button type="button" variant="outline" onclick={onReject}>Tolak</Button>
+			<Button type="button" onclick={() => onResubmit?.()}>Minta Astra susun ulang</Button>
+		{:else}
+			<Button type="button" variant="outline" onclick={onReject}>Tolak</Button>
+			<Button
+				type="button"
+				disabled={accepting || (total > 0 && selectedCount === 0)}
+				onclick={handleAccept}
+			>
+				{#if accepting}
+					<Spinner class="size-4" />
+				{/if}
+				{total > 1 ? `Terima (${selectedCount}/${total})` : 'Terima'}
+			</Button>
+		{/if}
 	</div>
 </div>

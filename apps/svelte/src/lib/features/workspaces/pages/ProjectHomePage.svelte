@@ -127,9 +127,10 @@
 		workspaceId: () => workspaceId,
 		save: (input) => saveDocument.mutateAsync(input)
 	});
-	let editorRef = $state<{ applyUserEdit(next: string): void; scrollToLine(line: number): void } | null>(
-		null
-	);
+	let editorRef = $state<{
+		applyUserEdit(next: string): void;
+		scrollToLine(line: number): void;
+	} | null>(null);
 	let previewRef = $state<{ scrollToHeading(title: string): void } | null>(null);
 
 	$effect(() => {
@@ -197,7 +198,11 @@
 		)
 	);
 
-	function handleCreateAnnotation(draft: AnnotationDraft, note: string, elementLabel: string): void {
+	function handleCreateAnnotation(
+		draft: AnnotationDraft,
+		note: string,
+		elementLabel: string
+	): void {
 		const canAddToComposer =
 			mentions.selectionRefs.filter((r) => r.kind === 'document-annotation').length <
 			MAX_CONTEXT_ANNOTATIONS;
@@ -241,9 +246,7 @@
 	}
 
 	function handleTurnSent(threadId: string, sentRefs: ContextRef[]): void {
-		const ids = sentRefs.flatMap((r) =>
-			r.kind === 'document-annotation' ? [r.annotationId] : []
-		);
+		const ids = sentRefs.flatMap((r) => (r.kind === 'document-annotation' ? [r.annotationId] : []));
 		if (ids.length === 0) return;
 		markSent.mutate({ ids, threadId });
 	}
@@ -256,6 +259,23 @@
 
 	// ── Proposal ─────────────────────────────────────────────────────────────
 	let proposalAcceptErrors = $state<TypstCompileError[] | null>(null);
+	let reviewingProposalId = $state<string | null>(null);
+	const proposalHunkCount = $derived(proposal.data?.hunks.length ?? 0);
+	const reviewingProposal = $derived(
+		reviewingProposalId !== null && reviewingProposalId === proposal.data?.id
+	);
+
+	function beginProposalReview(): void {
+		const current = proposal.data;
+		if (!current) return;
+		reviewingProposalId = current.id;
+		selectLeftMode('editor');
+	}
+
+	function exitProposalReview(): void {
+		reviewingProposalId = null;
+		proposalAcceptErrors = null;
+	}
 
 	function handleAcceptProposal(acceptedHunkIndexes: number[] | undefined): void {
 		const p = proposal.data;
@@ -267,6 +287,7 @@
 				onSuccess: (res) => {
 					if (res.status === 'accepted') {
 						toast.success('Suntingan diterapkan.');
+						exitProposalReview();
 						void reloadFromServer();
 					} else if (res.status === 'compile_error') {
 						proposalAcceptErrors = res.compileErrors;
@@ -285,7 +306,22 @@
 		if (!p) return;
 		proposalAcceptErrors = null;
 		rejectProposal.mutate(p.id, {
+			onSuccess: () => exitProposalReview(),
 			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menolak usulan.'))
+		});
+	}
+
+	function requestProposalResubmit(): void {
+		const current = proposal.data;
+		if (!current) return;
+		rejectProposal.mutate(current.id, {
+			onSuccess: () => {
+				exitProposalReview();
+				mentions.setComposerDraft(current.resubmitInstruction || current.summary);
+				selectLeftMode('chat');
+			},
+			onError: (error) =>
+				toast.error(readableApiErrorMessage(error, 'Gagal menyiapkan usulan ulang.'))
 		});
 	}
 
@@ -408,12 +444,10 @@
 				onfocus={() => runtime.preloadModules()}
 			>
 				<Icon icon={Code2Icon} class="size-3" /> Editor
-				{#if proposal.data}
-					<span
-						aria-hidden="true"
-						class="ml-1 size-1.5 rounded-full bg-primary"
-						title="Usulan Astra menunggu"
-					></span>
+				{#if proposalHunkCount > 0}
+					<span class="rounded-full bg-primary px-1.5 text-micro leading-4 text-primary-foreground"
+						>{proposalHunkCount}</span
+					>
 				{/if}
 			</ToggleGroup.Item>
 		</ToggleGroup.Root>
@@ -437,6 +471,11 @@
 				onfocus={() => runtime.preloadModules()}
 			>
 				<Icon icon={Code2Icon} class="size-3" /> Editor
+				{#if proposalHunkCount > 0}
+					<span class="rounded-full bg-primary px-1.5 text-micro leading-4 text-primary-foreground"
+						>{proposalHunkCount}</span
+					>
+				{/if}
 			</ToggleGroup.Item>
 			<ToggleGroup.Item
 				value="preview"
@@ -466,63 +505,67 @@
 {#snippet editorPanel()}
 	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
 		<PanelCardToolbar title={leftToggle} />
-		{#if proposal.data}
-			<div class="shrink-0 border-b border-border p-3">
+		{#if reviewingProposal && proposal.data}
+			<div class="min-h-0 flex-1 overflow-y-auto p-3">
 				<ProposalReviewCard
 					proposal={proposal.data}
+					source={proposal.data.currentSource}
 					accepting={acceptProposal.isPending}
 					acceptErrors={proposalAcceptErrors}
 					onAccept={handleAcceptProposal}
 					onReject={handleRejectProposal}
+					onExitReview={exitProposalReview}
+					onResubmit={requestProposalResubmit}
 				/>
 			</div>
-		{/if}
-		{#if runtime.autosave?.status === 'stale'}
-			<div
-				class="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-lemon/20 px-3 py-2 text-label"
-				role="status"
-			>
-				<span>Sumber berubah di tempat lain. Muat ulang sebelum menyunting.</span>
-				<Button type="button" size="sm" variant="secondary" onclick={reloadFromServer}>
-					Muat ulang
-				</Button>
-			</div>
-		{/if}
-		<div class="min-h-0 flex-1">
-			{#if runtime.loadError || runtime.previewError || documentQuery.isError}
-				<div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-					<p class="text-sm text-destructive">
-						{runtime.loadError ?? 'Dokumen gagal dimuat.'}
-					</p>
-					<Button type="button" size="sm" variant="outline" onclick={retryDocumentRuntime}>
-						Coba lagi
+		{:else}
+			{#if runtime.autosave?.status === 'stale'}
+				<div
+					class="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-lemon/20 px-3 py-2 text-label"
+					role="status"
+				>
+					<span>Sumber berubah di tempat lain. Muat ulang sebelum menyunting.</span>
+					<Button type="button" size="sm" variant="secondary" onclick={reloadFromServer}>
+						Muat ulang
 					</Button>
 				</div>
-			{:else if !documentQuery.isSuccess || !runtime.Editor}
-				<div class="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-					<Spinner class="size-4" /> Menyiapkan editor…
-				</div>
-			{:else}
-				{@const Editor = runtime.Editor}
-				<Editor
-					bind:this={editorRef}
-					value={runtime.source}
-					docKey={runtime.docKey}
-					editable={runtime.editable}
-					diagnostics={runtime.diagnostics}
-					onChange={(next) => runtime.onEditorChange(next)}
-				/>
 			{/if}
-		</div>
-		{#if runtime.saveStatusLabel}
-			<div
-				class="shrink-0 border-t border-border px-3 py-1 text-right text-micro text-muted-foreground"
-				aria-live={runtime.autosave?.status === 'error' || runtime.autosave?.status === 'stale'
-					? 'assertive'
-					: 'polite'}
-			>
-				{runtime.saveStatusLabel}
+			<div class="min-h-0 flex-1">
+				{#if runtime.loadError || runtime.previewError || documentQuery.isError}
+					<div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+						<p class="text-sm text-destructive">
+							{runtime.loadError ?? 'Dokumen gagal dimuat.'}
+						</p>
+						<Button type="button" size="sm" variant="outline" onclick={retryDocumentRuntime}>
+							Coba lagi
+						</Button>
+					</div>
+				{:else if !documentQuery.isSuccess || !runtime.Editor}
+					<div class="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+						<Spinner class="size-4" /> Menyiapkan editor…
+					</div>
+				{:else}
+					{@const Editor = runtime.Editor}
+					<Editor
+						bind:this={editorRef}
+						value={runtime.source}
+						docKey={runtime.docKey}
+						editable={runtime.editable}
+						diagnostics={runtime.diagnostics}
+						onChange={(next) => runtime.onEditorChange(next)}
+					/>
+				{/if}
 			</div>
+			{#if runtime.saveStatusLabel}
+				<div
+					class="shrink-0 border-t border-border px-3 py-1 text-right text-micro text-muted-foreground"
+					aria-live={runtime.autosave?.status === 'error' || runtime.autosave?.status === 'stale'
+						? 'assertive'
+						: 'polite'}
+				>
+					{runtime.saveStatusLabel}
+				</div>
+			{/if}
 		{/if}
 	</div>
 {/snippet}
@@ -584,6 +627,8 @@
 					{activeAnnotationId}
 					{selectedAnnotationIds}
 					outlineTitles={runtime.outline.map((entry) => entry.title)}
+					{proposalHunkCount}
+					onReviewProposal={beginProposalReview}
 					onCreateAnnotation={handleCreateAnnotation}
 					onDismissAnnotations={async (ids) => {
 						await dismissAnnotations.mutateAsync({ ids });
@@ -627,7 +672,10 @@
 		<p>Proyek tidak ditemukan.</p>
 	</div>
 {:else}
-	<div bind:this={host} class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background md:h-[calc(100svh-1rem)]">
+	<div
+		bind:this={host}
+		class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background md:h-[calc(100svh-1rem)]"
+	>
 		{#if !measured}
 			<div class="flex min-h-0 flex-1 items-center justify-center gap-2 text-muted-foreground">
 				<Spinner class="size-4" />

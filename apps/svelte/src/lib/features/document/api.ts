@@ -24,15 +24,16 @@ export type SaveWorkspaceDocumentResult =
 	| { status: 'stale_write'; currentVersion: number };
 
 /** Sumber Typst proyek (null = belum pernah ditulis; lazy-create saat save pertama). */
-export function useWorkspaceDocument(workspaceId: () => string, enabled: () => boolean = () => true) {
+export function useWorkspaceDocument(
+	workspaceId: () => string,
+	enabled: () => boolean = () => true
+) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.workspaces.document(workspaceId()),
 		enabled: enabled() && Boolean(workspaceId()),
 		queryFn: async () =>
-			unwrap(
-				await api.workspaces({ id: workspaceId() }).document.get()
-			) as WorkspaceDocumentPayload
+			unwrap(await api.workspaces({ id: workspaceId() }).document.get()) as WorkspaceDocumentPayload
 	}));
 }
 
@@ -56,6 +57,7 @@ export function useSaveWorkspaceDocument(workspaceId: () => string) {
 			if (result.status !== 'saved') return;
 			void qc.invalidateQueries({ queryKey: queryKeys.citations.bibliography(workspaceId()) });
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.documentBib(workspaceId()) });
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.proposals(workspaceId()) });
 		}
 	}));
 }
@@ -131,9 +133,7 @@ export function useCreateAnnotation(workspaceId: () => string) {
 			selectedText?: string;
 			note?: string;
 		}) =>
-			unwrap(
-				await api.workspaces({ id: workspaceId() }).annotations.post(input)
-			) as AnnotationView,
+			unwrap(await api.workspaces({ id: workspaceId() }).annotations.post(input)) as AnnotationView,
 		onSuccess: () => {
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.annotations(workspaceId()) });
 		}
@@ -180,9 +180,9 @@ export function useDismissWorkspaceAnnotations(workspaceId: () => string) {
 	const qc = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: async (input: { ids: string[] }) =>
-			unwrap(
-				await api.workspaces({ id: workspaceId() }).annotations.dismiss.post(input)
-			) as { ok: true },
+			unwrap(await api.workspaces({ id: workspaceId() }).annotations.dismiss.post(input)) as {
+				ok: true;
+			},
 		onSuccess: () => {
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.annotations(workspaceId()) });
 		}
@@ -194,9 +194,9 @@ export function useMarkAnnotationsSent(workspaceId: () => string) {
 	const qc = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: async (input: { ids: string[]; threadId: string; messageId?: string }) =>
-			unwrap(
-				await api.workspaces({ id: workspaceId() }).annotations['mark-sent'].post(input)
-			) as { ok: true },
+			unwrap(await api.workspaces({ id: workspaceId() }).annotations['mark-sent'].post(input)) as {
+				ok: true;
+			},
 		onSuccess: () => {
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.annotations(workspaceId()) });
 		}
@@ -227,6 +227,7 @@ export type PendingProposalView = {
 	baseVersion: number;
 	proposedSource: string;
 	summary: string;
+	resubmitInstruction: string;
 	annotationIds: string[];
 	threadId: string | null;
 	createdAt: number;
@@ -241,10 +242,7 @@ export type AcceptProposalResult =
 	| { status: 'stale'; currentVersion: number }
 	| { status: 'compile_error'; compileErrors: TypstCompileError[] };
 
-export function usePendingProposal(
-	workspaceId: () => string,
-	enabled: () => boolean = alwaysTrue
-) {
+export function usePendingProposal(workspaceId: () => string, enabled: () => boolean = alwaysTrue) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.workspaces.proposals(workspaceId()),
@@ -264,7 +262,9 @@ export function useAcceptProposal(workspaceId: () => string) {
 					.workspaces({ id: workspaceId() })
 					.proposals({ pid: input.proposalId })
 					.accept.post(
-						input.acceptedHunkIndexes ? { acceptedHunkIndexes: input.acceptedHunkIndexes } : undefined
+						input.acceptedHunkIndexes
+							? { acceptedHunkIndexes: input.acceptedHunkIndexes }
+							: undefined
 					)
 			) as AcceptProposalResult,
 		onSuccess: () => {

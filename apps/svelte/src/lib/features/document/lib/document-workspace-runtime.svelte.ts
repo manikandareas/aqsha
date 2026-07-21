@@ -39,6 +39,8 @@ type PreviewComponent = Component<
 		onSelectAnnotation?: (id: string) => void;
 		onActiveHeading?: (index: number) => void;
 		onDismissAnnotations?: (ids: string[]) => Promise<void>;
+		proposalHunkCount?: number;
+		onReviewProposal?: () => void;
 	},
 	PreviewHandle
 >;

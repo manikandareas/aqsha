@@ -37,7 +37,9 @@
 		onCreateAnnotation,
 		onSelectAnnotation,
 		onActiveHeading,
-		onDismissAnnotations
+		onDismissAnnotations,
+		proposalHunkCount = 0,
+		onReviewProposal
 	}: {
 		svg: string | null;
 		annotations?: PreviewAnnotation[];
@@ -48,6 +50,8 @@
 		onSelectAnnotation?: (id: string) => void;
 		onActiveHeading?: (index: number) => void;
 		onDismissAnnotations?: (ids: string[]) => Promise<void>;
+		proposalHunkCount?: number;
+		onReviewProposal?: () => void;
 	} = $props();
 
 	const MAX_WIDTH = 860;
@@ -284,6 +288,14 @@
 </script>
 
 <div class="relative flex min-h-0 flex-1 flex-col bg-paper-rail/40">
+	{#if proposalHunkCount > 0}
+		<div
+			class="m-3 flex items-center justify-between gap-3 rounded-lg border-2 border-border bg-card px-3 py-2"
+		>
+			<span class="text-label">Astra mengusulkan {proposalHunkCount} bagian.</span>
+			<Button type="button" size="sm" onclick={() => onReviewProposal?.()}>Tinjau usulan</Button>
+		</div>
+	{/if}
 	<div
 		bind:this={scrollEl}
 		class={[
