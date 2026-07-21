@@ -40,6 +40,10 @@
 	import TocOverlay from '$lib/features/document/components/TocOverlay.svelte';
 	import ProposalReviewCard from '$lib/features/document/components/ProposalReviewCard.svelte';
 	import {
+		ProposalReviewInteractions,
+		setProposalReviewInteractions
+	} from '$lib/features/document/lib/proposal-review-interactions.svelte';
+	import {
 		insertSection,
 		moveSection,
 		removeSection,
@@ -93,6 +97,8 @@
 
 	const mentions = new ComposerMentions();
 	setComposerMentions(mentions);
+	const proposalReviewInteractions = new ProposalReviewInteractions();
+	setProposalReviewInteractions(proposalReviewInteractions);
 
 	const workspace = useWorkspace(
 		() => workspaceId,
@@ -122,6 +128,19 @@
 	const rejectProposal = useRejectProposal(() => workspaceId);
 	const exportPdf = useExportPdf(() => workspaceId);
 	const exportDocx = useExportDocx(() => workspaceId);
+
+	$effect(() => {
+		const current = proposal.data;
+		proposalReviewInteractions.set(
+			current
+				? {
+					proposalId: current.id,
+					hunkCount: current.hunks.length,
+					review: beginProposalReview
+				}
+				: null
+		);
+	});
 
 	const runtime = new DocumentWorkspaceRuntime({
 		workspaceId: () => workspaceId,
@@ -286,6 +305,7 @@
 			{
 				onSuccess: (res) => {
 					if (res.status === 'accepted') {
+						proposalReviewInteractions.set(null);
 						toast.success('Suntingan diterapkan.');
 						exitProposalReview();
 						void reloadFromServer();
@@ -306,7 +326,10 @@
 		if (!p) return;
 		proposalAcceptErrors = null;
 		rejectProposal.mutate(p.id, {
-			onSuccess: () => exitProposalReview(),
+			onSuccess: () => {
+				proposalReviewInteractions.set(null);
+				exitProposalReview();
+			},
 			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menolak usulan.'))
 		});
 	}
@@ -316,6 +339,7 @@
 		if (!current) return;
 		rejectProposal.mutate(current.id, {
 			onSuccess: () => {
+				proposalReviewInteractions.set(null);
 				exitProposalReview();
 				mentions.setComposerDraft(current.resubmitInstruction || current.summary);
 				selectLeftMode('chat');

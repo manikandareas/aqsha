@@ -121,12 +121,16 @@ export type ArtifactCardModel = {
 	artifactType: string;
 };
 
+/** CTA model from a trusted successful `propose_document_edit` tool result. */
+export type DocumentProposalCardModel = { proposalId: string; summary: string };
+
 /** One ordered part in a single assistant message's timeline. */
 export type TimelinePart =
 	| { kind: 'text'; id: string; text: string; streaming: boolean }
 	| { kind: 'reasoning'; id: string; text: string; thinking: boolean }
 	| { kind: 'tool'; id: string; model: ToolRowModel }
-	| { kind: 'artifact'; id: string; model: ArtifactCardModel };
+	| { kind: 'artifact'; id: string; model: ArtifactCardModel }
+	| { kind: 'document-proposal'; id: string; model: DocumentProposalCardModel };
 
 /** Normalized message for the renderer (user = bubble; assistant = ordered parts). */
 export type TimelineMessage = {

@@ -5,6 +5,7 @@ import { toCards } from './source-card';
 import { statsDetailFromResult, statsRunDetailFromArgs } from './stats-run-detail';
 import type {
 	ArtifactCardModel,
+	DocumentProposalCardModel,
 	DeepStepDetail,
 	DeepSubSearch,
 	TimelineMessage,
@@ -187,16 +188,25 @@ export function mastraMessagesToTimeline(
 				const inv = (p.toolInvocation ?? {}) as ToolInvocationLike;
 				const toolName = str(inv.toolName);
 				const toolCallId = str(inv.toolCallId) || `${m.id}:${i}`;
-				// propose_artifact/execute_artifact sukses → kartu artifact (bukan tool-row generik).
+				// Hanya hasil tool sukses yang tervalidasi dapat membentuk kartu khusus.
 				const artifact = artifactFromResult(toolName, toolCallId, inv.result);
 				if (artifact) {
 					parts.push({ kind: 'artifact', id: `artifact:${toolCallId}`, model: artifact });
 				} else {
-					parts.push({
-						kind: 'tool',
-						id: `tool:${toolCallId}`,
-						model: toolModelFromInvocation(toolCallId, toolName, inv)
-					});
+					const proposal = documentProposalFromResult(toolName, inv.result);
+					if (proposal) {
+						parts.push({
+							kind: 'document-proposal',
+							id: `document-proposal:${toolCallId}`,
+							model: proposal
+						});
+					} else {
+						parts.push({
+							kind: 'tool',
+							id: `tool:${toolCallId}`,
+							model: toolModelFromInvocation(toolCallId, toolName, inv)
+						});
+					}
 				}
 			}
 		});
@@ -488,9 +498,11 @@ export function reduceMastraChunk(
 				toolCallId && s0.askGate?.toolCallId === toolCallId ? { ...s0, askGate: undefined } : s0;
 			const toolName = str(payload.toolName);
 			const result = payload.result ?? payload.output;
-			// propose_artifact sukses → render sebagai kartu artifact, bukan tool-row generik.
+			// Hanya hasil tool sukses yang tervalidasi dapat membentuk kartu khusus.
 			const artifact = artifactFromResult(toolName, toolCallId, result);
 			if (artifact) return replaceWithArtifact(s, idx, artifact);
+			const proposal = documentProposalFromResult(toolName, result);
+			if (proposal) return replaceWithDocumentProposal(s, idx, toolCallId, proposal);
 			return completeToolPart(s, idx, toolCallId, result, payload.isError === true);
 		}
 		case 'tool-error': {
@@ -1405,6 +1417,23 @@ function replaceWithArtifact(
 	});
 }
 
+function replaceWithDocumentProposal(
+	state: MastraTimelineState,
+	msgIdx: number,
+	toolCallId: string,
+	model: DocumentProposalCardModel
+): MastraTimelineState {
+	return mutateMessage(state, msgIdx, (parts) => {
+		const without = parts.filter(
+			(p) => !(p.kind === 'tool' && p.model.toolCallId === toolCallId)
+		);
+		return [
+			...without,
+			{ kind: 'document-proposal', id: `document-proposal:${toolCallId}`, model }
+		];
+	});
+}
+
 function mutateMessage(
 	state: MastraTimelineState,
 	msgIdx: number,
@@ -1476,6 +1505,20 @@ function artifactFromResult(
 		title: str(r.title) || 'Dokumen',
 		artifactType: str(r.artifactType) || 'markdown'
 	};
+}
+
+function documentProposalFromResult(
+	toolName: string,
+	result: unknown
+): DocumentProposalCardModel | null {
+	if (toolName !== 'propose_document_edit') return null;
+	if (!result || typeof result !== 'object' || Array.isArray(result)) return null;
+	const value = result as Record<string, unknown>;
+	if (value.ok !== true) return null;
+	const { proposalId, summary } = value;
+	if (typeof proposalId !== 'string' || !proposalId.trim()) return null;
+	if (typeof summary !== 'string' || !summary.trim()) return null;
+	return { proposalId, summary };
 }
 
 function toScalarString(value: unknown): string | null {

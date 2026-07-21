@@ -174,6 +174,24 @@ describe('tool parts', () => {
 		if (art?.kind === 'artifact') expect(art.model.artifactId).toBe('art1');
 	});
 
+	it('renders a trusted completed document-edit proposal as a proposal part', () => {
+		let s = startAssistantTurn(initialMastraTimeline(), 'q', 't1');
+		s = reduceAll(s, [
+			chunk('tool-call', { toolCallId: 'c10', toolName: 'propose_document_edit', args: {} }),
+			chunk('tool-result', {
+				toolCallId: 'c10',
+				toolName: 'propose_document_edit',
+				result: { ok: true, proposalId: 'proposal-1', summary: 'Perbaiki dua bagian' }
+			})
+		]);
+
+		expect(lastAssistant(s).parts).toContainEqual({
+			kind: 'document-proposal',
+			id: expect.any(String),
+			model: { proposalId: 'proposal-1', summary: 'Perbaiki dua bagian' }
+		});
+	});
+
 	it('accumulates tool-call-delta args and renders input rows progressively', () => {
 		let s = startAssistantTurn(initialMastraTimeline(), 'q', 't1');
 		s = reduceAll(s, [
@@ -430,6 +448,55 @@ describe('mastraMessagesToTimeline (rehydrate)', () => {
 		expect(out[0].role).toBe('assistant');
 		expect(textOf(out[0])).toBe('jawaban');
 		expect(out[0].parts.some((p) => p.kind === 'tool')).toBe(true);
+	});
+
+	it('reconstructs a trusted completed document-edit proposal', () => {
+		const out = mastraMessagesToTimeline([
+			{
+				id: 'm3',
+				role: 'assistant',
+				content: {
+					parts: [
+						{
+							type: 'tool-invocation',
+							toolInvocation: {
+								state: 'result',
+								toolCallId: 'c3',
+								toolName: 'propose_document_edit',
+								result: {
+									ok: true,
+									proposalId: 'proposal-1',
+									summary: 'Perbaiki dua bagian'
+								}
+							}
+						}
+					]
+				}
+			}
+		]);
+
+		expect(out[0].parts).toContainEqual({
+			kind: 'document-proposal',
+			id: expect.any(String),
+			model: { proposalId: 'proposal-1', summary: 'Perbaiki dua bagian' }
+		});
+	});
+
+	it('keeps malformed document-edit results as ordinary tool rows', () => {
+		let s = startAssistantTurn(initialMastraTimeline(), 'q', 't1');
+		s = reduceAll(s, [
+			chunk('tool-call', { toolCallId: 'c11', toolName: 'propose_document_edit', args: {} }),
+			chunk('tool-result', {
+				toolCallId: 'c11',
+				toolName: 'propose_document_edit',
+				result: { ok: true, proposalId: 'proposal-1', summary: '' }
+			})
+		]);
+
+		expect(lastAssistant(s).parts.some((p) => p.kind === 'document-proposal')).toBe(false);
+		expect(lastAssistant(s).parts).toContainEqual(
+			expect.objectContaining({ kind: 'tool', id: 'tool:c11' })
+		);
 	});
 });
 

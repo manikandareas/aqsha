@@ -9,6 +9,7 @@
 	import { messageSourceCards } from '../lib/thread-panel-data';
 	import type { SourceCardData, TimelineMessage, TimelinePart } from '../lib/timeline-types';
 	import type { ResearchSource } from '../types';
+	import ProposalReviewCTA from '../../document/components/ProposalReviewCTA.svelte';
 	import ChatArtifactCard from './ChatArtifactCard.svelte';
 	import InlineSources from './InlineSources.svelte';
 	import ProcessBlock from './ProcessBlock.svelte';
@@ -45,6 +46,12 @@
 	const artifactParts = $derived(
 		message.parts.filter(
 			(p): p is Extract<TimelinePart, { kind: 'artifact' }> => p.kind === 'artifact'
+		)
+	);
+	const proposalParts = $derived(
+		message.parts.filter(
+			(p): p is Extract<TimelinePart, { kind: 'document-proposal' }> =>
+				p.kind === 'document-proposal'
 		)
 	);
 	// Process = reasoning + tool + intermediate text (all texts except the final answer), original order.
@@ -145,6 +152,10 @@
 			statsGroups={messageStatsGroups}
 		/>
 	{/if}
+
+	{#each proposalParts as part (part.id)}
+		<ProposalReviewCTA proposalId={part.model.proposalId} summary={part.model.summary} />
+	{/each}
 
 	{#each artifactParts as part (part.id)}
 		<ChatArtifactCard model={part.model} />
