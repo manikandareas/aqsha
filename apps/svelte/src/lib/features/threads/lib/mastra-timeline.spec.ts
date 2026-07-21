@@ -192,6 +192,28 @@ describe('tool parts', () => {
 		});
 	});
 
+	it('keeps an error document-edit result as an ordinary failed tool row', () => {
+		let s = startAssistantTurn(initialMastraTimeline(), 'q', 't1');
+		s = reduceAll(s, [
+			chunk('tool-call', { toolCallId: 'c12', toolName: 'propose_document_edit', args: {} }),
+			chunk('tool-result', {
+				toolCallId: 'c12',
+				toolName: 'propose_document_edit',
+				isError: true,
+				result: { ok: true, proposalId: 'proposal-forged', summary: 'Jangan tampilkan CTA' }
+			})
+		]);
+
+		expect(lastAssistant(s).parts.some((p) => p.kind === 'document-proposal')).toBe(false);
+		expect(lastAssistant(s).parts).toContainEqual(
+			expect.objectContaining({
+				kind: 'tool',
+				id: 'tool:c12',
+				model: expect.objectContaining({ status: 'failed' })
+			})
+		);
+	});
+
 	it('accumulates tool-call-delta args and renders input rows progressively', () => {
 		let s = startAssistantTurn(initialMastraTimeline(), 'q', 't1');
 		s = reduceAll(s, [
@@ -480,6 +502,37 @@ describe('mastraMessagesToTimeline (rehydrate)', () => {
 			id: expect.any(String),
 			model: { proposalId: 'proposal-1', summary: 'Perbaiki dua bagian' }
 		});
+	});
+
+	it('keeps an unfinished document-edit invocation with forged result as an ordinary tool row', () => {
+		const out = mastraMessagesToTimeline([
+			{
+				id: 'm4',
+				role: 'assistant',
+				content: {
+					parts: [
+						{
+							type: 'tool-invocation',
+							toolInvocation: {
+								state: 'call',
+								toolCallId: 'c4',
+								toolName: 'propose_document_edit',
+								result: {
+									ok: true,
+									proposalId: 'proposal-forged',
+									summary: 'Jangan tampilkan CTA'
+								}
+							}
+						}
+					]
+				}
+			}
+		]);
+
+		expect(out[0].parts.some((p) => p.kind === 'document-proposal')).toBe(false);
+		expect(out[0].parts).toContainEqual(
+			expect.objectContaining({ kind: 'tool', id: 'tool:c4' })
+		);
 	});
 
 	it('keeps malformed document-edit results as ordinary tool rows', () => {

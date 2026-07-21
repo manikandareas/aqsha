@@ -193,7 +193,8 @@ export function mastraMessagesToTimeline(
 				if (artifact) {
 					parts.push({ kind: 'artifact', id: `artifact:${toolCallId}`, model: artifact });
 				} else {
-					const proposal = documentProposalFromResult(toolName, inv.result);
+					const proposal =
+						inv.state === 'result' ? documentProposalFromResult(toolName, inv.result) : null;
 					if (proposal) {
 						parts.push({
 							kind: 'document-proposal',
@@ -498,12 +499,13 @@ export function reduceMastraChunk(
 				toolCallId && s0.askGate?.toolCallId === toolCallId ? { ...s0, askGate: undefined } : s0;
 			const toolName = str(payload.toolName);
 			const result = payload.result ?? payload.output;
+			const isError = payload.isError === true;
 			// Hanya hasil tool sukses yang tervalidasi dapat membentuk kartu khusus.
 			const artifact = artifactFromResult(toolName, toolCallId, result);
 			if (artifact) return replaceWithArtifact(s, idx, artifact);
-			const proposal = documentProposalFromResult(toolName, result);
+			const proposal = isError ? null : documentProposalFromResult(toolName, result);
 			if (proposal) return replaceWithDocumentProposal(s, idx, toolCallId, proposal);
-			return completeToolPart(s, idx, toolCallId, result, payload.isError === true);
+			return completeToolPart(s, idx, toolCallId, result, isError);
 		}
 		case 'tool-error': {
 			const [s, idx] = ensureActiveAssistant(state);
