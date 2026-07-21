@@ -244,7 +244,13 @@ export const DocumentProposalService = {
         input.ownerUserId,
         input.workspaceId,
       );
-      if (concurrentPending) return pendingProposalResult(concurrentPending, currentVersion);
+      if (concurrentPending) {
+        const currentDoc = await WorkspaceDocumentService.getDocument(db, {
+          ownerUserId: input.ownerUserId,
+          workspaceId: input.workspaceId,
+        });
+        return pendingProposalResult(concurrentPending, currentDoc?.contentVersion ?? 0);
+      }
       throwAppError({
         message: "Proposal belum dapat disimpan. Coba lagi.",
         code: "proposal_conflict",

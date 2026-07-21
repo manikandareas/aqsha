@@ -1,12 +1,12 @@
 /**
  * DocumentProposalService — DB + typst integration (skip tanpa DATABASE_URL / binary typst).
  * Membuktikan: dry-run compile menyaring usulan gagal (compile_error union), anchored edits
- * (edit_mismatch), persist pending + supersede, accept penuh/parsial (dry-run subset), stale,
+ * (edit_mismatch), persist pending tanpa tertimpa, accept penuh/parsial (dry-run subset), stale,
  * reject membuka anotasi.
  */
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { createDb, DocumentEditProposalRepo } from "@aqsha/db";
-import { isTypstAvailable } from "../src/typst/compile.service";
+import { isTypstAvailable, TypstCompileService } from "../src/typst/compile.service";
 import { DocumentProposalService } from "../src/typst/document-proposal.service";
 import { applyProposalEdits } from "../src/typst/document-proposal.service";
 import { WorkspaceDocumentService } from "../src/workspace-document.service";
@@ -137,6 +137,60 @@ describe("DocumentProposalService", () => {
     const row = await DocumentEditProposalRepo.findById(db, OWNER, first.proposalId);
     expect(row?.status).toBe("pending");
     await DocumentProposalService.reject(db, { ownerUserId: OWNER, proposalId: first.proposalId });
+  });
+
+  itest("konflik proposal setelah compile menghitung stale dari versi dokumen terbaru", async () => {
+    await rejectPendingProposal();
+    const initialVersion = await resetDoc("= Pendahuluan\n\nVersi awal.\n");
+    const winningProposalId = crypto.randomUUID();
+    const compile = spyOn(TypstCompileService, "compile").mockImplementation(async () => {
+      const wonRace = await DocumentEditProposalRepo.insertPendingIfAbsent(db, {
+        id: winningProposalId,
+        ownerUserId: OWNER,
+        workspaceId: WS,
+        threadId: null,
+        baseVersion: initialVersion,
+        proposedSource: "= Pendahuluan\n\nProposal pemenang.\n",
+        summary: "Proposal pemenang",
+        resubmitInstruction: "",
+        annotationIds: [],
+        status: "pending",
+        createdAt: Date.now(),
+        decidedAt: null,
+      });
+      if (!wonRace) throw new Error("proposal pemenang harus tersimpan");
+
+      const saved = await WorkspaceDocumentService.saveDocument(db, {
+        ownerUserId: OWNER,
+        workspaceId: WS,
+        source: "= Pendahuluan\n\nDokumen berubah saat compile.\n",
+        baseVersion: initialVersion,
+        author: "user",
+      });
+      if (saved.status !== "saved") throw new Error("perubahan dokumen harus tersimpan");
+
+      return { ok: true, pdf: new Uint8Array([1]) };
+    });
+
+    try {
+      const result = await DocumentProposalService.propose(db, {
+        ownerUserId: OWNER,
+        workspaceId: WS,
+        fullSource: "= Pendahuluan\n\nKandidat yang kalah.\n",
+        summary: "Kandidat kalah",
+        enforceRateLimit: false,
+      });
+      expect(result).toEqual({
+        ok: false,
+        reason: "pending_proposal",
+        proposalId: winningProposalId,
+        summary: "Proposal pemenang",
+        isStale: true,
+      });
+    } finally {
+      compile.mockRestore();
+      await rejectPendingProposal();
+    }
   });
 
   itest("propose sumber yang gagal compile → compile_error union (tak tersimpan)", async () => {
