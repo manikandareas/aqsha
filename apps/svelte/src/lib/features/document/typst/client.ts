@@ -20,24 +20,36 @@ export class TypstClient {
 	#onCompiled: ((r: TypstCompiledResult) => void) | null = null;
 	#onError: ((message: string) => void) | null = null;
 	#debounceMs: number;
+	#compileTimeoutMs: number;
 	#timer: ReturnType<typeof setTimeout> | null = null;
-	#pending: { source: string; bib: string | null } | null = null;
+	#compileTimer: ReturnType<typeof setTimeout> | null = null;
+	#pending: { seq: number; source: string; bib: string | null } | null = null;
 
-	constructor(opts: { debounceMs?: number } = {}) {
+	constructor(opts: { debounceMs?: number; compileTimeoutMs?: number } = {}) {
 		this.#debounceMs = opts.debounceMs ?? 300;
+		this.#compileTimeoutMs = opts.compileTimeoutMs ?? 30_000;
 		if (!browser) return;
 		this.#worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
 		this.#worker.onmessage = (e: MessageEvent<TypstWorkerResponse>) => {
 			const msg = e.data;
 			// Buang respons basi: hanya render hasil dari update terakhir yang dikirim.
 			if (msg.type === 'compiled' && msg.seq === this.#seq) {
+				this.#clearCompileTimer();
 				this.#onCompiled?.({
 					svg: msg.svg,
 					diagnostics: mapTypstDiagnostics(msg.diagnostics, this.#lastSource)
 				});
 			} else if (msg.type === 'error' && msg.seq === this.#seq) {
+				this.#clearCompileTimer();
 				this.#onError?.(msg.message);
 			}
+		};
+		this.#worker.onerror = (event) => {
+			event.preventDefault();
+			this.#fail(event.message || 'Typst worker gagal dimuat.');
+		};
+		this.#worker.onmessageerror = () => {
+			this.#fail('Respons Typst worker tidak dapat dibaca.');
 		};
 	}
 
@@ -51,26 +63,43 @@ export class TypstClient {
 
 	/** Kirim sumber terbaru (debounced). `bib` selalu string (kosong = tanpa sitasi). */
 	update(source: string, bib: string | null = ''): void {
-		this.#pending = { source, bib };
+		this.#pending = { seq: ++this.#seq, source, bib };
 		if (this.#timer) clearTimeout(this.#timer);
+		this.#clearCompileTimer();
 		this.#timer = setTimeout(() => this.#flush(), this.#debounceMs);
 	}
 
 	#flush(): void {
 		if (!this.#worker || !this.#pending) return;
-		const { source, bib } = this.#pending;
+		const { seq, source, bib } = this.#pending;
 		this.#pending = null;
 		this.#lastSource = source;
 		this.#worker.postMessage({
 			type: 'update',
-			seq: ++this.#seq,
+			seq,
 			source,
 			bib
 		} satisfies TypstWorkerRequest);
+		this.#compileTimer = setTimeout(() => {
+			this.#compileTimer = null;
+			this.#onError?.('Typst worker tidak merespons tepat waktu.');
+		}, this.#compileTimeoutMs);
+	}
+
+	#clearCompileTimer(): void {
+		if (!this.#compileTimer) return;
+		clearTimeout(this.#compileTimer);
+		this.#compileTimer = null;
+	}
+
+	#fail(message: string): void {
+		this.#clearCompileTimer();
+		this.#onError?.(message);
 	}
 
 	dispose(): void {
 		if (this.#timer) clearTimeout(this.#timer);
+		this.#clearCompileTimer();
 		this.#worker?.postMessage({ type: 'dispose' } satisfies TypstWorkerRequest);
 		this.#worker?.terminate();
 		this.#worker = null;

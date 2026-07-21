@@ -14,7 +14,12 @@ describe('Typst runtime boundary', () => {
 		expect(previewSource).not.toContain('@myriaddreamin/typst.ts/renderer');
 		expect(workerSource).toContain('@myriaddreamin/typst.ts/renderer');
 		expect(workerSource).toContain('createTypstRenderer');
+		expect(workerSource).toContain('pendingUpdate');
+		expect(workerSource).toContain('processing');
 		expect(clientSource).toContain("msg.type === 'error'");
 		expect(clientSource).toContain('this.#onError?.(msg.message)');
+		expect(clientSource).toContain('this.#worker.onerror');
+		expect(clientSource).toContain('this.#worker.onmessageerror');
+		expect(clientSource).toContain('#compileTimeoutMs');
 	});
 });

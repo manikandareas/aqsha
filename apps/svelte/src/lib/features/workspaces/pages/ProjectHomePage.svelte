@@ -21,6 +21,7 @@
 	import { readableApiErrorMessage } from '$lib/errors/api-error';
 	import {
 		ComposerMentions,
+		projectPageAmbientRefs,
 		setComposerMentions
 	} from '$lib/features/threads/state/composer-mentions.svelte';
 	import {
@@ -97,6 +98,7 @@
 
 	const mentions = new ComposerMentions();
 	setComposerMentions(mentions);
+	mentions.syncAmbientFromPage(projectPageAmbientRefs());
 	const proposalReviewInteractions = new ProposalReviewInteractions();
 	setProposalReviewInteractions(proposalReviewInteractions);
 
@@ -134,10 +136,10 @@
 		proposalReviewInteractions.set(
 			current
 				? {
-					proposalId: current.id,
-					hunkCount: current.hunks.length,
-					review: beginProposalReview
-				}
+						proposalId: current.id,
+						hunkCount: current.hunks?.length ?? 0,
+						review: beginProposalReview
+					}
 				: null
 		);
 	});
@@ -151,14 +153,6 @@
 		scrollToLine(line: number): void;
 	} | null>(null);
 	let previewRef = $state<{ scrollToHeading(title: string): void } | null>(null);
-
-	$effect(() => {
-		const w = workspace.data;
-		if (!w) return;
-		mentions.syncAmbientFromPage([
-			{ kind: 'workspace', workspaceId: w.id, label: projectDisplayTitle(w) }
-		]);
-	});
 
 	$effect(() => {
 		if (!activation.documentRuntimeActive) return;
@@ -279,7 +273,7 @@
 	// ── Proposal ─────────────────────────────────────────────────────────────
 	let proposalAcceptErrors = $state<TypstCompileError[] | null>(null);
 	let reviewingProposalId = $state<string | null>(null);
-	const proposalHunkCount = $derived(proposal.data?.hunks.length ?? 0);
+	const proposalHunkCount = $derived(proposal.data?.hunks?.length ?? 0);
 	const reviewingProposal = $derived(
 		reviewingProposalId !== null && reviewingProposalId === proposal.data?.id
 	);

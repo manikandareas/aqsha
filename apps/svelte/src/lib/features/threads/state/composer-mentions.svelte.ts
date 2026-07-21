@@ -7,6 +7,10 @@ import {
 } from '@aqsha/chat-core';
 import { createContext } from '$lib/context';
 
+export function projectPageAmbientRefs(): ContextRef[] {
+	return [];
+}
+
 /**
  * Composer mention channels. Three independent epoch-driven channels the composer consumes and
  * explore/workspace pages publish to:

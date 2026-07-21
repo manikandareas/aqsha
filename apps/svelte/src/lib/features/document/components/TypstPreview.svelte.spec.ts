@@ -12,4 +12,17 @@ describe('TypstPreview', () => {
 		await expect.element(page.getByText('Preview siap')).toBeInTheDocument();
 		await expect.element(page.getByText('Menyusun preview…')).not.toBeInTheDocument();
 	});
+
+	it('menampilkan banner tinjau tanpa menyuntikkan diff proposal ke SVG tersimpan', async () => {
+		const savedSvgText = 'Versi dokumen tersimpan';
+		render(TypstPreview, {
+			svg: `<svg xmlns="http://www.w3.org/2000/svg"><text>${savedSvgText}</text></svg>`,
+			proposalHunkCount: 2
+		});
+
+		await expect.element(page.getByRole('button', { name: 'Tinjau usulan' })).toBeInTheDocument();
+		await expect.element(page.getByText(savedSvgText)).toBeInTheDocument();
+		const previewSvg = document.querySelector('.typst-preview-svg');
+		expect(previewSvg?.textContent).toBe(savedSvgText);
+	});
 });

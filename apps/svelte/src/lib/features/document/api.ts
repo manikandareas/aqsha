@@ -242,13 +242,25 @@ export type AcceptProposalResult =
 	| { status: 'stale'; currentVersion: number }
 	| { status: 'compile_error'; compileErrors: TypstCompileError[] };
 
+export function normalizePendingProposal(value: unknown): PendingProposalView {
+	if (value === null) return null;
+	if (
+		typeof value !== 'object' ||
+		!Array.isArray((value as { hunks?: unknown }).hunks) ||
+		!Array.isArray((value as { annotationIds?: unknown }).annotationIds)
+	) {
+		return null;
+	}
+	return value as PendingProposalView;
+}
+
 export function usePendingProposal(workspaceId: () => string, enabled: () => boolean = alwaysTrue) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.workspaces.proposals(workspaceId()),
 		enabled: enabled() && Boolean(workspaceId()),
 		queryFn: async () =>
-			unwrap(await api.workspaces({ id: workspaceId() }).proposals.get()) as PendingProposalView
+			normalizePendingProposal(unwrap(await api.workspaces({ id: workspaceId() }).proposals.get()))
 	}));
 }
 

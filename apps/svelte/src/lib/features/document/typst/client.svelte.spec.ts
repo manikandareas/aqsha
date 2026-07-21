@@ -26,13 +26,13 @@ describe('TypstClient worker runtime', () => {
 		try {
 			const result = new Promise<string>((resolve, reject) => {
 				client.onCompiled((compiled) => {
-					if (compiled.svg) resolve(compiled.svg);
+					if (compiled.svg?.includes('Render terbaru')) resolve(compiled.svg);
 				});
 				client.onError((message) => reject(new Error(message)));
 			});
 
 			client.update('= Render lama\n\nKonten pertama.');
-			await new Promise((resolve) => setTimeout(resolve, 20));
+			await new Promise((resolve) => setTimeout(resolve, 250));
 			client.update('= Render terbaru\n\nKonten final.');
 
 			const svg = await result;

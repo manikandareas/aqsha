@@ -45,43 +45,59 @@ function post(msg: TypstWorkerResponse, transfer: Transferable[] = []): void {
 	(self as unknown as Worker).postMessage(msg, transfer);
 }
 
-self.onmessage = async (e: MessageEvent<TypstWorkerRequest>) => {
+let pendingUpdate: Extract<TypstWorkerRequest, { type: 'update' }> | null = null;
+let processing = false;
+
+async function drainUpdates(): Promise<void> {
+	if (processing) return;
+	processing = true;
+	while (pendingUpdate) {
+		const msg = pendingUpdate;
+		pendingUpdate = null;
+		try {
+			await ensureCompiler();
+			const c = compiler!;
+			c.addSource('/main.typ', msg.source);
+			// refs.bib selalu ada (kosong bila tanpa sitasi) agar #bibliography tak "file not found".
+			c.mapShadow('/refs.bib', encoder.encode(msg.bib ?? ''));
+			// Format default = vector (artifact yang di-render renderer di main thread).
+			const res = await c.compile({ mainFilePath: '/main.typ', diagnostics: 'full' });
+			const vector = res.result ?? null;
+			const svg = vector
+				? await renderer!.runWithSession(async (session) => {
+						renderer!.manipulateData({ renderSession: session, action: 'reset', data: vector });
+						return renderer!.renderSvg({ renderSession: session });
+					})
+				: null;
+			post({
+				type: 'compiled',
+				seq: msg.seq,
+				svg,
+				diagnostics: (res.diagnostics ?? []) as TypstRawDiagnostic[]
+			});
+		} catch (err) {
+			post({
+				type: 'error',
+				seq: msg.seq,
+				message: err instanceof Error ? err.message : String(err)
+			});
+		}
+	}
+	processing = false;
+}
+
+self.onmessage = (e: MessageEvent<TypstWorkerRequest>) => {
 	const msg = e.data;
 	if (msg.type === 'dispose') {
+		pendingUpdate = null;
 		compiler = null;
 		renderer = null;
 		initPromise = null;
 		return;
 	}
 	if (msg.type !== 'update') return;
-	try {
-		await ensureCompiler();
-		const c = compiler!;
-		c.addSource('/main.typ', msg.source);
-		// refs.bib selalu ada (kosong bila tanpa sitasi) agar #bibliography tak "file not found".
-		c.mapShadow('/refs.bib', encoder.encode(msg.bib ?? ''));
-		// Format default = vector (artifact yang di-render renderer di main thread).
-		const res = await c.compile({ mainFilePath: '/main.typ', diagnostics: 'full' });
-		const vector = res.result ?? null;
-		const svg = vector
-			? await renderer!.runWithSession(async (session) => {
-					renderer!.manipulateData({ renderSession: session, action: 'reset', data: vector });
-					return renderer!.renderSvg({ renderSession: session });
-				})
-			: null;
-		post({
-			type: 'compiled',
-			seq: msg.seq,
-			svg,
-			diagnostics: (res.diagnostics ?? []) as TypstRawDiagnostic[]
-		});
-	} catch (err) {
-		post({
-			type: 'error',
-			seq: msg.seq,
-			message: err instanceof Error ? err.message : String(err)
-		});
-	}
+	pendingUpdate = msg;
+	void drainUpdates();
 };
 
 post({ type: 'ready' });
