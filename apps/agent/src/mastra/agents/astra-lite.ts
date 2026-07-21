@@ -16,6 +16,7 @@ import { EnsureFinalResponseProcessor } from "../processors/ensure-final-respons
 import { stripMentionMarkersProcessor } from "../processors/strip-mention-markers";
 import { threadArtifactManifestProcessor } from "../processors/thread-artifact-manifest";
 import { makeThreadProjectionProcessors } from "../processors/thread-projection";
+import { workspaceProjectManifestProcessor } from "../processors/workspace-project-manifest";
 import { inlineSkills } from "../skills";
 import { astraTools } from "../tools";
 
@@ -166,6 +167,7 @@ function createAstraAgent(tier: AgentKind): Agent {
       new TokenLimiterProcessor({ limit: tokenLimit, trimMode: "contiguous" }),
       projectionInput,
       billingPrecheck,
+      workspaceProjectManifestProcessor,
       // Manifest lampiran thread (durable, anti-"linglung"): setelah billingPrecheck supaya turn
       // yang diblok kuota tak menjalankan query artifact; sebelum EnsureFinalResponse (per-step).
       threadArtifactManifestProcessor,

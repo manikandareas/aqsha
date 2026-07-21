@@ -11,6 +11,7 @@
     "dev": "bun run skills:gen && mastra dev --dir src/mastra",
     "build": "bun run skills:gen && mastra build --dir src/mastra",
     "start": "node .mastra/output/index.mjs",
+    "test": "bun test --timeout 30000",
     "typecheck": "bun run skills:gen && tsc --noEmit"
   },
   "dependencies": {

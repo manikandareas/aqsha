@@ -1,5 +1,6 @@
 import { ChatThreadRepo } from "@aqsha/db";
 import { AnnotationService, WorkspaceDocumentService } from "@aqsha/services";
+import { DocumentProposalService } from "@aqsha/services/typst";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { getServiceDb } from "../lib/db";
@@ -25,13 +26,24 @@ export const getDocumentSource = createTool({
         return { ok: false as const, message: "Proyek thread ini tidak ditemukan." };
       }
       const workspaceId = thread.workspaceId;
-      const doc = await WorkspaceDocumentService.getDocument(db, { ownerUserId, workspaceId });
-      const annotations = await AnnotationService.list(db, { ownerUserId, workspaceId });
+      const [doc, annotations, pending] = await Promise.all([
+        WorkspaceDocumentService.getDocument(db, { ownerUserId, workspaceId }),
+        AnnotationService.list(db, { ownerUserId, workspaceId }),
+        DocumentProposalService.getPending(db, { ownerUserId, workspaceId }),
+      ]);
       return {
         ok: true as const,
         workspaceId,
         contentVersion: doc?.contentVersion ?? 0,
         source: doc?.source ?? "",
+        pendingProposal: pending
+          ? {
+              id: pending.id,
+              summary: pending.summary,
+              hunkCount: pending.hunks.length,
+              isStale: pending.isStale,
+            }
+          : null,
         openAnnotations: annotations
           .filter((a) => a.status === "open" || a.status === "sent")
           .map((a) => ({

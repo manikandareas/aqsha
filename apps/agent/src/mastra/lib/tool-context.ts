@@ -4,6 +4,7 @@ import {
   MASTRA_THREAD_ID_KEY,
   type RequestContext,
 } from "@mastra/core/request-context";
+import type { DocumentProposalAttemptState } from "../tools/document-proposal-attempts";
 
 /**
  * Helper kontekstual untuk tool Mastra Astra.
@@ -70,6 +71,9 @@ export type { AgentKind };
  */
 export const AQSHA_AGENT_KIND_KEY = "aqsha__agent_kind";
 
+/** Penghitung proposal Typst per request agar retry hanya hidup dalam satu turn server. */
+export const AQSHA_DOCUMENT_PROPOSAL_ATTEMPTS_KEY = "aqsha__document_proposal_attempts";
+
 /**
  * SEMUA key `aqsha__*` adalah server-owned (SEC-1). `mergeBodyRequestContext` (@mastra/server)
  * menyalin `requestContext` dari body klien ke RequestContext server untuk key yang BELUM
@@ -87,6 +91,7 @@ export const AQSHA_SERVER_OWNED_CONTEXT_KEYS = [
   AQSHA_DEEP_SUBQ_INDEX_KEY,
   AQSHA_DEEP_SUBQ_TEXT_KEY,
   AQSHA_AGENT_KIND_KEY,
+  AQSHA_DOCUMENT_PROPOSAL_ATTEMPTS_KEY,
 ] as const;
 
 /** Tier agen dari RequestContext (default `"lite"` bila absen / nilai tak dikenal). */
@@ -98,6 +103,27 @@ export type AstraToolCtx = {
   requestContext?: RequestContext;
   agent?: { threadId?: string; resourceId?: string; toolCallId?: string };
 };
+
+export function documentProposalAttemptState(ctx: AstraToolCtx): DocumentProposalAttemptState {
+  const requestContext = ctx.requestContext;
+  if (!requestContext) {
+    throw new Error("Tool proposal dokumen membutuhkan request context server.");
+  }
+  const existing = requestContext.get(AQSHA_DOCUMENT_PROPOSAL_ATTEMPTS_KEY);
+  if (
+    typeof existing === "object" &&
+    existing !== null &&
+    "attempts" in existing &&
+    typeof existing.attempts === "number" &&
+    Number.isInteger(existing.attempts) &&
+    existing.attempts >= 0
+  ) {
+    return existing as DocumentProposalAttemptState;
+  }
+  const state = { attempts: 0 };
+  requestContext.set(AQSHA_DOCUMENT_PROPOSAL_ATTEMPTS_KEY, state);
+  return state;
+}
 
 export function callerId(ctx: AstraToolCtx): string {
   const raw = ctx.requestContext?.get(MASTRA_RESOURCE_ID_KEY);

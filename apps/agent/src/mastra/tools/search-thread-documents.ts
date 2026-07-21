@@ -1,4 +1,6 @@
+import { ChatThreadRepo } from "@aqsha/db";
 import { RagService } from "@aqsha/services/rag";
+import { WorkspaceService } from "@aqsha/services/workspace";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { getServiceDb } from "../lib/db";
@@ -20,16 +22,22 @@ export const searchThreadDocuments = createTool({
       .string()
       .optional()
       .describe(
-        "Batasi pencarian ke satu workspace yang disematkan pengguna (workspaceId dari catatan konteks). Kosongkan untuk mencari dokumen yang dilampirkan ke percakapan.",
+        "Batasi pencarian ke satu workspace yang disematkan pengguna (workspaceId dari catatan konteks). Kosongkan untuk mencari dokumen proyek aktif.",
       ),
   }),
   execute: async (input, ctx) => {
     const ownerUserId = callerId(ctx);
+    const db = getServiceDb();
+    const thread = await ChatThreadRepo.findById(db, threadScopeId(ctx));
+    if (!thread || thread.ownerUserId !== ownerUserId) {
+      return { matches: [], note: "Thread aktif tidak ditemukan." };
+    }
+    const targetWorkspaceId = input.workspaceId
+      ? (await WorkspaceService.assertWorkspaceOwner(db, ownerUserId, input.workspaceId)).id
+      : thread.workspaceId;
     const matches = await RagService.searchThreadDocuments(getServiceDb(), {
       ownerUserId,
-      ...(input.workspaceId
-        ? { workspaceId: input.workspaceId }
-        : { threadId: threadScopeId(ctx) }),
+      workspaceId: targetWorkspaceId,
       query: input.query,
       limit: input.limit,
     });

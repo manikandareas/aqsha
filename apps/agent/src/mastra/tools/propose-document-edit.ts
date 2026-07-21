@@ -3,7 +3,12 @@ import { DocumentProposalService } from "@aqsha/services/typst";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { getServiceDb } from "../lib/db";
-import { callerId, threadScopeId } from "../lib/tool-context";
+import {
+  callerId,
+  documentProposalAttemptState,
+  threadScopeId,
+} from "../lib/tool-context";
+import { nextDocumentProposalAttempt } from "./document-proposal-attempts";
 
 /**
  * propose_document_edit — WRITE. Usulkan suntingan sumber Typst dokumen proyek (proyek implisit
@@ -36,6 +41,13 @@ export const proposeDocumentEdit = createTool({
       .min(1)
       .max(500)
       .describe("Ringkasan perubahan untuk user (bahasa Indonesia, 1-2 kalimat)."),
+    resubmitInstruction: z
+      .string()
+      .min(1)
+      .max(1200)
+      .describe(
+        "Instruksi singkat yang akan diisi kembali ke composer bila proposal menjadi basi; jangan menyatakan perubahan sudah diterapkan.",
+      ),
     respondsToAnnotationIds: z
       .array(z.string())
       .max(64)
@@ -53,12 +65,21 @@ export const proposeDocumentEdit = createTool({
         message: "Proyek thread ini tidak ditemukan.",
       };
     }
+    const attempt = nextDocumentProposalAttempt(documentProposalAttemptState(ctx));
+    if (!attempt.ok) {
+      return {
+        ok: false as const,
+        reason: "retry_exhausted" as const,
+        message: "Tiga percobaan proposal sudah dilakukan pada turn ini.",
+      };
+    }
     return DocumentProposalService.propose(db, {
       ownerUserId,
       workspaceId: thread.workspaceId,
       edits: input.edits,
       fullSource: input.fullSource,
       summary: input.summary,
+      resubmitInstruction: input.resubmitInstruction,
       respondsToAnnotationIds: input.respondsToAnnotationIds,
       threadId: threadScopeId(ctx),
     });
