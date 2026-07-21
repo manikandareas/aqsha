@@ -179,6 +179,14 @@ export function createContextChipElement(ref: ContextRef) {
       span.dataset.blockIds = ref.blockIds.join(",");
       span.dataset.excerpt = ref.excerpt;
       break;
+    case "document-annotation":
+      span.dataset.workspaceId = ref.workspaceId;
+      span.dataset.annotationId = ref.annotationId;
+      span.dataset.page = String(ref.page);
+      span.dataset.selectedText = ref.selectedText;
+      span.dataset.note = ref.note;
+      span.dataset.elementLabel = ref.elementLabel;
+      break;
     default: {
       // Exhaustiveness: kind ContextRef baru jadi error compile di sini.
       const _exhaustive: never = ref;

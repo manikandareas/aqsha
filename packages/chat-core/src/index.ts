@@ -814,6 +814,7 @@ export type AgentKind = "lite" | "pro";
 /** UX caps per percakapan (juga di-clamp ContextService.hydrate sisi server). */
 export const MAX_CONTEXT_WORKSPACES = 5;
 export const MAX_CONTEXT_PAPERS = 8;
+export const MAX_CONTEXT_ANNOTATIONS = 8;
 
 export type ContextRef =
   | { kind: "workspace"; workspaceId: string; label: string }
@@ -834,6 +835,19 @@ export type ContextRef =
       artifactId: string;
       blockIds: string[];
       excerpt: string;
+      label: string;
+    }
+  // Anotasi dokumen Typst (mode anotasi preview). Membawa seluruh data anchor secara inline
+  // (selectedText/page/note) sehingga TIDAK ikut hydrate server — konteksnya diformat lokal via
+  // buildDocumentAnnotationClientContext. annotationId dipakai untuk mark-sent setelah kirim.
+  | {
+      kind: "document-annotation";
+      workspaceId: string;
+      annotationId: string;
+      page: number;
+      selectedText: string;
+      note: string;
+      elementLabel: string;
       label: string;
     };
 
@@ -860,6 +874,8 @@ export function contextRefKey(ref: ContextRef): string {
     case "artifact-selection":
       // Key by artifact + blok terurut → pilihan blok yang sama dedupe, pilihan berbeda distinct.
       return `asel:${ref.artifactId}:${[...ref.blockIds].sort().join(",")}`;
+    case "document-annotation":
+      return `anno:${ref.annotationId}`;
   }
 }
 
@@ -870,6 +886,8 @@ export function contextRefsSignature(refs: ContextRef[]): string {
 /** Split refs into the id lists the hydrate endpoint expects. */
 export type ContextCitation = { workspaceId: string; citationId: string };
 
+export type DocumentAnnotationRef = Extract<ContextRef, { kind: "document-annotation" }>;
+
 export function splitContextRefs(refs: ContextRef[]): {
   workspaceIds: string[];
   artifactIds: string[];
@@ -877,6 +895,7 @@ export function splitContextRefs(refs: ContextRef[]): {
   feedItemIds: string[];
   workspaceCitations: ContextCitation[];
   selections: ContextSelection[];
+  documentAnnotations: DocumentAnnotationRef[];
 } {
   const workspaceIds: string[] = [];
   const artifactIds: string[] = [];
@@ -884,6 +903,7 @@ export function splitContextRefs(refs: ContextRef[]): {
   const feedItemIds: string[] = [];
   const workspaceCitations: ContextCitation[] = [];
   const selections: ContextSelection[] = [];
+  const documentAnnotations: DocumentAnnotationRef[] = [];
   for (const ref of refs) {
     switch (ref.kind) {
       case "workspace":
@@ -908,6 +928,9 @@ export function splitContextRefs(refs: ContextRef[]): {
           excerpt: ref.excerpt,
         });
         break;
+      case "document-annotation":
+        documentAnnotations.push(ref);
+        break;
       default: {
         // Exhaustiveness: menambah kind ContextRef baru jadi error compile di sini.
         const _exhaustive: never = ref;
@@ -915,7 +938,15 @@ export function splitContextRefs(refs: ContextRef[]): {
       }
     }
   }
-  return { workspaceIds, artifactIds, paperKeys, feedItemIds, workspaceCitations, selections };
+  return {
+    workspaceIds,
+    artifactIds,
+    paperKeys,
+    feedItemIds,
+    workspaceCitations,
+    selections,
+    documentAnnotations,
+  };
 }
 
 export function countContextRefs(refs: ContextRef[]): {
@@ -925,6 +956,7 @@ export function countContextRefs(refs: ContextRef[]): {
   news: number;
   workspaceCitations: number;
   selections: number;
+  documentAnnotations: number;
 } {
   let workspaces = 0;
   let papers = 0;
@@ -932,6 +964,7 @@ export function countContextRefs(refs: ContextRef[]): {
   let news = 0;
   let workspaceCitations = 0;
   let selections = 0;
+  let documentAnnotations = 0;
   for (const ref of refs) {
     switch (ref.kind) {
       case "workspace":
@@ -952,13 +985,24 @@ export function countContextRefs(refs: ContextRef[]): {
       case "artifact-selection":
         selections += 1;
         break;
+      case "document-annotation":
+        documentAnnotations += 1;
+        break;
       default: {
         const _exhaustive: never = ref;
         void _exhaustive;
       }
     }
   }
-  return { workspaces, papers, explorePapers, news, workspaceCitations, selections };
+  return {
+    workspaces,
+    papers,
+    explorePapers,
+    news,
+    workspaceCitations,
+    selections,
+    documentAnnotations,
+  };
 }
 
 export function buildWorkspaceMentionLabel(workspaceName: string): string {
@@ -992,6 +1036,31 @@ export function buildSelectionMentionLabel(excerpt: string, blockCount = 0): str
   if (trimmed) return `❝ ${messagePreview(trimmed, 24)}`;
   if (blockCount > 0) return `❝ ${blockCount} blok`;
   return "❝ Pilihan";
+}
+
+/** Label pill anotasi dokumen. Prefiks `✎` membedakannya dari pill lain. */
+export function buildDocumentAnnotationMentionLabel(
+  elementLabel: string,
+  selectedText: string,
+): string {
+  const trimmed = (selectedText ?? "").replace(/\s+/g, " ").trim();
+  return `✎ ${elementLabel}: ${messagePreview(trimmed, 24)}`;
+}
+
+/**
+ * Serialisasi chip anotasi → satu context message untuk Astra. Anchor edit = teks terseleksi
+ * (typst.ts tak mengekspos peta span→baris); alur kerja tool ada di instruksi agen, bukan di sini.
+ */
+export function buildDocumentAnnotationClientContext(refs: DocumentAnnotationRef[]): string {
+  const lines = refs.map((r, i) => {
+    const excerpt = r.selectedText ? ` — teks: "${r.selectedText}"` : "";
+    const note = r.note ? ` — catatan: ${r.note}` : "";
+    return `${i + 1}. [id:${r.annotationId}] (hal. ${r.page}) [${r.elementLabel}]${excerpt}${note}`;
+  });
+  return [
+    "Anotasi dari user pada dokumen proyek ini. Panggil get_document_source lalu propose_document_edit; pakai teks terseleksi sebagai anchor (edits.oldText).",
+    ...lines,
+  ].join("\n");
 }
 
 /** Inline mention markers (private-use sentinels) — keep pills inline in sent text. */
