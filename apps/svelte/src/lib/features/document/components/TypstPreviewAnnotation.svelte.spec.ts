@@ -138,4 +138,53 @@ describe('TypstPreview mode anotasi', () => {
 			.not.toBeInTheDocument();
 		expect(onCreateAnnotation).not.toHaveBeenCalled();
 	});
+
+	it('membatalkan Clear mempertahankan overlay anotasi sent', async () => {
+		render(TypstPreview, {
+			svg: SVG,
+			annotations: [
+				{
+					id: 'sent-id',
+					page: 1,
+					rects: [{ x: 0.05, y: 0.1, w: 0.4, h: 0.1 }],
+					status: 'sent'
+				}
+			]
+		});
+		await nextFrame();
+		await expect.element(page.getByRole('button', { name: 'Buka anotasi' })).toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Nyalakan mode anotasi' }).click();
+		await page.getByRole('button', { name: 'Bersihkan anotasi' }).click();
+		await page.getByRole('button', { name: 'Batal clear' }).click();
+
+		await expect.element(page.getByRole('button', { name: 'Buka anotasi' })).toBeInTheDocument();
+	});
+
+	it('meneruskan snapshot anotasi sent ke Clear setelah tiga detik', async () => {
+		const onDismissAnnotations = vi.fn().mockResolvedValue(undefined);
+		render(TypstPreview, {
+			svg: SVG,
+			annotations: [
+				{
+					id: 'sent-id',
+					page: 1,
+					rects: [{ x: 0.05, y: 0.1, w: 0.4, h: 0.1 }],
+					status: 'sent'
+				}
+			],
+			onDismissAnnotations
+		});
+		await nextFrame();
+
+		vi.useFakeTimers();
+		try {
+			await page.getByRole('button', { name: 'Nyalakan mode anotasi' }).click();
+			await page.getByRole('button', { name: 'Bersihkan anotasi' }).click();
+			await vi.advanceTimersByTimeAsync(3000);
+			expect(onDismissAnnotations).toHaveBeenCalledWith(['sent-id']);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });

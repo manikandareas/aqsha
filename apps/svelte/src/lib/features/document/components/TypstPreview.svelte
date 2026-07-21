@@ -12,6 +12,7 @@
 		pageElements
 	} from '../lib/annotation-selection';
 	import { AnnotationAgentation } from '../lib/annotation-agentation.svelte';
+	import AnnotationClearToolbar from './AnnotationClearToolbar.svelte';
 	import AnnotationModeLayer from './AnnotationModeLayer.svelte';
 
 	/**
@@ -35,7 +36,8 @@
 		outlineTitles = [],
 		onCreateAnnotation,
 		onSelectAnnotation,
-		onActiveHeading
+		onActiveHeading,
+		onDismissAnnotations
 	}: {
 		svg: string | null;
 		annotations?: PreviewAnnotation[];
@@ -45,6 +47,7 @@
 		onCreateAnnotation?: (draft: AnnotationDraft, note: string, elementLabel: string) => void;
 		onSelectAnnotation?: (id: string) => void;
 		onActiveHeading?: (index: number) => void;
+		onDismissAnnotations?: (ids: string[]) => Promise<void>;
 	} = $props();
 
 	const MAX_WIDTH = 860;
@@ -61,6 +64,11 @@
 	>([]);
 
 	const stageWidth = $derived(fitWidth > 0 ? Math.max(280, Math.round(fitWidth * zoom)) : 0);
+	const visibleAnnotationIds = $derived(
+		annotations.flatMap((annotation) =>
+			annotation.status === 'open' || annotation.status === 'sent' ? [annotation.id] : []
+		)
+	);
 
 	const agentation = new AnnotationAgentation({
 		svgHost: () => svgHost,
@@ -364,24 +372,45 @@
 		</div>
 
 		<!-- Toggle mode anotasi (gaya agentation): hover blok dokumen → klik → catatan inline. -->
-		<div class="absolute right-4 bottom-4 z-30" data-annotation-ui>
-			<Button
-				type="button"
-				size="icon"
-				variant="outline"
-				aria-label={agentation.enabled ? 'Matikan mode anotasi' : 'Nyalakan mode anotasi'}
-				aria-pressed={agentation.enabled}
-				class={[
-					'rounded-full border-2',
-					agentation.enabled
-						? 'border-mint-strong bg-mint text-mint-foreground hover:bg-mint'
-						: 'bg-card'
-				]}
-				onclick={() => agentation.toggle()}
+		{#if agentation.enabled}
+			<div
+				role="toolbar"
+				aria-label="Alat anotasi"
+				class="absolute right-4 bottom-4 z-30 flex items-center gap-1 rounded-full border-2 border-border bg-card p-1"
+				data-annotation-ui
 			>
-				<Icon icon={MessageSquarePlusIcon} class="size-4" />
-			</Button>
-		</div>
+				<Button
+					type="button"
+					size="icon"
+					variant="outline"
+					aria-label="Matikan mode anotasi"
+					aria-pressed={agentation.enabled}
+					class="rounded-full border-2 border-mint-strong bg-mint text-mint-foreground hover:bg-mint"
+					onclick={() => agentation.toggle()}
+				>
+					<Icon icon={MessageSquarePlusIcon} class="size-4" />
+				</Button>
+				<AnnotationClearToolbar
+					visibleIds={visibleAnnotationIds}
+					disabled={visibleAnnotationIds.length === 0}
+					onDismiss={(ids) => onDismissAnnotations?.(ids) ?? Promise.resolve()}
+				/>
+			</div>
+		{:else}
+			<div class="absolute right-4 bottom-4 z-30" data-annotation-ui>
+				<Button
+					type="button"
+					size="icon"
+					variant="outline"
+					aria-label="Nyalakan mode anotasi"
+					aria-pressed={agentation.enabled}
+					class="rounded-full border-2 bg-card"
+					onclick={() => agentation.toggle()}
+				>
+					<Icon icon={MessageSquarePlusIcon} class="size-4" />
+				</Button>
+			</div>
+		{/if}
 	{/if}
 </div>
 

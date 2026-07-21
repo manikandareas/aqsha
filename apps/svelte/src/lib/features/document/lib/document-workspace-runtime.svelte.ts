@@ -38,6 +38,7 @@ type PreviewComponent = Component<
 		onCreateAnnotation?: (draft: AnnotationDraft, note: string, elementLabel: string) => void;
 		onSelectAnnotation?: (id: string) => void;
 		onActiveHeading?: (index: number) => void;
+		onDismissAnnotations?: (ids: string[]) => Promise<void>;
 	},
 	PreviewHandle
 >;

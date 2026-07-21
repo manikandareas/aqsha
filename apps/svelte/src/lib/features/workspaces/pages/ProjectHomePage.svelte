@@ -60,6 +60,7 @@
 		useExportDocx,
 		useWorkspaceAnnotations,
 		useCreateAnnotation,
+		useDismissWorkspaceAnnotations,
 		useMarkAnnotationsSent,
 		usePendingProposal,
 		useAcceptProposal,
@@ -111,6 +112,7 @@
 		() => backgroundQueriesActive
 	);
 	const createAnnotation = useCreateAnnotation(() => workspaceId);
+	const dismissAnnotations = useDismissWorkspaceAnnotations(() => workspaceId);
 	const markSent = useMarkAnnotationsSent(() => workspaceId);
 	const proposal = usePendingProposal(
 		() => workspaceId,
@@ -196,11 +198,9 @@
 	);
 
 	function handleCreateAnnotation(draft: AnnotationDraft, note: string, elementLabel: string): void {
-		const pinned = mentions.selectionRefs.filter((r) => r.kind === 'document-annotation').length;
-		if (pinned >= MAX_CONTEXT_ANNOTATIONS) {
-			toast.error(`Maksimal ${MAX_CONTEXT_ANNOTATIONS} anotasi per pesan.`);
-			return;
-		}
+		const canAddToComposer =
+			mentions.selectionRefs.filter((r) => r.kind === 'document-annotation').length <
+			MAX_CONTEXT_ANNOTATIONS;
 		createAnnotation.mutate(
 			{
 				kind: 'pin',
@@ -211,6 +211,12 @@
 			},
 			{
 				onSuccess: (a) => {
+					if (!canAddToComposer) {
+						toast.info(
+							`Anotasi tersimpan. Lepas chip konteks untuk menambah lagi (maksimal ${MAX_CONTEXT_ANNOTATIONS}).`
+						);
+						return;
+					}
 					const selectedText = a.selectedText ?? draft.selectedText;
 					mentions.addSelectionRef({
 						kind: 'document-annotation',
@@ -579,6 +585,9 @@
 					{selectedAnnotationIds}
 					outlineTitles={runtime.outline.map((entry) => entry.title)}
 					onCreateAnnotation={handleCreateAnnotation}
+					onDismissAnnotations={async (ids) => {
+						await dismissAnnotations.mutateAsync({ ids });
+					}}
 					onSelectAnnotation={focusAnnotation}
 					onActiveHeading={(index: number) => (activeTocIndex = index)}
 				/>

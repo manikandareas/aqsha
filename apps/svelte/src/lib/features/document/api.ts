@@ -175,6 +175,20 @@ export function useDeleteAnnotation(workspaceId: () => string) {
 	}));
 }
 
+export function useDismissWorkspaceAnnotations(workspaceId: () => string) {
+	const api = getApiClient();
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (input: { ids: string[] }) =>
+			unwrap(
+				await api.workspaces({ id: workspaceId() }).annotations.dismiss.post(input)
+			) as { ok: true },
+		onSuccess: () => {
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.annotations(workspaceId()) });
+		}
+	}));
+}
+
 export function useMarkAnnotationsSent(workspaceId: () => string) {
 	const api = getApiClient();
 	const qc = useQueryClient();
