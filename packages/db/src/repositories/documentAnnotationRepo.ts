@@ -46,10 +46,11 @@ export const DocumentAnnotationRepo = {
     await db.delete(documentAnnotations).where(eq(documentAnnotations.id, id));
   },
 
-  /** Transisi status massal (mark-sent / resolve / reopen) — dibatasi owner + daftar id. */
+  /** Transisi status massal (mark-sent / resolve / reopen) dibatasi owner, workspace, dan daftar id. */
   async updateStatusByIds(
     db: DbOrTx,
     ownerUserId: string,
+    workspaceId: string,
     ids: string[],
     patch: Partial<NewDocumentAnnotation>,
   ): Promise<void> {
@@ -58,7 +59,11 @@ export const DocumentAnnotationRepo = {
       .update(documentAnnotations)
       .set(patch)
       .where(
-        and(eq(documentAnnotations.ownerUserId, ownerUserId), inArray(documentAnnotations.id, ids)),
+        and(
+          eq(documentAnnotations.ownerUserId, ownerUserId),
+          eq(documentAnnotations.workspaceId, workspaceId),
+          inArray(documentAnnotations.id, ids),
+        ),
       );
   },
 };

@@ -352,10 +352,16 @@ export const DocumentProposalService = {
       status: "accepted",
       decidedAt: now,
     });
-    await DocumentAnnotationRepo.updateStatusByIds(db, input.ownerUserId, proposal.annotationIds, {
-      status: "resolved",
-      updatedAt: now,
-    });
+    await DocumentAnnotationRepo.updateStatusByIds(
+      db,
+      input.ownerUserId,
+      proposal.workspaceId,
+      proposal.annotationIds,
+      {
+        status: "resolved",
+        updatedAt: now,
+      },
+    );
     return { status: "accepted", contentVersion: saved.contentVersion };
   },
 
@@ -367,10 +373,16 @@ export const DocumentProposalService = {
       status: "rejected",
       decidedAt: now,
     });
-    await DocumentAnnotationRepo.updateStatusByIds(db, input.ownerUserId, proposal.annotationIds, {
-      status: "open",
-      updatedAt: now,
-    });
+    await DocumentAnnotationRepo.updateStatusByIds(
+      db,
+      input.ownerUserId,
+      proposal.workspaceId,
+      proposal.annotationIds,
+      {
+        status: "open",
+        updatedAt: now,
+      },
+    );
     return { ok: true };
   },
 

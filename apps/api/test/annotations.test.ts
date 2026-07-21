@@ -40,6 +40,11 @@ describe("annotations routes", () => {
     const body = (await res.json()) as { code?: string };
     expect(typeof body.code).toBe("string");
   });
+
+  itest("dismiss membutuhkan setidaknya satu id anotasi", async () => {
+    const res = await req("POST", `/workspaces/x/annotations/dismiss`, `tok_${OWNER}`, { ids: [] });
+    expect(res.status).toBe(400);
+  });
 });
 
 afterAll(() => {

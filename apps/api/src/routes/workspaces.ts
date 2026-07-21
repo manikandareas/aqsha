@@ -266,6 +266,21 @@ export const workspaces = new Elysia()
     { auth: true },
   )
   .post(
+    "/workspaces/:id/annotations/dismiss",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return AnnotationService.dismissMany(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        ids: body.ids,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ ids: t.Array(t.String(), { minItems: 1, maxItems: 64 }) }),
+    },
+  )
+  .post(
     "/workspaces/:id/annotations/mark-sent",
     ({ ownerUserId, params, body }) => {
       const { db } = getDb();

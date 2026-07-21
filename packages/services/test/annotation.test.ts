@@ -12,6 +12,7 @@ const itest = DATABASE_URL ? test : test.skip;
 const SUFFIX = Math.floor(Math.random() * 1e9);
 const OWNER = `itan_${SUFFIX}`;
 const WS = `itan_${SUFFIX}:ws`;
+const WS_OWNED = `itan_${SUFFIX}:ws-owned`;
 const WS_FOREIGN = `itan_${SUFFIX}:wsx`;
 const NOW = 1_700_000_000_000;
 const { db, client } = createDb(DATABASE_URL ?? "postgresql://x");
@@ -21,6 +22,8 @@ async function seed() {
     values (${OWNER}, ${OWNER}, ${`${OWNER}@test.local`}, ${NOW}, ${NOW})`;
   await client`insert into workspaces (id, owner_user_id, name, kind, status, created_at, updated_at)
     values (${WS}, ${OWNER}, ${"Proyek"}, ${"paper"}, ${"active"}, ${NOW}, ${NOW})`;
+  await client`insert into workspaces (id, owner_user_id, name, kind, status, created_at, updated_at)
+    values (${WS_OWNED}, ${OWNER}, ${"Proyek kedua"}, ${"paper"}, ${"active"}, ${NOW}, ${NOW})`;
 }
 
 afterAll(async () => {
@@ -79,6 +82,46 @@ describe("AnnotationService", () => {
     const row = rows.find((r) => r.id === annotationId);
     expect(row?.status).toBe("sent");
     expect(row?.threadId).toBe("thread-1");
+  });
+
+  itest("dismissMany hanya menyembunyikan anotasi open/sent pada workspace yang sama", async () => {
+    const sent = await AnnotationService.create(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      kind: "pin",
+      page: 1,
+      rects: [{ x: 4, y: 8, w: 0, h: 0 }],
+      note: "sudah dikirim",
+    });
+    const otherWorkspace = await AnnotationService.create(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS_OWNED,
+      kind: "pin",
+      page: 1,
+      rects: [{ x: 5, y: 9, w: 0, h: 0 }],
+      note: "tetap terlihat",
+    });
+    await AnnotationService.markSent(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      ids: [sent.id],
+      threadId: "t-1",
+    });
+
+    await AnnotationService.dismissMany(db, {
+      ownerUserId: OWNER,
+      workspaceId: WS,
+      ids: [sent.id, otherWorkspace.id],
+    });
+
+    const row = (await AnnotationService.list(db, { ownerUserId: OWNER, workspaceId: WS })).find(
+      (item) => item.id === sent.id,
+    );
+    const otherRow = (
+      await AnnotationService.list(db, { ownerUserId: OWNER, workspaceId: WS_OWNED })
+    ).find((item) => item.id === otherWorkspace.id);
+    expect(row?.status).toBe("dismissed");
+    expect(otherRow?.status).toBe("open");
   });
 
   itest("guard: workspace bukan milik owner → 404", async () => {

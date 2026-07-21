@@ -185,10 +185,22 @@ export const AnnotationService = {
     },
   ): Promise<{ ok: true }> {
     await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
-    await DocumentAnnotationRepo.updateStatusByIds(db, input.ownerUserId, input.ids, {
+    await DocumentAnnotationRepo.updateStatusByIds(db, input.ownerUserId, input.workspaceId, input.ids, {
       status: "sent",
       threadId: input.threadId,
       messageId: input.messageId ?? null,
+      updatedAt: Date.now(),
+    });
+    return { ok: true };
+  },
+
+  async dismissMany(
+    db: Db,
+    input: { ownerUserId: string; workspaceId: string; ids: string[] },
+  ): Promise<{ ok: true }> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
+    await DocumentAnnotationRepo.updateStatusByIds(db, input.ownerUserId, input.workspaceId, input.ids, {
+      status: "dismissed",
       updatedAt: Date.now(),
     });
     return { ok: true };
