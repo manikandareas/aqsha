@@ -121,6 +121,7 @@ export {
 	PlayIcon as Play,
 	PlugSocketIcon as PlugIcon,
 	Add01Icon as PlusIcon,
+	Add02Icon as Add02Icon,
 	QuoteUpIcon as Quote,
 	SaveIcon as SaveIcon,
 	BalanceScaleIcon as Scale,

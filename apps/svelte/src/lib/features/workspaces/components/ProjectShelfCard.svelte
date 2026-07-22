@@ -1,106 +1,157 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import * as Avatar from '@aqsha/ui-svelte/components/avatar';
 	import { cn } from '@aqsha/ui-svelte/utils';
-	import { formatRelativeToNow, WORKSPACE_KIND_LABELS } from '../labels';
+	import { viewerContext } from '$lib/auth';
+	import { formatDeadline, formatRelativeToNow, WORKSPACE_KIND_LABELS } from '../labels';
 	import { projectAccent, type ProjectAccent } from '../project-presentation';
-	import { projectDisplayTitle, type Workspace } from '../types';
+	import { projectShelfPreview } from '../project-shelf-preview';
+	import { projectDisplayTitle, type WorkspaceListItem } from '../types';
+	import ProjectShelfCardActions from './ProjectShelfCardActions.svelte';
 
 	type AccentStyle = {
 		cover: string;
 		badge: string;
-		empty: string;
 	};
 
 	const ACCENT_STYLES: Record<ProjectAccent, AccentStyle> = {
 		mint: {
 			cover:
 				'border-mint-soft-border bg-mint-soft text-mint-foreground dark:border-border dark:bg-card dark:text-card-foreground',
-			badge: 'border-mint-soft-border text-mint-foreground',
-			empty: 'text-mint-foreground/70 dark:text-muted-foreground'
+			badge: 'border-mint-soft-border text-mint-foreground'
 		},
 		lavender: {
 			cover:
 				'border-lavender-soft-border bg-lavender-soft text-lavender-foreground dark:border-border dark:bg-card dark:text-card-foreground',
-			badge: 'border-lavender-soft-border text-lavender-foreground',
-			empty: 'text-lavender-foreground/70 dark:text-muted-foreground'
+			badge: 'border-lavender-soft-border text-lavender-foreground'
 		},
 		coral: {
 			cover:
 				'border-coral-soft-border bg-coral-soft text-coral-foreground dark:border-border dark:bg-card dark:text-card-foreground',
-			badge: 'border-coral-soft-border text-coral-foreground',
-			empty: 'text-coral-foreground/70 dark:text-muted-foreground'
+			badge: 'border-coral-soft-border text-coral-foreground'
 		},
 		lemon: {
 			cover:
 				'border-lemon-soft-border bg-lemon-soft text-lemon-foreground dark:border-border dark:bg-card dark:text-card-foreground',
-			badge: 'border-lemon-soft-border text-lemon-foreground',
-			empty: 'text-lemon-foreground/70 dark:text-muted-foreground'
+			badge: 'border-lemon-soft-border text-lemon-foreground'
 		}
 	};
 
-	let { workspace }: { workspace: Workspace } = $props();
+	let { workspace }: { workspace: WorkspaceListItem } = $props();
+
+	const viewer = viewerContext.get();
+	const display = $derived(viewer.display({ name: 'Aqsha user', email: 'Signed in' }));
 
 	const untitled = $derived(!workspace.name.trim() && !workspace.topicNote?.trim());
 	const title = $derived(projectDisplayTitle(workspace));
 	const kindLabel = $derived(WORKSPACE_KIND_LABELS[workspace.kind]);
-	const note = $derived(workspace.topicNote?.trim() ?? '');
+	const sneakPeek = $derived(projectShelfPreview(workspace));
 	const accent = $derived(projectAccent(workspace.kind));
 	const accentStyle = $derived(ACCENT_STYLES[accent]);
-	const editLabel = $derived(`Diedit ${formatRelativeToNow(workspace.updatedAt)}`);
+	const absoluteDate = $derived(formatDeadline(workspace.updatedAt));
+	const relativeEditLabel = $derived(`Diedit ${formatRelativeToNow(workspace.updatedAt)}`);
 </script>
 
 <article
-	class="group relative min-w-0 rounded-xl focus-within:outline-none focus-within:ring-[3px] focus-within:ring-ring/50"
+	class={cn(
+		'group relative flex h-[17.5rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border-2 p-3',
+		'transition-[border-color,transform] duration-150 ease-out',
+		'hover:-translate-y-0.5 hover:border-foreground/30',
+		'focus-within:-translate-y-0.5 focus-within:border-ring',
+		'focus-within:outline-none focus-within:ring-[3px] focus-within:ring-ring/50',
+		'motion-reduce:transform-none',
+		accentStyle.cover
+	)}
 >
+	<!-- Full-card hit target; chrome (menu) sits above via z-index so it can stop navigation. -->
 	<a
 		href={resolve('/app/(product)/projects/[projectId]', { projectId: workspace.id })}
-		class="absolute inset-0 z-20 rounded-xl"
+		class="absolute inset-0 z-10 rounded-2xl"
 		aria-label={`Buka ${title}`}
 	></a>
 
+	<!-- Fixed preview pane: flex-1 + overflow clip keeps card height stable across projects. -->
 	<div
-		class={cn(
-			'relative flex aspect-[4/3] flex-col overflow-hidden rounded-xl border-2 px-4 pt-4 pb-3.5',
-			'transition-[border-color,transform] duration-150 ease-out',
-			'group-hover:-translate-y-0.5 group-hover:border-foreground/30',
-			'group-focus-within:-translate-y-0.5 group-focus-within:border-ring',
-			'motion-reduce:transform-none',
-			accentStyle.cover
-		)}
+		class="relative z-0 min-h-0 flex-1 overflow-hidden rounded-xl border-2 border-border/80 bg-card text-card-foreground shadow-none"
 		aria-hidden="true"
 	>
+		{#if sneakPeek}
+			<div class="flex h-full flex-col gap-1 overflow-hidden px-3 py-2.5">
+				{#each sneakPeek.blocks as block, index (index)}
+					{#if block.type === 'title'}
+						<p class="shrink-0 truncate text-[0.85rem] font-bold leading-snug text-foreground">
+							{block.text}
+						</p>
+					{:else if block.type === 'heading'}
+						<p
+							class={cn(
+								'shrink-0 truncate font-semibold leading-snug text-foreground',
+								block.level === 1 ? 'text-[0.75rem]' : 'text-[0.7rem]'
+							)}
+						>
+							{block.text}
+						</p>
+					{:else}
+						<p class="line-clamp-2 min-h-0 text-[0.68rem] leading-relaxed text-muted-foreground">
+							{block.text}
+						</p>
+					{/if}
+				{/each}
+			</div>
+		{:else}
+			<p
+				class="grid h-full place-items-center px-3 py-2.5 text-center font-hand text-lg leading-snug text-muted-foreground"
+			>
+				Belum ada isi dokumen
+			</p>
+		{/if}
+	</div>
+
+	<div class="relative z-20 flex shrink-0 flex-col gap-1.5 px-0.5 pb-0.5">
+		<div class="flex items-start gap-2">
+			<h3
+				class={cn(
+					'min-w-0 flex-1 truncate text-[0.95rem] leading-snug tracking-normal',
+					untitled ? 'italic text-current/55' : 'font-semibold text-current'
+				)}
+			>
+				{title}
+			</h3>
+
+			<ProjectShelfCardActions {workspace} />
+		</div>
+
 		<div class="flex items-center gap-2">
-			{#if workspace.emoji?.trim()}
-				<span class="text-base leading-none">{workspace.emoji}</span>
-			{/if}
+			<time
+				class="min-w-0 flex-1 truncate text-label text-current/55"
+				datetime={new Date(workspace.updatedAt).toISOString()}
+				title={relativeEditLabel}
+			>
+				{absoluteDate}
+			</time>
+
 			<span
 				class={cn(
-					'rounded-full border bg-card/90 px-2.5 py-1 text-micro font-semibold shadow-none',
+					'relative z-20 shrink-0 rounded-full border bg-card/90 px-2 py-0.5 text-micro font-semibold shadow-none',
 					accentStyle.badge
 				)}
 			>
 				{kindLabel}
 			</span>
+
+			<Avatar.Root
+				class="relative z-20 size-7 shrink-0 rounded-full ring-1 ring-border"
+				aria-hidden="true"
+			>
+				{#if display.image}
+					<Avatar.Image src={display.image} alt="" />
+				{/if}
+				<Avatar.Fallback
+					class="rounded-full bg-sky-soft text-[10px] font-semibold text-sky-foreground"
+				>
+					{display.initials}
+				</Avatar.Fallback>
+			</Avatar.Root>
 		</div>
-
-		{#if note}
-			<p class="mt-4 line-clamp-4 max-w-[34ch] text-[0.8rem] leading-relaxed text-current/80">
-				{note}
-			</p>
-		{:else}
-			<p class={cn('font-hand mt-4 text-xl leading-snug', accentStyle.empty)}>Belum ada catatan</p>
-		{/if}
-	</div>
-
-	<div class="min-w-0 px-1 pt-3 pb-1">
-		<h3
-			class={cn(
-				'text-control truncate leading-snug tracking-normal',
-				untitled ? 'italic text-muted-foreground' : 'font-semibold text-foreground'
-			)}
-		>
-			{title}
-		</h3>
-		<p class="mt-1 text-label text-muted-foreground">{editLabel}</p>
 	</div>
 </article>

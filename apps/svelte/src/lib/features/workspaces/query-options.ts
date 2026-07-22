@@ -1,12 +1,12 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/svelte-query';
 import type { ApiClient } from '@aqsha/api/client';
 import { queryKeys, unwrap } from '$lib/query';
-import type { Workspace } from './types';
+import type { Workspace, WorkspaceListItem } from './types';
 
 export const WORKSPACE_LIST_PAGE_SIZE = 25;
 
 export type WorkspaceListPage = {
-	items: Workspace[];
+	items: WorkspaceListItem[];
 	nextCursor: string | null;
 };
 

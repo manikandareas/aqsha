@@ -6,14 +6,14 @@
 	import { viewerContext } from '$lib/auth';
 	import { readableApiErrorMessage } from '$lib/errors';
 	import { landingGreeting } from '$lib/features/thread-experience/utils/landing-greeting';
-	import { FolderIcon, Icon } from '$lib/icons';
+	import { Add02Icon, Icon } from '$lib/icons';
 	import { useWorkspacesList } from '../api';
 	import HomeFeatureShortcuts from '../components/HomeFeatureShortcuts.svelte';
 	import NewProjectCard from '../components/NewProjectCard.svelte';
 	import ProjectShelfCard from '../components/ProjectShelfCard.svelte';
 	import ProjectSortMenu from '../components/ProjectSortMenu.svelte';
 	import { sortWorkspaces, type ProjectSortId } from '../project-sort';
-	import type { Workspace } from '../types';
+	import type { WorkspaceListItem } from '../types';
 
 	const skeletonCards = [0, 1, 2, 3, 4] as const;
 	const newProjectHref = resolve('/app/(product)/projects/new');
@@ -28,7 +28,7 @@
 	let sort = $state<ProjectSortId>('updated-desc');
 	let localHour = $state<number | null>(null);
 
-	const projects = $derived<Workspace[]>(list.data?.pages.flatMap((page) => page.items) ?? []);
+	const projects = $derived<WorkspaceListItem[]>(list.data?.pages.flatMap((page) => page.items) ?? []);
 	const sortedProjects = $derived(sortWorkspaces(projects, sort));
 	const projectCount = $derived(projects.length);
 	const name = $derived(viewer.display({ name: '', email: '' }).name);
@@ -60,8 +60,8 @@
 				</p>
 			</div>
 			<Button href={newProjectHref} size="default" class="self-start sm:self-auto">
-				<Icon icon={FolderIcon} class="size-4" />
-				Proyek baru
+				<Icon icon={Add02Icon} class="size-4" />
+				New
 			</Button>
 		</header>
 
@@ -99,13 +99,22 @@
 				>
 					<NewProjectCard />
 					{#each skeletonCards as item (item)}
-						<div class="min-w-0" aria-hidden="true">
+						<div
+							class="flex h-[17.5rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border-2 border-border bg-card/50 p-3"
+							aria-hidden="true"
+						>
 							<div
-								class="aspect-[4/3] animate-pulse rounded-xl border-2 border-border bg-card/60"
+								class="min-h-0 flex-1 animate-pulse rounded-xl border-2 border-border/70 bg-muted/35"
 							></div>
-							<div class="px-1 pt-3">
-								<div class="h-4 w-3/4 animate-pulse rounded bg-muted/60"></div>
-								<div class="mt-2 h-3 w-1/3 animate-pulse rounded bg-muted/45"></div>
+							<div class="flex shrink-0 flex-col gap-1.5 px-0.5 pb-0.5">
+								<div class="flex items-center gap-2">
+									<div class="h-4 min-w-0 flex-1 animate-pulse rounded bg-muted/60"></div>
+									<div class="size-8 shrink-0 animate-pulse rounded-md bg-muted/45"></div>
+								</div>
+								<div class="flex items-center gap-2">
+									<div class="h-3 w-1/3 animate-pulse rounded bg-muted/45"></div>
+									<div class="ml-auto size-7 shrink-0 animate-pulse rounded-full bg-muted/50"></div>
+								</div>
 							</div>
 						</div>
 					{/each}

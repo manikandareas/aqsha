@@ -1,5 +1,6 @@
 import {
   Add01Icon,
+  Add02Icon as HugeAdd02Icon,
   AlertCircleIcon as HugeAlertCircleIcon,
   ArchiveIcon as HugeArchiveIcon,
   ArrowDown01Icon,
@@ -232,6 +233,7 @@ export const PinOffIcon = createIcon(HugePinOffIcon);
 export const Play = createIcon(HugePlayIcon);
 export const PlugIcon = createIcon(PlugSocketIcon);
 export const PlusIcon = createIcon(Add01Icon);
+export const Add02Icon = createIcon(HugeAdd02Icon);
 export const Quote = createIcon(QuoteUpIcon);
 export const SaveIcon = createIcon(HugeSaveIcon);
 export const Scale = createIcon(BalanceScaleIcon);

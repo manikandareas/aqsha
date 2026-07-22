@@ -1,4 +1,5 @@
 import {
+  ArtifactRepo,
   throwAppError,
   WORKSPACE_KIND_INFO_FIELDS,
   WORKSPACE_KINDS,
@@ -9,6 +10,7 @@ import {
 } from "@aqsha/db";
 import type { Db, DbOrTx } from "@aqsha/db";
 import { decodeKeysetCursor } from "@aqsha/db";
+import { previewFromTypstSource } from "./artifacts/model";
 import { PLAN_CATALOG, UNLIMITED } from "./plan";
 import { resolveEffectivePlanKey } from "./billing/snapshot";
 import { scaffoldTypstDocument } from "./typst/scaffold";
@@ -31,6 +33,11 @@ function sanitizeKindInfo(
 }
 
 export const DEFAULT_WORKSPACE_NAME = "Workspace Saya";
+
+/** Workspace row + sneak-peek teks dokumen Typst untuk rak/list (null bila belum ada dokumen). */
+export type WorkspaceListItem = Workspace & {
+  documentPreview: string | null;
+};
 
 const WORKSPACE_NAME_LABEL = "Workspace name";
 const DEFAULT_LIST_LIMIT = 25;
@@ -99,19 +106,37 @@ export const WorkspaceService = {
     return workspace;
   },
 
-  /** List keyset milik owner (active-only kecuali `includeArchived`). */
+  /** List keyset milik owner (active-only kecuali `includeArchived`) + sneak-peek dokumen Typst. */
   async list(
     db: DbOrTx,
     ownerUserId: string,
     args: { includeArchived?: boolean; cursor?: string | null; limit?: number },
-  ): Promise<{ items: Workspace[]; nextCursor: string | null }> {
+  ): Promise<{ items: WorkspaceListItem[]; nextCursor: string | null }> {
     const limit = clampLimit(args.limit);
-    return WorkspaceRepo.listByOwner(db, {
+    const page = await WorkspaceRepo.listByOwner(db, {
       ownerUserId,
       includeArchived: args.includeArchived ?? false,
       limit,
       cursor: decodeKeysetCursor(args.cursor),
     });
+    const documentIds = page.items
+      .map((item) => item.documentArtifactId)
+      .filter((id): id is string => Boolean(id));
+    // Raw content prefix (or stored preview) → one Typst cleaner. Client only soft-renders blocks.
+    const rawPreviews = await ArtifactRepo.findPreviewsByIds(db, documentIds);
+    return {
+      items: page.items.map((item) => {
+        const raw = item.documentArtifactId
+          ? (rawPreviews.get(item.documentArtifactId) ?? null)
+          : null;
+        const cleaned = raw?.trim() ? previewFromTypstSource(raw) : "";
+        return {
+          ...item,
+          documentPreview: cleaned || null,
+        };
+      }),
+      nextCursor: page.nextCursor,
+    };
   },
 
   /** Soft ownership: `null` bila missing/not-owned (BUKAN throw). Port `workspaces.get` V1. */

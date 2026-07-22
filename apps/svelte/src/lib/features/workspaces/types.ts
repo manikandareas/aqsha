@@ -61,6 +61,11 @@ export type Workspace = {
 	updatedAt: number;
 };
 
+/** List enrichment: always present (`null` when the project has no Typst document yet). */
+export type WorkspaceListItem = Workspace & {
+	documentPreview: string | null;
+};
+
 export type Folder = {
 	id: string;
 	ownerUserId: string;

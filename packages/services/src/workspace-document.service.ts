@@ -9,7 +9,7 @@ import {
   type Workspace,
   WorkspaceRepo,
 } from "@aqsha/db";
-import { previewFromText } from "./artifacts/model";
+import { previewFromTypstSource } from "./artifacts/model";
 import { CitationUsageService, type ParsedCitationCluster } from "./citations/citation-usages";
 import { scanTypstCiteKeys } from "./typst/cite-scan";
 
@@ -131,7 +131,7 @@ export const WorkspaceDocumentService = {
       detectedDocumentKind: null,
       storageR2Key: null,
       ragEntryId: null,
-      plainTextPreview: previewFromText(input.source),
+      plainTextPreview: previewFromTypstSource(input.source),
       indexedAt: null,
       contentVersion: 1,
       status: "active",
@@ -241,7 +241,7 @@ export const WorkspaceDocumentService = {
             detectedDocumentKind: null,
             storageR2Key: null,
             ragEntryId: null,
-            plainTextPreview: previewFromText(input.source),
+            plainTextPreview: previewFromTypstSource(input.source),
             indexedAt: null,
             contentVersion: 1,
             status: "active",
@@ -320,7 +320,7 @@ export const WorkspaceDocumentService = {
       await db.transaction(async (tx) => {
         const won = await ArtifactRepo.updateIfVersion(tx, artifact.id, currentVersion, {
           contentVersion: nextVersion,
-          plainTextPreview: previewFromText(input.source),
+          plainTextPreview: previewFromTypstSource(input.source),
           updatedAt: now,
         });
         if (!won) throw new StaleWriteRollback();

@@ -6,6 +6,7 @@ import {
   MAX_UPLOAD_BYTES,
   normalizeUrl,
   previewFromText,
+  previewFromTypstSource,
   siteNameFromUrl,
   titleFromUrl,
   uploadArtifactType,
@@ -97,6 +98,38 @@ describe("pure mappings", () => {
     expect(previewFromText("a   b\n\nc")).toBe("a b c");
     expect(previewFromText("x".repeat(400)).endsWith("...")).toBe(true);
     expect(previewFromText("x".repeat(400)).length).toBe(280);
+  });
+
+  test("previewFromTypstSource drops preamble so headings survive the cap", () => {
+    const source = [
+      '#set text(font: "Inter", lang: "id", size: 11pt)',
+      "#set par(justify: true, leading: 0.8em, first-line-indent: 1.25em)",
+      '#set page(paper: "a4", margin: (x: 3cm, y: 2.5cm), numbering: "1")',
+      '#set heading(numbering: "1.1")',
+      "",
+      "= Pendahuluan",
+      "",
+      "Isi bab pertama.",
+    ].join("\n");
+    const preview = previewFromTypstSource(source, 280);
+    expect(preview).toContain("= Pendahuluan");
+    expect(preview).toContain("Isi bab pertama.");
+    expect(preview).not.toContain("#set text");
+  });
+
+  test("previewFromTypstSource recovers headings from collapsed single-line previews", () => {
+    const preview = previewFromTypstSource(
+      '#set text(font: "Inter") = Pendahuluan = Tinjauan Pustaka Isi singkat.',
+    );
+    expect(preview).toContain("= Pendahuluan");
+    expect(preview).toContain("= Tinjauan Pustaka Isi singkat.");
+    expect(preview).not.toContain("#set text");
+  });
+
+  test("previewFromTypstSource keeps line breaks + truncates", () => {
+    expect(previewFromTypstSource("= Bab\n\n\nHalo")).toBe("= Bab\n\nHalo");
+    expect(previewFromTypstSource("x".repeat(2000)).endsWith("...")).toBe(true);
+    expect(previewFromTypstSource("x".repeat(2000)).length).toBe(1200);
   });
 
   test("threshold constants", () => {

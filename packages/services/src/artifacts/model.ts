@@ -11,6 +11,8 @@ import { throwAppError } from "@aqsha/db";
 export const ARTIFACT_BODY_INLINE_LIMIT = 700_000;
 export const ARTIFACT_CONTEXT_LIMIT = 24_000;
 export const ARTIFACT_PREVIEW_LIMIT = 280;
+/** Longer window for Typst shelf sneak-peeks after preamble lines are dropped. */
+export const TYPST_SHELF_PREVIEW_LIMIT = 1_200;
 export const MAX_INDEXED_TEXT_CHARS = 300_000;
 export const PAPER_ENRICHMENT_TEXT_CHARS = 8_000;
 export const MAX_UPLOAD_MB = 50;
@@ -217,6 +219,42 @@ export function previewFromText(value: string, limit = ARTIFACT_PREVIEW_LIMIT): 
   const compact = value.replace(/\s+/g, " ").trim();
   if (compact.length <= limit) return compact;
   return `${compact.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
+}
+
+/**
+ * Typst shelf sneak-peek source window — single cleanup used on write *and* list enrichment.
+ * Re-splits older collapsed previews, drops pure preamble/command lines, then caps length so
+ * headings/body survive (a naive 280-char window dies inside `#set` noise).
+ */
+export function previewFromTypstSource(
+  value: string,
+  limit = TYPST_SHELF_PREVIEW_LIMIT,
+): string {
+  const cleaned = value
+    .replace(/\r\n/g, "\n")
+    .replace(/\s+(?=={1,3}\s+\S)/g, "\n")
+    .replace(/\s+(?=#(?:pagebreak|align|bibliography)\b)/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\s+$/g, ""))
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      // Keep content-bearing calls (`#text(...)[...]`); drop pure setup/import/pagebreak lines.
+      if (
+        /^#(?:set|show|import|include|let|pagebreak|bibliography|outline|v|h|colbreak)\b/.test(
+          trimmed,
+        ) &&
+        !trimmed.includes("[")
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (cleaned.length <= limit) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
 }
 
 export function plainTextFromMarkdown(markdown: string): string {

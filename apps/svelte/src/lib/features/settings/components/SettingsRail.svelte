@@ -1,38 +1,36 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import NavUser from '$lib/components/layout/NavUser.svelte';
+	import SidebarSection from '$lib/components/layout/sidebar/SidebarSection.svelte';
+	import { sidebarItemClass } from '$lib/components/layout/sidebar/sidebar-item-class';
 	import { Icon, ArrowLeftIcon } from '$lib/icons';
-	import { cn } from '@aqsha/ui-svelte/utils';
 	import { settingsItemForPath, settingsMenu, type SettingsMenuItem } from '../lib/settings-menu';
 
 	/**
-	 * Settings navigation rail. Offcanvas + flush variant (distinct from the product AppSidebar),
-	 * "Kembali ke chat" header, two nav groups (Pribadi / Riset), NavUser footer (viewer resolves from
-	 * `viewerContext`). Active section derives from the current pathname.
+	 * Settings navigation rail — same inset + icon-collapsible chrome as AppSidebar.
+	 * Header: "Kembali ke beranda". Content: Pribadi / Riset via SidebarSection.
+	 * Collapse stays on Sidebar.Rail (no header toggle). Active section from pathname;
+	 * NavUser resolves from `viewerContext`.
 	 */
+	const sidebar = Sidebar.useSidebar();
 	const active = $derived(settingsItemForPath(page.url.pathname).key);
-
-	const settingsItemBaseClass =
-		'h-8 gap-2 rounded-[8px] px-2.5 py-0 text-[12px] font-medium transition-[background-color,color] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5';
-
-	function settingsItemClass(isActive: boolean) {
-		return cn(
-			settingsItemBaseClass,
-			isActive
-				? 'bg-primary/10 text-foreground [&_svg]:text-primary'
-				: 'text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-primary/70'
-		);
-	}
+	const collapsed = $derived(!sidebar.isMobile && sidebar.state === 'collapsed');
+	const groups = ['Pribadi', 'Riset'] as const;
 </script>
 
 {#snippet navRow(item: SettingsMenuItem, isActive: boolean)}
 	<Sidebar.MenuItem class="min-w-0 overflow-hidden">
-		<Sidebar.MenuButton {isActive} class={settingsItemClass(isActive)}>
+		<Sidebar.MenuButton
+			{isActive}
+			size="rail"
+			class={sidebarItemClass(isActive)}
+			tooltipContent={item.label}
+		>
 			{#snippet child({ props })}
 				<a href={item.href} {...props}>
-					<Icon icon={item.icon} />
+					<Icon icon={item.icon} class="size-3.5 shrink-0 group-data-[collapsible=icon]:size-4" />
 					<span>{item.label}</span>
 				</a>
 			{/snippet}
@@ -40,30 +38,22 @@
 	</Sidebar.MenuItem>
 {/snippet}
 
-{#snippet navGroup(label: SettingsMenuItem['group'])}
-	<div class="min-w-0 overflow-hidden">
-		<div class="flex items-center justify-between gap-1 px-0.5 pb-1.5 pt-0">
-			<span class="text-[11px] font-medium tracking-[-0.01em] text-primary/75">{label}</span>
-		</div>
-		<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
-			{#each settingsMenu.filter((item) => item.group === label) as item (item.key)}
-				{@render navRow(item, active === item.key)}
-			{/each}
-		</Sidebar.Menu>
-	</div>
-{/snippet}
-
-<Sidebar.Root collapsible="offcanvas" variant="flush">
-	<Sidebar.Header class="gap-3 px-3 pb-3 pt-3.5">
-		<Sidebar.Menu>
-			<Sidebar.MenuItem>
+<Sidebar.Root collapsible="icon" variant="inset">
+	<Sidebar.Header class="gap-3 px-3 pb-3 pt-3.5 group-data-[collapsible=icon]:px-0">
+		<Sidebar.Menu class="gap-1 group-data-[collapsible=icon]:items-center">
+			<Sidebar.MenuItem class="min-w-0 overflow-hidden">
 				<Sidebar.MenuButton
-					class={cn(settingsItemBaseClass, 'text-muted-foreground hover:text-foreground')}
+					size="rail"
+					class={sidebarItemClass(false)}
+					tooltipContent="Kembali ke beranda"
 				>
 					{#snippet child({ props })}
-						<a href={resolve('/app')} {...props}>
-							<Icon icon={ArrowLeftIcon} class="size-3.5" />
-							<span>Kembali ke chat</span>
+						<a {...props} href={resolve('/app/(product)')}>
+							<Icon
+								icon={ArrowLeftIcon}
+								class="size-3.5 shrink-0 group-data-[collapsible=icon]:size-4"
+							/>
+							<span>Kembali ke beranda</span>
 						</a>
 					{/snippet}
 				</Sidebar.MenuButton>
@@ -71,14 +61,31 @@
 		</Sidebar.Menu>
 	</Sidebar.Header>
 
-	<Sidebar.Content class="min-h-0 px-3 pb-3 pt-0">
-		<div class="grid gap-5">
-			{@render navGroup('Pribadi')}
-			{@render navGroup('Riset')}
-		</div>
+	<Sidebar.Content class="min-h-0 px-3 pb-3 pt-2 group-data-[collapsible=icon]:px-0">
+		{#if !collapsed}
+			<div class="grid gap-4">
+				{#each groups as group, index (group)}
+					<SidebarSection label={group} first={index === 0}>
+						<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
+							{#each settingsMenu.filter((item) => item.group === group) as item (item.key)}
+								{@render navRow(item, active === item.key)}
+							{/each}
+						</Sidebar.Menu>
+					</SidebarSection>
+				{/each}
+			</div>
+		{:else}
+			<!-- Icon rail: section labels hide; keep every settings destination as a tooltip'd glyph. -->
+			<Sidebar.Menu class="gap-1 group-data-[collapsible=icon]:items-center">
+				{#each settingsMenu as item (item.key)}
+					{@render navRow(item, active === item.key)}
+				{/each}
+			</Sidebar.Menu>
+		{/if}
 	</Sidebar.Content>
 
-	<Sidebar.Footer class="mt-auto p-3">
+	<Sidebar.Footer class="mt-auto gap-3 p-3 group-data-[collapsible=icon]:p-2">
 		<NavUser />
 	</Sidebar.Footer>
+	<Sidebar.Rail />
 </Sidebar.Root>

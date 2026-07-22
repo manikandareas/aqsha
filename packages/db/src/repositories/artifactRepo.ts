@@ -1,5 +1,6 @@
-import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { type Artifact, artifacts, type NewArtifact } from "../schema/artifacts";
+import { artifactContents } from "../schema/artifactContents";
 import { type KeysetCursor, encodeKeysetCursor } from "../cursor";
 import type { DbOrTx } from "../types";
 
@@ -197,5 +198,32 @@ export const ArtifactRepo = {
   async deleteByIds(db: DbOrTx, ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await db.delete(artifacts).where(inArray(artifacts.id, ids));
+  },
+
+  /**
+   * Batch raw Typst source for shelf list enrichment. Prefer inline content prefix
+   * (`left(plain_text, 4000)`) as input to `previewFromTypstSource` in the service layer;
+   * fall back to stored `plain_text_preview` when content is missing/offloaded.
+   */
+  async findPreviewsByIds(
+    db: DbOrTx,
+    ids: string[],
+  ): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    if (ids.length === 0) return out;
+    const rows = await db
+      .select({
+        id: artifacts.id,
+        plainTextPreview: artifacts.plainTextPreview,
+        contentPrefix: sql<string | null>`left(${artifactContents.plainText}, 4000)`,
+      })
+      .from(artifacts)
+      .leftJoin(artifactContents, eq(artifactContents.artifactId, artifacts.id))
+      .where(inArray(artifacts.id, ids));
+    for (const row of rows) {
+      const fromContent = row.contentPrefix?.trim() || null;
+      out.set(row.id, fromContent || row.plainTextPreview);
+    }
+    return out;
   },
 };

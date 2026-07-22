@@ -14,6 +14,7 @@
 	import { buttonVariants } from '@aqsha/ui-svelte/components/button';
 	import NavUser from './NavUser.svelte';
 	import SidebarSection from './sidebar/SidebarSection.svelte';
+	import { sidebarItemClass } from './sidebar/sidebar-item-class';
 	import NameDialog from '$lib/features/workspaces/components/NameDialog.svelte';
 	import {
 		useWorkspacesList,
@@ -47,18 +48,6 @@
 	 * Rail navigasi kiri IA project-first: Beranda, Perpustakaan, Jelajahi, Pengaturan +
 	 * daftar proyek (urut aktivitas). Thread tidak lagi global — hidup di dalam proyek.
 	 */
-	const sidebarItemBaseClass =
-		'gap-2 font-medium transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-muted/60 data-active:bg-primary/10 data-active:font-medium data-active:text-foreground data-active:shadow-none data-active:[&_svg]:text-primary hover:text-foreground active:bg-muted active:text-foreground [&_svg]:size-3.5';
-
-	function sidebarItemClass(active?: boolean) {
-		return cn(
-			sidebarItemBaseClass,
-			active
-				? 'bg-primary/10 text-foreground [&_svg]:text-primary'
-				: 'text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground'
-		);
-	}
-
 	// Sub-rows (kind.typ, Referensi) mirror the parent project row's type: 12px label + muted ink,
 	// mint when active. `[&>svg]` overrides beat MenuSubButton's built-in direct-child icon color.
 	const sidebarSubItemBaseClass =

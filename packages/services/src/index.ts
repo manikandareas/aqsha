@@ -5,7 +5,7 @@
 export { ThreadService, TitleService } from "./chat";
 
 export { InterestService } from "./interest.service";
-export { DEFAULT_WORKSPACE_NAME, WorkspaceService } from "./workspace.service";
+export { DEFAULT_WORKSPACE_NAME, WorkspaceService, type WorkspaceListItem } from "./workspace.service";
 export { AnnotationService, type AnnotationView } from "./annotation.service";
 export {
   DOCUMENT_REVISION_RETENTION,
