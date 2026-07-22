@@ -48,10 +48,10 @@ describe('buttonVariants', () => {
 		expect(cls).not.toContain('btn-lip');
 	});
 
-	it('sizes map to the Aqsha heights (sm 32 / default 40 / lg 46)', () => {
-		expect(buttonVariants({ size: 'default' })).toContain('h-10');
+	it('sizes map to the Aqsha heights (sm 32 / default 36 / lg 40)', () => {
+		expect(buttonVariants({ size: 'default' })).toContain('h-9');
 		expect(buttonVariants({ size: 'sm' })).toContain('h-8');
-		expect(buttonVariants({ size: 'lg' })).toContain('h-[46px]');
+		expect(buttonVariants({ size: 'lg' })).toContain('h-10');
 		expect(buttonVariants({ size: 'icon' })).toContain('size-10');
 	});
 });

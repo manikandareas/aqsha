@@ -87,8 +87,8 @@
 		<div class="flex flex-wrap items-center gap-3">
 			<Button size="xs">Extra small</Button>
 			<Button size="sm">Small 32</Button>
-			<Button size="default">Default 40</Button>
-			<Button size="lg">Large 46</Button>
+			<Button size="default">Default 36</Button>
+			<Button size="lg">Large 40</Button>
 		</div>
 	</section>
 

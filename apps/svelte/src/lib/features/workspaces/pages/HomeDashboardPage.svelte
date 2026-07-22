@@ -1,0 +1,161 @@
+<script lang="ts">
+	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
+	import { useClerkContext } from 'svelte-clerk';
+	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { viewerContext } from '$lib/auth';
+	import { readableApiErrorMessage } from '$lib/errors';
+	import { landingGreeting } from '$lib/features/thread-experience/utils/landing-greeting';
+	import { FolderIcon, Icon } from '$lib/icons';
+	import { useWorkspacesList } from '../api';
+	import HomeFeatureShortcuts from '../components/HomeFeatureShortcuts.svelte';
+	import NewProjectCard from '../components/NewProjectCard.svelte';
+	import ProjectShelfCard from '../components/ProjectShelfCard.svelte';
+	import ProjectSortMenu from '../components/ProjectSortMenu.svelte';
+	import { sortWorkspaces, type ProjectSortId } from '../project-sort';
+	import type { Workspace } from '../types';
+
+	const skeletonCards = [0, 1, 2, 3, 4] as const;
+	const newProjectHref = resolve('/app/(product)/projects/new');
+
+	const clerk = useClerkContext();
+	const viewer = viewerContext.get();
+	const list = useWorkspacesList(
+		() => false,
+		() => clerk.isLoaded && Boolean(clerk.auth.userId)
+	);
+
+	let sort = $state<ProjectSortId>('updated-desc');
+	let localHour = $state<number | null>(null);
+
+	const projects = $derived<Workspace[]>(list.data?.pages.flatMap((page) => page.items) ?? []);
+	const sortedProjects = $derived(sortWorkspaces(projects, sort));
+	const projectCount = $derived(projects.length);
+	const name = $derived(viewer.display({ name: '', email: '' }).name);
+	const firstName = $derived(name.trim().split(/\s+/)[0] ?? '');
+	const greeting = $derived(
+		localHour === null
+			? firstName
+				? `Halo, ${firstName}`
+				: 'Halo'
+			: landingGreeting(firstName, localHour)
+	);
+
+	onMount(() => {
+		localHour = new Date().getHours();
+	});
+</script>
+
+<div class="flex w-full flex-1 flex-col overflow-y-auto px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+	<div class="mx-auto flex w-full max-w-7xl flex-col gap-8 sm:gap-10">
+		<header class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+			<div class="min-w-0">
+				<h1
+					class="font-heading text-balance text-3xl leading-tight font-bold text-foreground sm:text-4xl"
+				>
+					Ruang risetmu
+				</h1>
+				<p class="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+					{greeting}. Pilih proyek dan lanjutkan dari tempat terakhir.
+				</p>
+			</div>
+			<Button href={newProjectHref} size="default" class="self-start sm:self-auto">
+				<Icon icon={FolderIcon} class="size-4" />
+				Proyek baru
+			</Button>
+		</header>
+
+		<HomeFeatureShortcuts />
+
+		<section aria-labelledby="projects-heading" class="flex flex-col gap-5">
+			<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+				<div class="flex items-center gap-2.5">
+					<h2
+						id="projects-heading"
+						class="font-heading text-xl font-bold text-foreground sm:text-2xl"
+					>
+						Rak proyek
+					</h2>
+					{#if !list.isPending && !list.isError}
+						<span
+							class="rounded-md border-2 border-border bg-card px-1.5 py-0.5 font-mono text-micro tabular-nums text-muted-foreground"
+							aria-label={`${projectCount} proyek`}
+						>
+							{projectCount}
+						</span>
+					{/if}
+				</div>
+				{#if !list.isPending && !list.isError && projectCount > 0}
+					<ProjectSortMenu bind:value={sort} />
+				{/if}
+			</div>
+
+			{#if list.isPending}
+				<p class="sr-only" role="status">Memuat proyek…</p>
+				<div
+					class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+					aria-busy="true"
+					aria-label="Memuat proyek"
+				>
+					<NewProjectCard />
+					{#each skeletonCards as item (item)}
+						<div class="min-w-0" aria-hidden="true">
+							<div
+								class="aspect-[4/3] animate-pulse rounded-xl border-2 border-border bg-card/60"
+							></div>
+							<div class="px-1 pt-3">
+								<div class="h-4 w-3/4 animate-pulse rounded bg-muted/60"></div>
+								<div class="mt-2 h-3 w-1/3 animate-pulse rounded bg-muted/45"></div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{:else if list.isError}
+				<div role="alert" class="rounded-xl border-2 border-border bg-card p-6 sm:p-8">
+					<h3 class="font-heading text-lg font-bold text-foreground">Proyekmu belum bisa dimuat</h3>
+					<p class="mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
+						{readableApiErrorMessage(list.error, 'Coba lagi sebentar, ya.')}
+					</p>
+					<Button
+						type="button"
+						variant="outline"
+						class="mt-4 min-h-11"
+						onclick={() => list.refetch()}
+					>
+						Coba lagi
+					</Button>
+				</div>
+			{:else if projectCount === 0}
+				<div class="flex max-w-xl flex-col gap-2">
+					<h3 class="font-heading text-lg font-bold text-foreground">Mulai rak pertamamu</h3>
+					<p class="text-sm leading-relaxed text-muted-foreground">
+						Buat ruang kerja untuk skripsi, artikel, atau tulisan bebas. Sumber dan catatanmu akan
+						tetap terhubung di satu tempat.
+					</p>
+				</div>
+				<div class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+					<NewProjectCard />
+				</div>
+			{:else}
+				<div class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+					<NewProjectCard />
+					{#each sortedProjects as workspace (workspace.id)}
+						<ProjectShelfCard {workspace} />
+					{/each}
+				</div>
+
+				{#if list.hasNextPage}
+					<Button
+						type="button"
+						variant="outline"
+						class="mx-auto min-h-11"
+						disabled={list.isFetchingNextPage}
+						onclick={() => list.fetchNextPage()}
+					>
+						{list.isFetchingNextPage ? 'Memuat proyek…' : 'Muat lebih banyak'}
+					</Button>
+				{/if}
+			{/if}
+		</section>
+	</div>
+</div>
