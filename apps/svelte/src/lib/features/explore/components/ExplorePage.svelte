@@ -54,8 +54,8 @@
 
 <main class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
 	<div class="@container/explore min-h-0 flex-1 overflow-y-auto">
-		<header class={panelHeaderBarClass}>
-			<nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5 text-[13px]">
+		<header class={cn(panelHeaderBarClass, 'border-b-0')}>
+			<nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5">
 				{#if !isLeftSidebarOpen}
 					<Button
 						type="button"
@@ -71,7 +71,7 @@
 					type="button"
 					onclick={() => setTopic(null)}
 					class={cn(
-						'shrink-0 truncate rounded-md font-medium transition-colors',
+						'shrink-0 truncate rounded-md text-base font-semibold transition-colors',
 						topicLabel ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
 					)}
 				>
@@ -79,7 +79,7 @@
 				</button>
 				{#if topicLabel}
 					<Icon icon={ChevronRightIcon} class="size-3.5 shrink-0 text-muted-foreground/60" />
-					<span class="min-w-0 truncate font-medium text-foreground">{topicLabel}</span>
+					<span class="min-w-0 truncate text-base font-semibold text-foreground">{topicLabel}</span>
 				{/if}
 			</nav>
 		</header>

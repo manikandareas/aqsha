@@ -7,11 +7,24 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
-	import { Input } from '@aqsha/ui-svelte/components/input';
+	import * as InputGroup from '@aqsha/ui-svelte/components/input-group';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
+	import { panelBodyColumnClass, panelHeaderBarClass } from '$lib/components/layout/panel-surface';
 	import { PageTitle } from '$lib/seo';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import { Icon, FilterIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, XIcon } from '$lib/icons';
+	import {
+		Icon,
+		FilterIcon,
+		LinkIcon,
+		MoreHorizontalIcon,
+		PenLineIcon,
+		PlusIcon,
+		Quote,
+		SearchIcon,
+		UploadIcon,
+		XIcon
+	} from '$lib/icons';
 	import CitationDetailView from '../components/CitationDetailView.svelte';
 	import CitationDoiDialog from '../components/CitationDoiDialog.svelte';
 	import CitationDuplicatesDialog from '../components/CitationDuplicatesDialog.svelte';
@@ -39,8 +52,8 @@
 	import { applyLibraryUrl, readLibraryUrl, type LibraryUrlState } from '../library-url-model';
 
 	/**
-	 * Perpustakaan referensi akun (lintas proyek). Filter + detail hidup di URL;
-	 * file/PDF tetap aset per proyek — halaman ini murni referensi.
+	 * Perpustakaan referensi akun (lintas proyek). Chrome mengikuti board library:
+	 * toolbar kompak + empty state terpusat; filter + detail hidup di URL.
 	 */
 	const clerk = useClerkContext();
 	const enabled = $derived(clerk.isLoaded && Boolean(clerk.auth.userId));
@@ -72,6 +85,7 @@
 	let editTargetId = $state<string | null>(null);
 	let deleteTarget = $state<CitationListItem | null>(null);
 	let confirmBulkDelete = $state(false);
+	let searchExpanded = $state(false);
 
 	let selectionMode = $state(false);
 	const selectedIds = new SvelteSet<string>();
@@ -94,12 +108,28 @@
 	const items = $derived<CitationListItem[]>(list.data?.pages.flatMap((p) => p.items) ?? []);
 	const total = $derived(list.data?.pages[0]?.total ?? 0);
 	const hasFilter = $derived(Boolean(filters.q || filters.status || filters.source || filters.tag));
+	const hasActiveTypeFilter = $derived(Boolean(filters.status || filters.source || filters.tag));
+	const hasQuery = $derived(filters.q.trim().length > 0);
 
 	// Derived dapat dioverride saat mengetik dan otomatis kembali ke URL saat navigasi berubah.
 	let searchDraft = $derived(urlState.q);
-	function submitSearch(event: SubmitEvent) {
-		event.preventDefault();
+
+	const controlButtonClass =
+		'size-7 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground';
+	const controlButtonActiveClass = 'bg-primary/10 text-primary hover:text-primary';
+
+	function submitSearch() {
 		navigate({ q: searchDraft.trim() });
+	}
+
+	function collapseSearch() {
+		searchExpanded = false;
+	}
+
+	function clearSearch() {
+		searchDraft = '';
+		navigate({ q: '' });
+		collapseSearch();
 	}
 </script>
 
@@ -113,51 +143,199 @@
 		}}
 	>
 		{#snippet main()}
-			<header
-				class="flex flex-wrap items-center justify-between gap-3 border-b-2 border-border px-6 py-4"
-			>
-				<div>
-					<h1 class="font-heading text-2xl font-bold">Perpustakaan</h1>
-					<p class="text-sm text-muted-foreground">
-						{total} referensi lintas proyek — tambahkan ke proyek kapan pun.
-					</p>
-				</div>
-				<div class="flex items-center gap-2">
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger>
-							{#snippet child({ props })}
-								<Button {...props} type="button" class="gap-1.5">
-									<Icon icon={PlusIcon} class="size-4" /> Tambah sumber
-								</Button>
-							{/snippet}
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content align="end">
-							<DropdownMenu.Item onSelect={() => (dialog = 'doi')}>Dari DOI</DropdownMenu.Item>
-							<DropdownMenu.Item onSelect={() => (dialog = 'manual')}>Isi manual</DropdownMenu.Item>
-							<DropdownMenu.Item onSelect={() => (dialog = 'import')}>
-								Import file (.bib/.ris)
-							</DropdownMenu.Item>
-							<DropdownMenu.Item onSelect={() => (dialog = 'provider')}>
-								Tarik dari Mendeley/Zotero
-							</DropdownMenu.Item>
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
-					<CitationExportMenu disabled={items.length === 0} />
+			<header class={cn(panelHeaderBarClass, 'border-b-0')}>
+				<div class="flex min-w-0 items-center gap-1.5">
+					<h1 class="min-w-0 shrink-0 truncate rounded-md text-base font-semibold text-foreground">
+						Perpustakaan
+					</h1>
+					{#if enabled && !list.isPending}
+						<span
+							class="hidden rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground sm:inline"
+							aria-label={`${total} referensi`}
+						>
+							{total}
+						</span>
+					{/if}
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger>
 							{#snippet child({ props })}
 								<Button
 									{...props}
 									type="button"
-									variant="outline"
-									size="icon"
+									variant="ghost"
+									class={controlButtonClass}
+									aria-label="Tambah sumber"
+								>
+									<Icon icon={PlusIcon} class="size-3.5" />
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="start" class="w-52">
+							<DropdownMenu.Item onSelect={() => (dialog = 'import')}>
+								<Icon icon={UploadIcon} class="size-4" />
+								Import file (.bib/.ris)
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onSelect={() => (dialog = 'doi')}>
+								<Icon icon={LinkIcon} class="size-4" />
+								Dari DOI
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onSelect={() => (dialog = 'manual')}>
+								<Icon icon={PenLineIcon} class="size-4" />
+								Isi manual
+							</DropdownMenu.Item>
+							<DropdownMenu.Item onSelect={() => (dialog = 'provider')}>
+								<Icon icon={Quote} class="size-4" />
+								Mendeley / Zotero
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				</div>
+
+				<div class="flex min-w-0 items-center gap-1">
+					{#if searchExpanded}
+						<InputGroup.Root
+							class="h-7 w-[168px] min-w-0 max-w-[55vw] rounded-full border-border/70 bg-muted/20 shadow-none transition-colors focus-within:border-ring focus-within:bg-background sm:w-[200px] sm:max-w-none"
+						>
+							<InputGroup.Addon>
+								<Icon icon={SearchIcon} class="size-3.5 shrink-0 text-muted-foreground" />
+							</InputGroup.Addon>
+							<InputGroup.Input
+								autofocus
+								bind:value={searchDraft}
+								placeholder="Cari judul, penulis, DOI…"
+								class="h-7 min-w-0 text-[12px]"
+								aria-label="Cari referensi"
+								onkeydown={(event) => {
+									if (event.key === 'Enter') {
+										event.preventDefault();
+										submitSearch();
+									}
+									if (event.key === 'Escape') {
+										clearSearch();
+									}
+								}}
+								onblur={() => {
+									if (!hasQuery && !searchDraft.trim()) collapseSearch();
+									else if (searchDraft.trim() !== filters.q) submitSearch();
+								}}
+							/>
+							<InputGroup.Addon align="inline-end">
+								<button
+									type="button"
+									onclick={clearSearch}
+									aria-label="Bersihkan pencarian"
+									class="inline-flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+								>
+									<Icon icon={XIcon} class="size-3" />
+								</button>
+							</InputGroup.Addon>
+						</InputGroup.Root>
+					{:else}
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							onclick={() => (searchExpanded = true)}
+							class={cn('relative', controlButtonClass, hasQuery && controlButtonActiveClass)}
+							aria-label={hasQuery ? `Pencarian aktif: ${filters.q}` : 'Cari referensi'}
+						>
+							<Icon icon={SearchIcon} class="size-3.5" />
+							{#if hasQuery}
+								<span
+									aria-hidden="true"
+									class="absolute top-1 right-1 size-1.5 rounded-full bg-primary"
+								></span>
+							{/if}
+						</Button>
+					{/if}
+
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									class={cn(controlButtonClass, hasActiveTypeFilter && controlButtonActiveClass)}
+									aria-label={hasActiveTypeFilter ? 'Filter aktif' : 'Filter referensi'}
+								>
+									<Icon icon={FilterIcon} class="size-3.5" />
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="end" class="w-56">
+							<DropdownMenu.Group>
+								<DropdownMenu.GroupHeading>Status</DropdownMenu.GroupHeading>
+								{#each Object.entries(CITATION_STATUS_LABELS) as [value, label] (value)}
+									<DropdownMenu.CheckboxItem
+										checked={filters.status === value}
+										onCheckedChange={(checked) =>
+											navigate({ status: checked ? (value as LibraryUrlState['status']) : null })}
+									>
+										{label}
+									</DropdownMenu.CheckboxItem>
+								{/each}
+							</DropdownMenu.Group>
+							<DropdownMenu.Separator />
+							<DropdownMenu.Group>
+								<DropdownMenu.GroupHeading>Sumber</DropdownMenu.GroupHeading>
+								{#each Object.entries(CITATION_SOURCE_LABELS) as [value, label] (value)}
+									<DropdownMenu.CheckboxItem
+										checked={filters.source === value}
+										onCheckedChange={(checked) =>
+											navigate({ source: checked ? (value as LibraryUrlState['source']) : null })}
+									>
+										{label}
+									</DropdownMenu.CheckboxItem>
+								{/each}
+							</DropdownMenu.Group>
+							{#if (tags.data ?? []).length > 0}
+								<DropdownMenu.Separator />
+								<DropdownMenu.Group>
+									<DropdownMenu.GroupHeading>Tag</DropdownMenu.GroupHeading>
+									{#each tags.data ?? [] as tag (tag)}
+										<DropdownMenu.CheckboxItem
+											checked={filters.tag === tag}
+											onCheckedChange={(checked) => navigate({ tag: checked ? tag : null })}
+										>
+											{tag}
+										</DropdownMenu.CheckboxItem>
+									{/each}
+								</DropdownMenu.Group>
+							{/if}
+							{#if hasFilter}
+								<DropdownMenu.Separator />
+								<DropdownMenu.Item
+									onSelect={() => navigate({ q: '', status: null, source: null, tag: null })}
+								>
+									<Icon icon={XIcon} class="size-4" />
+									Bersihkan filter
+								</DropdownMenu.Item>
+							{/if}
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+
+					<span aria-hidden="true" class="mx-0.5 h-4 w-px shrink-0 bg-border/70"></span>
+
+					<CitationExportMenu disabled={items.length === 0} />
+
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button
+									{...props}
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									class={controlButtonClass}
 									aria-label="Opsi lain"
 								>
 									<Icon icon={MoreHorizontalIcon} class="size-4" />
 								</Button>
 							{/snippet}
 						</DropdownMenu.Trigger>
-						<DropdownMenu.Content align="end">
+						<DropdownMenu.Content align="end" class="w-44">
 							<DropdownMenu.Item onSelect={() => (selectionMode = true)}>
 								Pilih beberapa
 							</DropdownMenu.Item>
@@ -169,83 +347,9 @@
 				</div>
 			</header>
 
-			<div class="flex flex-wrap items-center gap-2 px-6 py-3">
-				<form class="flex min-w-56 flex-1 items-center gap-2" onsubmit={submitSearch}>
-					<Input
-						bind:value={searchDraft}
-						placeholder="Cari judul, penulis, DOI…"
-						aria-label="Cari referensi"
-					/>
-					<Button type="submit" variant="outline" size="icon" aria-label="Cari">
-						<Icon icon={SearchIcon} class="size-4" />
-					</Button>
-				</form>
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Button {...props} type="button" variant="outline" size="sm" class="gap-1.5">
-								<Icon icon={FilterIcon} class="size-3.5" /> Filter
-							</Button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content align="end" class="w-56">
-						<DropdownMenu.Group>
-							<DropdownMenu.GroupHeading>Status</DropdownMenu.GroupHeading>
-							{#each Object.entries(CITATION_STATUS_LABELS) as [value, label] (value)}
-								<DropdownMenu.CheckboxItem
-									checked={filters.status === value}
-									onCheckedChange={(checked) =>
-										navigate({ status: checked ? (value as LibraryUrlState['status']) : null })}
-								>
-									{label}
-								</DropdownMenu.CheckboxItem>
-							{/each}
-						</DropdownMenu.Group>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Group>
-							<DropdownMenu.GroupHeading>Sumber</DropdownMenu.GroupHeading>
-							{#each Object.entries(CITATION_SOURCE_LABELS) as [value, label] (value)}
-								<DropdownMenu.CheckboxItem
-									checked={filters.source === value}
-									onCheckedChange={(checked) =>
-										navigate({ source: checked ? (value as LibraryUrlState['source']) : null })}
-								>
-									{label}
-								</DropdownMenu.CheckboxItem>
-							{/each}
-						</DropdownMenu.Group>
-						{#if (tags.data ?? []).length > 0}
-							<DropdownMenu.Separator />
-							<DropdownMenu.Group>
-								<DropdownMenu.GroupHeading>Tag</DropdownMenu.GroupHeading>
-								{#each tags.data ?? [] as tag (tag)}
-									<DropdownMenu.CheckboxItem
-										checked={filters.tag === tag}
-										onCheckedChange={(checked) => navigate({ tag: checked ? tag : null })}
-									>
-										{tag}
-									</DropdownMenu.CheckboxItem>
-								{/each}
-							</DropdownMenu.Group>
-						{/if}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-				{#if hasFilter}
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						class="gap-1 text-muted-foreground"
-						onclick={() => navigate({ q: '', status: null, source: null, tag: null })}
-					>
-						<Icon icon={XIcon} class="size-3.5" /> Bersihkan filter
-					</Button>
-				{/if}
-			</div>
-
-			<div class="min-h-0 flex-1 overflow-y-auto px-6 pb-8">
+			<div class={cn(panelBodyColumnClass, 'min-h-0 flex-1 overflow-y-auto')}>
 				{#if !enabled || list.isPending}
-					<ul class="grid gap-2" aria-label="Memuat perpustakaan">
+					<ul class="grid gap-2 px-5 pt-3 pb-8 @2xl:px-6" aria-label="Memuat perpustakaan">
 						{#each ['a', 'b', 'c', 'd', 'e', 'f'] as key (key)}
 							<li class="flex items-center gap-3 rounded-md border-2 border-border px-4 py-3">
 								<Skeleton class="size-2 shrink-0 rounded-full" />
@@ -268,7 +372,7 @@
 						Tidak ada referensi yang cocok dengan filter.
 					</p>
 				{:else}
-					<ul class="grid gap-2">
+					<ul class="grid gap-2 px-5 pt-3 pb-8 @2xl:px-6">
 						{#each items as item (item.id)}
 							<LibraryRow
 								{item}
@@ -302,7 +406,7 @@
 						<Button
 							type="button"
 							variant="outline"
-							class="mx-auto mt-4 flex"
+							class="mx-auto mb-8 flex"
 							disabled={list.isFetchingNextPage}
 							onclick={() => list.fetchNextPage()}
 						>
