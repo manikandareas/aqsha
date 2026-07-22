@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { browser } from '$app/environment';
 	import { mode } from 'mode-watcher';
+	import type { TypstProject } from '@vedivad/codemirror-typst';
 	import { Icon, Loader2Icon } from '$lib/icons';
 	import type { Cm6Diagnostic } from '../typst/diagnostics';
 	import type { TypstEditorHandle } from '../lib/typst-editor';
@@ -9,8 +10,8 @@
 	/**
 	 * Editor sumber Typst (CodeMirror 6 + engine bahasa vedivad: highlight/autocomplete/hover).
 	 * Buffer = source-of-truth: `value` HANYA untuk seed awal + reset saat `docKey` berganti (proposal
-	 * diterima / versi termuat baru), bukan disinkron tiap keystroke. Diagnostik lint berasal dari
-	 * worker preview (@myriaddreamin), didorong via `diagnostics`. Engine dimuat asinkron di browser.
+	 * diterima / versi termuat baru), bukan disinkron tiap keystroke. Preview, diagnostics, completion,
+	 * dan hover memakai satu `TypstProject` yang dimiliki workspace runtime.
 	 */
 	let {
 		value,
@@ -18,6 +19,7 @@
 		editable = true,
 		diagnostics = [],
 		mainFilePath = '/main.typ',
+		project,
 		onChange
 	}: {
 		value: string;
@@ -26,6 +28,7 @@
 		diagnostics?: Cm6Diagnostic[];
 		/** Path virtual utama Typst, mis. `/skripsi.typ`. */
 		mainFilePath?: string;
+		project: TypstProject | null;
 		onChange: (next: string) => void;
 	} = $props();
 
@@ -40,6 +43,7 @@
 		if (!browser || !host) return;
 		const parent = host;
 		const path = mainFilePath;
+		const typstProject = project;
 		let disposed = false;
 		let local: TypstEditorHandle | null = null;
 		void (async () => {
@@ -54,6 +58,7 @@
 				onChange
 			}));
 			local = await mountTypstEditor(parent, {
+				project: typstProject,
 				doc: seed.doc,
 				editable: seed.editable,
 				dark: seed.dark,

@@ -20,8 +20,9 @@ export class ProposalReviewInteractions {
 
 const context = createContext<ProposalReviewInteractions>('proposal-review-interactions');
 
-export const setProposalReviewInteractions = (value: ProposalReviewInteractions): ProposalReviewInteractions =>
-	context.set(value);
+export const setProposalReviewInteractions = (
+	value: ProposalReviewInteractions
+): ProposalReviewInteractions => context.set(value);
 
 export const getProposalReviewInteractions = (): ProposalReviewInteractions =>
 	context.getOptional() ?? new ProposalReviewInteractions();

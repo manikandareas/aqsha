@@ -22,10 +22,7 @@ export class AutosaveController {
 	constructor(opts: {
 		initialVersion: number;
 		debounceMs?: number;
-		save: (input: {
-			source: string;
-			baseVersion: number;
-		}) => Promise<SaveWorkspaceDocumentResult>;
+		save: (input: { source: string; baseVersion: number }) => Promise<SaveWorkspaceDocumentResult>;
 	}) {
 		this.version = opts.initialVersion;
 		this.#debounceMs = opts.debounceMs ?? 800;

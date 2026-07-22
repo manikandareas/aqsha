@@ -16,9 +16,6 @@ const sentrySourcemapUpload = Boolean(
 );
 
 export default defineConfig({
-	optimizeDeps: {
-		include: ['@myriaddreamin/typst.ts', '@myriaddreamin/typst.ts/renderer']
-	},
 	plugins: [
 		tailwindcss(),
 		// Content Collections (blog/changelog) — generate `.content-collections/generated` saat
@@ -50,6 +47,12 @@ export default defineConfig({
 			: []),
 		sveltekit()
 	],
+	// Prebundling rewrites `new Worker(new URL("./typsten-worker.js", import.meta.url))` into a
+	// broken `/node_modules/.bun/...` path that misses Vite's static serve and hangs Comlink init.
+	optimizeDeps: {
+		exclude: ['@vedivad/codemirror-typst', '@vedivad/typst-web-service']
+	},
+	assetsInclude: ['**/*.wasm'],
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

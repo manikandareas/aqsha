@@ -43,7 +43,10 @@
 
 	function updateProgress(): void {
 		if (deadline === null) return;
-		progress = Math.min(1, Math.max(0, (Date.now() - (deadline - CLEAR_DELAY_MS)) / CLEAR_DELAY_MS));
+		progress = Math.min(
+			1,
+			Math.max(0, (Date.now() - (deadline - CLEAR_DELAY_MS)) / CLEAR_DELAY_MS)
+		);
 	}
 
 	function startClear(): void {

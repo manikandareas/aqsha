@@ -3,7 +3,10 @@ import { EditorView } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { keymap } from '@codemirror/view';
 import { indentWithTab } from '@codemirror/commands';
-import { setDiagnostics as setLintDiagnostics, type Diagnostic as LintDiagnostic } from '@codemirror/lint';
+import {
+	setDiagnostics as setLintDiagnostics,
+	type Diagnostic as LintDiagnostic
+} from '@codemirror/lint';
 import {
 	TypstProject,
 	createTypstSetup,
@@ -20,19 +23,9 @@ export const ExternalSync = Annotation.define<boolean>();
 
 /**
  * Engine bahasa Typst untuk editor (highlight/autocomplete/hover) dari @vedivad/codemirror-typst,
- * terpisah dari worker preview @myriaddreamin. Singleton modul: satu worker+WASM, reuse lintas mount
- * + tahan HMR. `null` = engine gagal dimuat → editor jatuh ke mode polos (tetap bisa mengetik).
+ * memakai `TypstProject` yang sama dengan preview dan diagnostics. `null` membuat editor jatuh ke
+ * mode polos sehingga source tetap dapat disunting bila runtime bahasa gagal dimuat.
  */
-let projectPromise: Promise<TypstProject | null> | null = null;
-function getTypstProject(): Promise<TypstProject | null> {
-	if (!projectPromise) {
-		projectPromise = TypstProject.create().catch((err) => {
-			console.error('[typst-editor] gagal memuat engine bahasa; editor mode polos', err);
-			return null;
-		});
-	}
-	return projectPromise;
-}
 
 function chromeTheme(dark: boolean): Extension {
 	return EditorView.theme(
@@ -73,6 +66,7 @@ export type TypstEditorHandle = {
 export async function mountTypstEditor(
 	parent: HTMLElement,
 	opts: {
+		project: TypstProject | null;
 		doc: string;
 		editable: boolean;
 		dark: boolean;
@@ -81,7 +75,7 @@ export async function mountTypstEditor(
 		mainFilePath?: string;
 	}
 ): Promise<TypstEditorHandle> {
-	const project = await getTypstProject();
+	const project = opts.project;
 	const editableCompartment = new Compartment();
 	// Bila engine tak tersedia, pakai compartment tema sendiri (mode polos) — jika ada, tema ikut
 	// bundle vedivad (chrome + token) dan berpindah via themes.set.

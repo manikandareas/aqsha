@@ -1,4 +1,10 @@
-import type { TypstRawDiagnostic } from './types';
+export type TypstRawDiagnostic = {
+	package?: string;
+	path?: string;
+	severity: string;
+	message: string;
+	range: string;
+};
 
 export type Cm6Severity = 'error' | 'warning' | 'info';
 export type Cm6Diagnostic = {

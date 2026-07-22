@@ -589,7 +589,6 @@
 	}
 }
 
-
 /* PDF viewer — flush, theme-aware pages with citation links.
    Selectors kept for when the PDF reader is wired; inert until then. */
 .react-pdf__Document {
@@ -658,4 +657,3 @@
 	background: var(--background);
 	padding: 1.5rem 1rem 6rem;
 }
-

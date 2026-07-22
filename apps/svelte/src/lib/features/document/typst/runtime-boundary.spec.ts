@@ -5,21 +5,18 @@ const previewSource = readFileSync(
 	new URL('../components/TypstPreview.svelte', import.meta.url),
 	'utf8'
 );
-const workerSource = readFileSync(new URL('./worker.ts', import.meta.url), 'utf8');
-const clientSource = readFileSync(new URL('./client.ts', import.meta.url), 'utf8');
+const engineSource = readFileSync(new URL('./document-typst-engine.ts', import.meta.url), 'utf8');
+const editorSource = readFileSync(new URL('../lib/typst-editor.ts', import.meta.url), 'utf8');
 
 describe('Typst runtime boundary', () => {
-	it('menjalankan compiler dan renderer WASM sepenuhnya di worker', () => {
+	it('memakai satu TypstProject Vedivad untuk compile, render, dan editor intelligence', () => {
 		expect(previewSource).not.toContain('getTypstRenderer');
 		expect(previewSource).not.toContain('@myriaddreamin/typst.ts/renderer');
-		expect(workerSource).toContain('@myriaddreamin/typst.ts/renderer');
-		expect(workerSource).toContain('createTypstRenderer');
-		expect(workerSource).toContain('pendingUpdate');
-		expect(workerSource).toContain('processing');
-		expect(clientSource).toContain("msg.type === 'error'");
-		expect(clientSource).toContain('this.#onError?.(msg.message)');
-		expect(clientSource).toContain('this.#worker.onerror');
-		expect(clientSource).toContain('this.#worker.onmessageerror');
-		expect(clientSource).toContain('#compileTimeoutMs');
+		expect(engineSource).toContain('TypstProject.create');
+		expect(engineSource).toContain('renderedPages');
+		expect(engineSource).toContain("'/refs.bib'");
+		expect(engineSource).not.toContain('@myriaddreamin');
+		expect(editorSource).not.toContain('TypstProject.create');
+		expect(editorSource).toContain('project: TypstProject | null');
 	});
 });

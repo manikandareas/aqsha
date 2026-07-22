@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { type Component } from 'svelte';
+import type { TypstProject } from '@vedivad/codemirror-typst';
 import { readableApiErrorMessage } from '$lib/errors/api-error';
 import { AutosaveController } from '$lib/features/document/lib/autosave-controller.svelte';
 import {
@@ -8,8 +9,11 @@ import {
 } from '$lib/features/document/lib/outline';
 import type { AnnotationDraft } from '$lib/features/document/lib/annotation-selection';
 import type { SaveWorkspaceDocumentResult } from '$lib/features/document/api';
-import type { TypstClient } from '$lib/features/document/typst/client';
 import type { Cm6Diagnostic } from '$lib/features/document/typst/diagnostics';
+import type {
+	DocumentTypstEngine,
+	VedivadDocumentTypstEngine
+} from '$lib/features/document/typst/document-typst-engine';
 
 type EditorHandle = { applyUserEdit(next: string): void; scrollToLine(line: number): void };
 type PreviewHandle = { scrollToHeading(title: string): void };
@@ -20,6 +24,7 @@ type EditorComponent = Component<
 		editable?: boolean;
 		diagnostics?: Cm6Diagnostic[];
 		mainFilePath?: string;
+		project: TypstProject | null;
 		onChange: (next: string) => void;
 	},
 	EditorHandle
@@ -62,13 +67,16 @@ export class DocumentWorkspaceRuntime {
 	previewSvg = $state<string | null>(null);
 	previewError = $state<string | null>(null);
 	diagnostics = $state<Cm6Diagnostic[]>([]);
+	typstProject = $state<TypstProject | null>(null);
 
-	#clientCtor = $state<(new (opts?: { mainFilePath?: string }) => TypstClient) | null>(null);
-	#client = $state<TypstClient | null>(null);
+	#engineFactory = $state<typeof VedivadDocumentTypstEngine | null>(null);
+	#engine: DocumentTypstEngine | null = null;
 	#moduleLoadPromise: Promise<void> | null = null;
 	#workspaceId: () => string;
 	#mainTypFilename: () => string;
 	#save: (input: { source: string; baseVersion: number }) => Promise<SaveWorkspaceDocumentResult>;
+	/** Bib terakhir dari pushSource — di-flush saat engine selesai mount (race SSR-first). */
+	#lastBib = '';
 
 	constructor(opts: {
 		workspaceId: () => string;
@@ -115,12 +123,12 @@ export class DocumentWorkspaceRuntime {
 		this.#moduleLoadPromise = Promise.all([
 			import('$lib/features/document/components/TypstSourceEditor.svelte'),
 			import('$lib/features/document/components/TypstPreview.svelte'),
-			import('$lib/features/document/typst/client')
+			import('$lib/features/document/typst/document-typst-engine')
 		])
 			.then(([editorModule, previewModule, clientModule]) => {
 				this.Editor = editorModule.default;
 				this.Preview = previewModule.default;
-				this.#clientCtor = clientModule.TypstClient;
+				this.#engineFactory = clientModule.VedivadDocumentTypstEngine;
 			})
 			.catch((error: unknown) => {
 				this.#moduleLoadPromise = null;
@@ -138,36 +146,58 @@ export class DocumentWorkspaceRuntime {
 		});
 	}
 
-	/** Mount the Typst worker client. Call from `$effect`; return value is the disposer. */
-	mountClient(active: boolean, docReady: boolean): (() => void) | undefined {
-		const Client = this.#clientCtor;
-		if (!browser || !active || !docReady || !Client) return;
-		const client = new Client({ mainFilePath: this.mainFilePath });
-		client.onCompiled((r) => {
-			if (r.svg) {
-				this.previewSvg = r.svg;
+	/** Mount satu TypstProject untuk preview, diagnostics, dan editor intelligence. */
+	mountEngine(active: boolean, docReady: boolean): (() => void) | undefined {
+		const Engine = this.#engineFactory;
+		if (!browser || !active || !docReady || !Engine) return;
+		let cancelled = false;
+		let mounted: DocumentTypstEngine | null = null;
+		void Engine.create({ mainFilePath: this.mainFilePath })
+			.then((engine) => {
+				if (cancelled) {
+					engine.dispose();
+					return;
+				}
+				mounted = engine;
+				this.#engine = engine;
+				this.typstProject = engine.project;
+				engine.onCompiled((result) => {
+					if (result.svg) {
+						this.previewSvg = result.svg;
+						this.previewError = null;
+					} else if (!this.previewSvg) {
+						this.previewError = 'Preview belum dapat disusun. Periksa diagnostik dokumen.';
+					}
+					this.diagnostics = result.diagnostics;
+				});
+				engine.onError(() => {
+					this.previewError = 'Runtime preview gagal. Coba muat ulang preview.';
+				});
+				// pushSource sering jalan sebelum create() selesai — flush buffer sekarang.
 				this.previewError = null;
-			} else if (!this.previewSvg) {
-				this.previewError = 'Preview belum dapat disusun. Periksa diagnostik dokumen.';
-			}
-			this.diagnostics = r.diagnostics;
-		});
-		client.onError((message) => {
-			console.error('[typst-worker] gagal menyusun preview', message);
-			this.previewError = 'Runtime preview gagal. Coba muat ulang preview.';
-		});
-		this.#client = client;
+				void engine.update(this.source, this.#lastBib, this.mainFilePath);
+			})
+			.catch((error: unknown) => {
+				if (!cancelled) {
+					this.loadError = readableApiErrorMessage(error, 'Runtime dokumen gagal dimuat.');
+				}
+			});
 		return () => {
-			client.dispose();
-			this.#client = null;
+			cancelled = true;
+			mounted?.dispose();
+			if (this.#engine === mounted) {
+				this.#engine = null;
+				this.typstProject = null;
+			}
 		};
 	}
 
 	pushSource(bib: string): void {
-		const client = this.#client;
-		if (!client) return;
+		this.#lastBib = bib;
+		const engine = this.#engine;
+		if (!engine) return;
 		this.previewError = null;
-		client.update(this.source, bib, this.mainFilePath);
+		void engine.update(this.source, bib, this.mainFilePath);
 	}
 
 	onEditorChange(next: string): void {
@@ -209,8 +239,8 @@ export class DocumentWorkspaceRuntime {
 
 	retryPreview(bib: string, fallback: () => Promise<void>): void {
 		this.previewError = null;
-		if (this.#client) {
-			this.#client.update(this.source, bib, this.mainFilePath);
+		if (this.#engine) {
+			void this.#engine.update(this.source, bib, this.mainFilePath);
 			return;
 		}
 		void fallback();

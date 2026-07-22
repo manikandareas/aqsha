@@ -34,7 +34,10 @@
 </script>
 
 <div class="flex h-[480px] flex-col">
-	<div class="flex shrink-0 items-center justify-end gap-2 border-b border-border p-2" data-annotation-ui>
+	<div
+		class="flex shrink-0 items-center justify-end gap-2 border-b border-border p-2"
+		data-annotation-ui
+	>
 		<AnnotationModeControls
 			bind:annotationMode
 			visibleIds={visibleAnnotationIds}
@@ -43,12 +46,6 @@
 		/>
 	</div>
 	<div class="min-h-0 flex-1">
-		<TypstPreview
-			bind:annotationMode
-			{svg}
-			{annotations}
-			{outlineTitles}
-			{onCreateAnnotation}
-		/>
+		<TypstPreview bind:annotationMode {svg} {annotations} {outlineTitles} {onCreateAnnotation} />
 	</div>
 </div>
