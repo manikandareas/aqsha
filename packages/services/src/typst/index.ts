@@ -7,6 +7,12 @@ export {
   type TypstCompileInput,
   type TypstCompileResult,
 } from "./compile.service";
+export {
+  MAIN_TYP_FILENAMES,
+  mainTypFilename,
+  resolveMainTypFilename,
+  sanitizeMainTypFilename,
+} from "./main-filename";
 export { scaffoldTypstDocument, type ScaffoldTypstOptions } from "./scaffold";
 export { scanTypstCiteKeys, stripTypstComments } from "./cite-scan";
 export { composeProjectBib } from "./project-bib";

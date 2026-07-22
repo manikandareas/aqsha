@@ -23,11 +23,16 @@ export class TypstClient {
 	#compileTimeoutMs: number;
 	#timer: ReturnType<typeof setTimeout> | null = null;
 	#compileTimer: ReturnType<typeof setTimeout> | null = null;
-	#pending: { seq: number; source: string; bib: string | null } | null = null;
+	#mainFilePath: string;
+	#pending: { seq: number; source: string; bib: string | null; mainFilePath: string } | null =
+		null;
 
-	constructor(opts: { debounceMs?: number; compileTimeoutMs?: number } = {}) {
+	constructor(
+		opts: { debounceMs?: number; compileTimeoutMs?: number; mainFilePath?: string } = {}
+	) {
 		this.#debounceMs = opts.debounceMs ?? 300;
 		this.#compileTimeoutMs = opts.compileTimeoutMs ?? 30_000;
+		this.#mainFilePath = opts.mainFilePath ?? '/main.typ';
 		if (!browser) return;
 		this.#worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
 		this.#worker.onmessage = (e: MessageEvent<TypstWorkerResponse>) => {
@@ -61,9 +66,20 @@ export class TypstClient {
 		this.#onError = cb;
 	}
 
+	/** Path virtual berkas utama (mis. `/skripsi.typ`) — dipakai update berikutnya. */
+	setMainFilePath(path: string): void {
+		this.#mainFilePath = path || '/main.typ';
+	}
+
 	/** Kirim sumber terbaru (debounced). `bib` selalu string (kosong = tanpa sitasi). */
-	update(source: string, bib: string | null = ''): void {
-		this.#pending = { seq: ++this.#seq, source, bib };
+	update(source: string, bib: string | null = '', mainFilePath?: string): void {
+		if (mainFilePath) this.#mainFilePath = mainFilePath;
+		this.#pending = {
+			seq: ++this.#seq,
+			source,
+			bib,
+			mainFilePath: this.#mainFilePath
+		};
 		if (this.#timer) clearTimeout(this.#timer);
 		this.#clearCompileTimer();
 		this.#timer = setTimeout(() => this.#flush(), this.#debounceMs);
@@ -71,14 +87,15 @@ export class TypstClient {
 
 	#flush(): void {
 		if (!this.#worker || !this.#pending) return;
-		const { seq, source, bib } = this.#pending;
+		const { seq, source, bib, mainFilePath } = this.#pending;
 		this.#pending = null;
 		this.#lastSource = source;
 		this.#worker.postMessage({
 			type: 'update',
 			seq,
 			source,
-			bib
+			bib,
+			mainFilePath
 		} satisfies TypstWorkerRequest);
 		this.#compileTimer = setTimeout(() => {
 			this.#compileTimer = null;

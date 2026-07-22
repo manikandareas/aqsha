@@ -4,6 +4,7 @@ import {
   DocumentAnnotationRepo,
   DocumentEditProposalRepo,
   throwAppError,
+  WorkspaceRepo,
 } from "@aqsha/db";
 import { getRateLimiter } from "../quota";
 import {
@@ -12,8 +13,14 @@ import {
 } from "../workspace-document.service";
 import { TypstCompileService } from "./compile.service";
 import { applyHunkSelection, computeProposalHunks, type ProposalHunk } from "./hunks";
+import { resolveMainTypFilename } from "./main-filename";
 import { composeProjectBib } from "./project-bib";
 import type { TypstDiagnostic } from "./types";
+
+async function mainFileNameForWorkspace(db: Db, workspaceId: string): Promise<string> {
+  const workspace = await WorkspaceRepo.findById(db, workspaceId);
+  return resolveMainTypFilename(workspace?.kind);
+}
 
 export type ProposalEdit = { oldText: string; newText: string };
 
@@ -217,7 +224,8 @@ export const DocumentProposalService = {
       ownerUserId: input.ownerUserId,
       workspaceId: input.workspaceId,
     });
-    const result = await TypstCompileService.compile({ mainTyp: candidate, bib });
+    const mainFileName = await mainFileNameForWorkspace(db, input.workspaceId);
+    const result = await TypstCompileService.compile({ mainTyp: candidate, bib, mainFileName });
     if (!result.ok) {
       return { ok: false, reason: "compile_error", compileErrors: result.errors };
     }
@@ -325,7 +333,8 @@ export const DocumentProposalService = {
           ownerUserId: input.ownerUserId,
           workspaceId: proposal.workspaceId,
         });
-        const compiled = await TypstCompileService.compile({ mainTyp: source, bib });
+        const mainFileName = await mainFileNameForWorkspace(db, proposal.workspaceId);
+        const compiled = await TypstCompileService.compile({ mainTyp: source, bib, mainFileName });
         if (!compiled.ok) {
           return { status: "compile_error", compileErrors: compiled.errors };
         }

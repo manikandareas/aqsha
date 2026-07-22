@@ -94,6 +94,17 @@ describe("TypstCompileService.compile", () => {
     }
   });
 
+  maybe("mainFileName kind-based → diagnostik memakai basename tersebut", async () => {
+    const result = await TypstCompileService.compile({
+      mainTyp: "= Bab\n\n#undefined_var_xyz\n",
+      mainFileName: "skripsi.typ",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]!.file).toBe("skripsi.typ");
+    }
+  });
+
   maybe("dokumen dengan bibliography + sitasi → ok:true", async () => {
     const bib = [
       "@article{sugiyono2019,",

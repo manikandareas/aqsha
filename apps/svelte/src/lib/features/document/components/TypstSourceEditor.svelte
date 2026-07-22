@@ -17,12 +17,15 @@
 		docKey,
 		editable = true,
 		diagnostics = [],
+		mainFilePath = '/main.typ',
 		onChange
 	}: {
 		value: string;
 		docKey: string;
 		editable?: boolean;
 		diagnostics?: Cm6Diagnostic[];
+		/** Path virtual utama Typst, mis. `/skripsi.typ`. */
+		mainFilePath?: string;
 		onChange: (next: string) => void;
 	} = $props();
 
@@ -31,28 +34,38 @@
 	let mountedKey = $state<string | null>(null);
 	const isDark = $derived(mode.current === 'dark');
 
-	// Mount sekali saat host siap. Nilai prop dibaca di dalam closure asinkron (setelah await) →
-	// tidak dilacak sebagai dependency, jadi efek hanya bergantung pada `host` (tak remount saat mengetik).
+	// Mount saat host / path berkas utama siap. `mainFilePath` ikut dependency agar remount bila
+	// kind proyek resolve setelah load; prop buffer (`value`) dibaca untrack di dalam async.
 	$effect(() => {
 		if (!browser || !host) return;
 		const parent = host;
+		const path = mainFilePath;
 		let disposed = false;
 		let local: TypstEditorHandle | null = null;
 		void (async () => {
 			const { mountTypstEditor } = await import('../lib/typst-editor');
 			if (disposed) return;
-			local = await mountTypstEditor(parent, {
+			const seed = untrack(() => ({
 				doc: value,
 				editable,
 				dark: isDark,
+				diagnostics,
+				docKey,
 				onChange
+			}));
+			local = await mountTypstEditor(parent, {
+				doc: seed.doc,
+				editable: seed.editable,
+				dark: seed.dark,
+				mainFilePath: path,
+				onChange: seed.onChange
 			});
 			if (disposed) {
 				local.destroy();
 				return;
 			}
-			local.setDiagnostics(diagnostics);
-			mountedKey = docKey;
+			local.setDiagnostics(seed.diagnostics);
+			mountedKey = seed.docKey;
 			handle = local;
 		})();
 		return () => {

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { throwAppError } from "@aqsha/db";
 import { parseTypstDiagnostics } from "./diagnostics";
+import { sanitizeMainTypFilename } from "./main-filename";
 import { runSandboxed } from "./runner";
 import type { TypstDiagnostic } from "./types";
 
@@ -11,8 +12,13 @@ const DEFAULT_MAX_PDF_BYTES = 25 * 1024 * 1024;
 const DEFAULT_MAX_MEMORY_KB = 2_097_152;
 
 export type TypstCompileInput = {
-  /** Ditulis sebagai main.typ; sitasi merujuk `#bibliography("refs.bib")`. */
+  /** Isi sumber Typst; ditulis ke `mainFileName` di workdir. */
   mainTyp: string;
+  /**
+   * Basename berkas utama (mis. `skripsi.typ`). Default / unknown → `main.typ`.
+   * Hanya nilai dari allowlist kind yang diterima (cegah path traversal).
+   */
+  mainFileName?: string;
   /** Ditulis sebagai refs.bib bila ada (dokumen tanpa sitasi tak perlu). */
   bib?: string;
   options?: { timeoutMs?: number; maxPdfBytes?: number };
@@ -67,7 +73,8 @@ export const TypstCompileService = {
     const cache = cacheDir();
     await mkdir(cache, { recursive: true }).catch(() => {});
     try {
-      await writeFile(join(workdir, "main.typ"), input.mainTyp, "utf8");
+      const mainFileName = sanitizeMainTypFilename(input.mainFileName);
+      await writeFile(join(workdir, mainFileName), input.mainTyp, "utf8");
       if (input.bib != null) {
         await writeFile(join(workdir, "refs.bib"), input.bib, "utf8");
       }
@@ -78,7 +85,7 @@ export const TypstCompileService = {
         "--root",
         workdir,
         ...fontPathArgs(),
-        "main.typ",
+        mainFileName,
         "out.pdf",
       ];
 

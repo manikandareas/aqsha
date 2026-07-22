@@ -32,6 +32,7 @@
 	import ProjectChatPane from '../components/ProjectChatPane.svelte';
 	import ProjectChatRuntimeProvider from '../components/ProjectChatRuntimeProvider.svelte';
 	import { useWorkspace } from '../api';
+	import { resolveMainTypFilename } from '../main-typ-filename';
 	import { projectDisplayTitle } from '../types';
 	import TocOverlay from '$lib/features/document/components/TocOverlay.svelte';
 	import AnnotationModeControls from '$lib/features/document/components/AnnotationModeControls.svelte';
@@ -140,6 +141,7 @@
 
 	const runtime = new DocumentWorkspaceRuntime({
 		workspaceId: () => workspaceId,
+		mainTypFilename: () => resolveMainTypFilename(workspace.data?.kind),
 		save: (input) => saveDocument.mutateAsync(input)
 	});
 	let editorRef = $state<{
@@ -164,7 +166,9 @@
 	$effect(() => {
 		const s = runtime.source;
 		const b = bibQuery.data?.bib ?? '';
+		const path = runtime.mainFilePath;
 		void s;
+		void path;
 		runtime.pushSource(b);
 	});
 
@@ -557,6 +561,7 @@
 						docKey={runtime.docKey}
 						editable={runtime.editable}
 						diagnostics={runtime.diagnostics}
+						mainFilePath={runtime.mainFilePath}
 						onChange={(next) => runtime.onEditorChange(next)}
 					/>
 				{/if}

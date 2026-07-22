@@ -11,7 +11,15 @@ export type TypstRawDiagnostic = {
 
 /** Pesan main → worker. */
 export type TypstWorkerRequest =
-	{ type: 'update'; seq: number; source: string; bib: string | null } | { type: 'dispose' };
+	| {
+			type: 'update';
+			seq: number;
+			source: string;
+			bib: string | null;
+			/** Path virtual utama, mis. `/skripsi.typ` (harus leading `/`). */
+			mainFilePath: string;
+	  }
+	| { type: 'dispose' };
 
 /** Pesan worker → main. SVG sudah selesai dirender agar WASM tidak memblokir main thread. */
 export type TypstWorkerResponse =

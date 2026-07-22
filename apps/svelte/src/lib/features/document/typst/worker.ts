@@ -57,11 +57,12 @@ async function drainUpdates(): Promise<void> {
 		try {
 			await ensureCompiler();
 			const c = compiler!;
-			c.addSource('/main.typ', msg.source);
+			const mainFilePath = msg.mainFilePath || '/main.typ';
+			c.addSource(mainFilePath, msg.source);
 			// refs.bib selalu ada (kosong bila tanpa sitasi) agar #bibliography tak "file not found".
 			c.mapShadow('/refs.bib', encoder.encode(msg.bib ?? ''));
 			// Format default = vector (artifact yang di-render renderer di main thread).
-			const res = await c.compile({ mainFilePath: '/main.typ', diagnostics: 'full' });
+			const res = await c.compile({ mainFilePath, diagnostics: 'full' });
 			const vector = res.result ?? null;
 			const svg = vector
 				? await renderer!.runWithSession(async (session) => {

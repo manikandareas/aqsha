@@ -54,8 +54,11 @@
 		threadDetail.data?.agentKind === 'pro' ? 'pro' : 'lite'
 	);
 
+	// Key terpisah dari ThreadDetailShell (`['mastra','thread-messages',id]` → shape
+	// `{messages,oldestCursor,hasOlder}`). Berbagi key + staleTime 30s membuat restore panel
+	// membaca cache tanpa `threadId` lalu gagal `history.data?.threadId === restoreId` selamanya.
 	const history = createQuery(() => ({
-		queryKey: ['mastra', 'thread-messages', restoreThreadId],
+		queryKey: ['mastra', 'project-chat-messages', restoreThreadId],
 		enabled: restoreThreadId !== null && clerkLoaded && Boolean(userId),
 		queryFn: async () => {
 			const requestedThreadId = restoreThreadId;
@@ -116,16 +119,21 @@
 	}
 
 	// Advance restoring → ready/failed once history + thread detail both settle.
+	// Gate on `isFetched` (bukan truthy `data`): query disabled saat Clerk cold-load
+	// melaporkan `isFetching===false`; `threadDetail.data === null` (404 lembut) juga jangan
+	// menahan restore selamanya — paritas latch di ThreadDetailShell.
 	$effect(() => {
 		if (session.phase.kind !== 'restoring') return;
 		const restoreId = session.phase.threadId;
+		void clerkLoaded;
+		void userId;
 		if (history.isError || threadDetail.isError) {
 			session.markRestoreFailed();
 			return;
 		}
-		if (history.data?.threadId === restoreId && threadDetail.data) {
-			session.markRestored();
-		}
+		if (!history.isFetched || !threadDetail.isFetched) return;
+		if (history.data?.threadId !== restoreId) return;
+		session.markRestored();
 	});
 
 	$effect(() => {

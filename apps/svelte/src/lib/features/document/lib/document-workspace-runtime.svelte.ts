@@ -19,6 +19,7 @@ type EditorComponent = Component<
 		docKey: string;
 		editable?: boolean;
 		diagnostics?: Cm6Diagnostic[];
+		mainFilePath?: string;
 		onChange: (next: string) => void;
 	},
 	EditorHandle
@@ -62,22 +63,29 @@ export class DocumentWorkspaceRuntime {
 	previewError = $state<string | null>(null);
 	diagnostics = $state<Cm6Diagnostic[]>([]);
 
-	#clientCtor = $state<(new () => TypstClient) | null>(null);
+	#clientCtor = $state<(new (opts?: { mainFilePath?: string }) => TypstClient) | null>(null);
 	#client = $state<TypstClient | null>(null);
 	#moduleLoadPromise: Promise<void> | null = null;
 	#workspaceId: () => string;
+	#mainTypFilename: () => string;
 	#save: (input: { source: string; baseVersion: number }) => Promise<SaveWorkspaceDocumentResult>;
 
 	constructor(opts: {
 		workspaceId: () => string;
+		/** Basename berkas utama (mis. `skripsi.typ`), di-derive dari workspace.kind. */
+		mainTypFilename: () => string;
 		save: (input: { source: string; baseVersion: number }) => Promise<SaveWorkspaceDocumentResult>;
 	}) {
 		this.#workspaceId = opts.workspaceId;
+		this.#mainTypFilename = opts.mainTypFilename;
 		this.#save = opts.save;
 	}
 
-	// $derived.by (bukan template inline) — #workspaceId baru terisi di constructor.
-	docKey = $derived.by(() => `${this.#workspaceId()}:${this.reloadNonce}`);
+	// $derived.by (bukan template inline) — getter baru terisi di constructor.
+	mainFilePath = $derived.by(() => `/${this.#mainTypFilename()}`);
+	docKey = $derived.by(
+		() => `${this.#workspaceId()}:${this.reloadNonce}:${this.#mainTypFilename()}`
+	);
 	outline = $derived(parseDocumentOutline(this.source));
 	editable = $derived(this.autosave?.status !== 'stale');
 	saveStatusLabel = $derived.by(() => {
@@ -134,7 +142,7 @@ export class DocumentWorkspaceRuntime {
 	mountClient(active: boolean, docReady: boolean): (() => void) | undefined {
 		const Client = this.#clientCtor;
 		if (!browser || !active || !docReady || !Client) return;
-		const client = new Client();
+		const client = new Client({ mainFilePath: this.mainFilePath });
 		client.onCompiled((r) => {
 			if (r.svg) {
 				this.previewSvg = r.svg;
@@ -159,7 +167,7 @@ export class DocumentWorkspaceRuntime {
 		const client = this.#client;
 		if (!client) return;
 		this.previewError = null;
-		client.update(this.source, bib);
+		client.update(this.source, bib, this.mainFilePath);
 	}
 
 	onEditorChange(next: string): void {
@@ -202,7 +210,7 @@ export class DocumentWorkspaceRuntime {
 	retryPreview(bib: string, fallback: () => Promise<void>): void {
 		this.previewError = null;
 		if (this.#client) {
-			this.#client.update(this.source, bib);
+			this.#client.update(this.source, bib, this.mainFilePath);
 			return;
 		}
 		void fallback();

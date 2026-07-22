@@ -72,7 +72,14 @@ export type TypstEditorHandle = {
 
 export async function mountTypstEditor(
 	parent: HTMLElement,
-	opts: { doc: string; editable: boolean; dark: boolean; onChange: (value: string) => void }
+	opts: {
+		doc: string;
+		editable: boolean;
+		dark: boolean;
+		onChange: (value: string) => void;
+		/** Path virtual utama, mis. `/skripsi.typ`. */
+		mainFilePath?: string;
+	}
 ): Promise<TypstEditorHandle> {
 	const project = await getTypstProject();
 	const editableCompartment = new Compartment();
@@ -100,7 +107,7 @@ export async function mountTypstEditor(
 			extensions: [
 				basicSetup,
 				...languageExtensions,
-				typstFilePath.of('/main.typ'),
+				typstFilePath.of(opts.mainFilePath ?? '/main.typ'),
 				keymap.of([indentWithTab]),
 				EditorView.lineWrapping,
 				editableCompartment.of(EditorState.readOnly.of(!opts.editable)),

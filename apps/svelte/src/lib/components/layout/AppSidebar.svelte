@@ -20,6 +20,7 @@
 		useUpdateWorkspace,
 		useArchiveWorkspace
 	} from '$lib/features/workspaces/api';
+	import { mainTypFilename } from '$lib/features/workspaces/main-typ-filename';
 	import { projectDisplayTitle, type Workspace } from '$lib/features/workspaces/types';
 	import {
 		Icon,
@@ -58,7 +59,7 @@
 		);
 	}
 
-	// Sub-rows (main.typ, Referensi) mirror the parent project row's type: 12px label + muted ink,
+	// Sub-rows (kind.typ, Referensi) mirror the parent project row's type: 12px label + muted ink,
 	// mint when active. `[&>svg]` overrides beat MenuSubButton's built-in direct-child icon color.
 	const sidebarSubItemBaseClass =
 		'gap-2 font-normal text-muted-foreground transition-[background-color,color] duration-150 ease-out [&>svg]:size-3.5 [&>svg]:text-muted-foreground hover:bg-muted/60 hover:text-foreground hover:[&>svg]:text-foreground active:bg-muted active:text-foreground data-active:bg-primary/10 data-active:text-foreground data-active:[&>svg]:text-primary';
@@ -76,7 +77,7 @@
 	const pathname = $derived(page.url.pathname);
 	const selectedProjectId = $derived(page.params.projectId);
 
-	// Which project rows are expanded to reveal their children (main.typ + Referensi). The project
+	// Which project rows are expanded to reveal their children (kind.typ + Referensi). The project
 	// you navigate into auto-expands; a manual collapse afterward sticks until you visit it again.
 	const expandedProjects = new SvelteSet<string>();
 	// Idempotent like a boolean $state: skip when already in the requested state. The controlled
@@ -337,7 +338,7 @@
 													{#snippet child({ props })}
 														<a {...props} href={detailHref}>
 															<Icon icon={FileText} class="shrink-0" />
-															<span>main.typ</span>
+															<span>{mainTypFilename(project.kind)}</span>
 														</a>
 													{/snippet}
 												</Sidebar.MenuSubButton>
