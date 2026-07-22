@@ -32,18 +32,35 @@
 
 	const activeBlock = $derived(agentation.composer?.block ?? agentation.hover?.block ?? null);
 
-	const outlineBox = $derived.by<OverlayBox | null>(() => {
-		if (!activeBlock || !svgHost || !stageEl) return null;
-		return overlayBoxes(svgHost, stageEl, activeBlock.page, [activeBlock.bbox])[0] ?? null;
+	const activeOutlineBoxes = $derived.by<OverlayBox[]>(() => {
+		if (!activeBlock || !svgHost || !stageEl) return [];
+		return overlayBoxes(svgHost, stageEl, activeBlock.page, activeBlock.rects);
 	});
 
 	const stageWidth = $derived(stageEl?.clientWidth ?? 0);
+	const dragRect = $derived.by(() => {
+		const box = agentation.dragBox;
+		if (!box) return null;
+		return {
+			left: Math.min(box.start.x, box.end.x),
+			top: Math.min(box.start.y, box.end.y),
+			width: Math.abs(box.end.x - box.start.x),
+			height: Math.abs(box.end.y - box.start.y)
+		};
+	});
 
 	const badgePos = $derived.by(() => {
 		const hover = agentation.hover;
 		if (!hover || agentation.composer) return null;
 		const left = Math.min(Math.max(hover.cursor.x + 10, 4), Math.max(4, stageWidth - badgeW - 4));
 		return { left, top: hover.cursor.y - 34 };
+	});
+
+	const noticePos = $derived.by(() => {
+		const notice = agentation.notice;
+		if (!notice) return null;
+		const left = Math.min(Math.max(notice.cursor.x + 10, 4), Math.max(4, stageWidth - 260));
+		return { left, top: notice.cursor.y - 34 };
 	});
 
 	const panelPos = $derived.by(() => {
@@ -83,7 +100,19 @@
 	}
 </script>
 
-{#if outlineBox}
+{#if dragRect}
+	<div
+		data-annotation-ui
+		data-annotation-drag-box
+		class="pointer-events-none absolute z-20 rounded border border-dashed border-mint bg-mint/10"
+		style:left={`${dragRect.left}px`}
+		style:top={`${dragRect.top}px`}
+		style:width={`${dragRect.width}px`}
+		style:height={`${dragRect.height}px`}
+	></div>
+{/if}
+
+{#each activeOutlineBoxes as outlineBox, i (`${outlineBox.left}:${outlineBox.top}:${i}`)}
 	<div
 		data-annotation-ui
 		class="annotation-outline pointer-events-none absolute z-20 rounded border-2 border-mint bg-mint/10"
@@ -92,7 +121,7 @@
 		style:width={`${outlineBox.width + 6}px`}
 		style:height={`${outlineBox.height + 6}px`}
 	></div>
-{/if}
+{/each}
 
 {#if badgePos && activeBlock}
 	<div
@@ -103,6 +132,18 @@
 		style:top={`${badgePos.top}px`}
 	>
 		<span class="italic">{activeBlock.kind}:</span> "{activeBlock.label}"
+	</div>
+{/if}
+
+{#if noticePos && agentation.notice}
+	<div
+		data-annotation-ui
+		role="status"
+		class="pointer-events-none absolute z-40 max-w-64 rounded-md bg-foreground px-2 py-1 text-label font-medium text-background"
+		style:left={`${noticePos.left}px`}
+		style:top={`${noticePos.top}px`}
+	>
+		{agentation.notice.message}
 	</div>
 {/if}
 

@@ -603,6 +603,9 @@
 					bind:this={previewRef}
 					bind:annotationMode
 					svg={runtime.previewSvg}
+					project={runtime.typstProject}
+					source={runtime.source}
+					mainFilePath={runtime.mainFilePath}
 					annotations={annotations.data ?? []}
 					{activeAnnotationId}
 					{selectedAnnotationIds}

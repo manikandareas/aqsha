@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { browser } from '$app/environment';
+	import type { TypstProject } from '@vedivad/codemirror-typst';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, Loader2Icon, MinusIcon, PlusIcon } from '$lib/icons';
 	import { normalizeHeadingText } from '../lib/outline';
@@ -12,6 +13,11 @@
 		pageElements
 	} from '../lib/annotation-selection';
 	import { AnnotationAgentation } from '../lib/annotation-agentation.svelte';
+	import {
+		combineSemanticBlockRange,
+		resolveSemanticAreaRange,
+		resolveVedivadBlockAtPoint
+	} from '../lib/annotation-hover-targets';
 	import AnnotationModeLayer from './AnnotationModeLayer.svelte';
 
 	/**
@@ -38,7 +44,10 @@
 		onActiveHeading,
 		proposalHunkCount = 0,
 		onReviewProposal,
-		annotationMode = $bindable(false)
+		annotationMode = $bindable(false),
+		project = null,
+		source = '',
+		mainFilePath = '/main.typ'
 	}: {
 		svg: string | null;
 		annotations?: PreviewAnnotation[];
@@ -52,6 +61,9 @@
 		onReviewProposal?: () => void;
 		/** Mode anotasi — dikontrol dari header panel induk. */
 		annotationMode?: boolean;
+		project?: TypstProject | null;
+		source?: string;
+		mainFilePath?: string;
 	} = $props();
 
 	const MAX_WIDTH = 860;
@@ -66,6 +78,7 @@
 	let overlayItems = $state<
 		Array<{ id: string; active: boolean; selected: boolean; boxes: OverlayBox[] }>
 	>([]);
+	let vedivadBlockCache = new WeakMap<Element, ReturnType<typeof resolveVedivadBlockAtPoint>>();
 
 	const stageWidth = $derived(fitWidth > 0 ? Math.max(280, Math.round(fitWidth * zoom)) : 0);
 
@@ -73,6 +86,32 @@
 		svgHost: () => svgHost,
 		stageEl: () => stageEl,
 		outlineTitles: () => outlineTitles,
+		resolveBlock: (host, target, clientX, clientY) =>
+			resolveVedivadBlockAtPoint({
+				project,
+				source,
+				mainFilePath,
+				svgHost: host,
+				outlineTitles,
+				target,
+				clientX,
+				clientY,
+				cache: vedivadBlockCache
+			}),
+		resolveRange: (host, start, end, legacyBlocks) =>
+			combineSemanticBlockRange({ start, end, legacyBlocks, svgHost: host, source }),
+		resolveAreaRange: (host, start, end, legacyBlocks) =>
+			resolveSemanticAreaRange({
+				project,
+				source,
+				mainFilePath,
+				svgHost: host,
+				outlineTitles,
+				legacyBlocks,
+				start,
+				end,
+				cache: vedivadBlockCache
+			}),
 		onCreate: (draft, note, elementLabel) => onCreateAnnotation?.(draft, note, elementLabel)
 	});
 
@@ -114,15 +153,24 @@
 	$effect(() => {
 		if (!browser || !scrollEl) return;
 		const el = scrollEl;
+		const onDown = (e: PointerEvent) => agentation.onPointerDown(e);
 		const onMove = (e: PointerEvent) => agentation.onPointerMove(e);
+		const onUp = (e: PointerEvent) => agentation.onPointerUp(e);
+		const onCancel = (e: PointerEvent) => agentation.onPointerCancel(e);
 		const onLeave = () => agentation.onPointerLeave();
 		const onClick = (e: MouseEvent) => agentation.onStageClick(e);
-		el.addEventListener('pointermove', onMove, { passive: true });
+		el.addEventListener('pointerdown', onDown);
+		el.addEventListener('pointermove', onMove);
+		el.addEventListener('pointerup', onUp);
+		el.addEventListener('pointercancel', onCancel);
 		el.addEventListener('pointerleave', onLeave);
 		el.addEventListener('click', onClick, true);
 		el.addEventListener('scroll', onScrollActiveHeading, { passive: true });
 		return () => {
+			el.removeEventListener('pointerdown', onDown);
 			el.removeEventListener('pointermove', onMove);
+			el.removeEventListener('pointerup', onUp);
+			el.removeEventListener('pointercancel', onCancel);
 			el.removeEventListener('pointerleave', onLeave);
 			el.removeEventListener('click', onClick, true);
 			el.removeEventListener('scroll', onScrollActiveHeading);
@@ -198,7 +246,11 @@
 	$effect(() => {
 		void renderNonce;
 		void stageWidth;
+		void source;
+		void mainFilePath;
+		void outlineTitles;
 		if (!browser) return;
+		vedivadBlockCache = new WeakMap();
 		agentation.invalidateIndex();
 	});
 
@@ -324,22 +376,27 @@
 
 			<!-- Overlay sorotan anotasi. -->
 			{#each overlayItems as item (item.id)}
-				{#each item.boxes as box, i (i)}
-					<button
-						type="button"
-						aria-label="Buka anotasi"
-						class={[
-							'absolute z-10 rounded-[3px] transition-colors',
-							item.active ? 'bg-lemon/50 ring-2 ring-lemon' : 'bg-lemon/25 hover:bg-lemon/40',
-							item.selected && 'ring-2 ring-mint'
-						]}
-						style:left={`${box.left}px`}
-						style:top={`${box.top}px`}
-						style:width={`${box.width}px`}
-						style:height={`${box.height}px`}
-						onclick={() => onSelectAnnotation?.(item.id)}
-					></button>
-				{/each}
+				<button
+					type="button"
+					aria-label="Buka anotasi"
+					class="group pointer-events-none absolute inset-0 z-10 outline-none"
+					onclick={() => onSelectAnnotation?.(item.id)}
+				>
+					{#each item.boxes as box, i (i)}
+						<span
+							aria-hidden="true"
+							class={[
+								'pointer-events-auto absolute rounded-[3px] transition-colors group-focus-visible:ring-2 group-focus-visible:ring-mint',
+								item.active ? 'bg-lemon/50 ring-2 ring-lemon' : 'bg-lemon/25 hover:bg-lemon/40',
+								item.selected && 'ring-2 ring-mint'
+							]}
+							style:left={`${box.left}px`}
+							style:top={`${box.top}px`}
+							style:width={`${box.width}px`}
+							style:height={`${box.height}px`}
+						></span>
+					{/each}
+				</button>
 			{/each}
 
 			<AnnotationModeLayer {agentation} {svgHost} {stageEl} {scrollEl} />

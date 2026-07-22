@@ -32,6 +32,9 @@ type EditorComponent = Component<
 type PreviewComponent = Component<
 	{
 		svg: string | null;
+		project?: TypstProject | null;
+		source?: string;
+		mainFilePath?: string;
 		annotations?: Array<{
 			id: string;
 			page: number;

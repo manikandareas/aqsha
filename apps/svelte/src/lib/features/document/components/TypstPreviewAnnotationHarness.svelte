@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { TypstProject } from '@vedivad/codemirror-typst';
 	import AnnotationModeControls from './AnnotationModeControls.svelte';
 	import TypstPreview from './TypstPreview.svelte';
 	import type { AnnotationDraft } from '../lib/annotation-selection';
@@ -11,7 +12,10 @@
 		annotations = [],
 		outlineTitles = [],
 		onCreateAnnotation,
-		onDismissAnnotations
+		onDismissAnnotations,
+		project = null,
+		source = '',
+		mainFilePath = '/main.typ'
 	}: {
 		svg: string | null;
 		annotations?: Array<{
@@ -23,6 +27,9 @@
 		outlineTitles?: string[];
 		onCreateAnnotation?: (draft: AnnotationDraft, note: string, elementLabel: string) => void;
 		onDismissAnnotations?: (ids: string[]) => Promise<void>;
+		project?: TypstProject | null;
+		source?: string;
+		mainFilePath?: string;
 	} = $props();
 
 	let annotationMode = $state(false);
@@ -46,6 +53,15 @@
 		/>
 	</div>
 	<div class="min-h-0 flex-1">
-		<TypstPreview bind:annotationMode {svg} {annotations} {outlineTitles} {onCreateAnnotation} />
+		<TypstPreview
+			bind:annotationMode
+			{svg}
+			{annotations}
+			{outlineTitles}
+			{onCreateAnnotation}
+			{project}
+			{source}
+			{mainFilePath}
+		/>
 	</div>
 </div>
