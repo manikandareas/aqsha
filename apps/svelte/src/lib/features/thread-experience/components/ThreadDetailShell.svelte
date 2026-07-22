@@ -4,7 +4,6 @@
 	import { useClerkContext } from 'svelte-clerk';
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { buildWorkspaceMentionLabel } from '@aqsha/chat-core';
-	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
@@ -21,16 +20,15 @@
 		oldestHistoryCursor
 	} from '$lib/features/threads/lib/thread-history';
 	import { ThreadHistoryPager } from '$lib/features/threads/lib/thread-history-pager.svelte';
-	import { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
+	import type { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
 	import {
 		setComposerMentions,
 		ComposerMentions
 	} from '$lib/features/threads/state/composer-mentions.svelte';
 	import { setThreadPanel, ThreadPanelController } from './thread-panel-context.svelte';
 	import { isThreadPanelOpen } from '../utils/thread-panel-model';
-	import MastraChatThreadSurface from './MastraChatThreadSurface.svelte';
-	import DetailPanel from './DetailPanel.svelte';
 	import ThreadHeader from './ThreadHeader.svelte';
+	import ThreadSnapshotSurface from './ThreadSnapshotSurface.svelte';
 
 	/**
 	 * Thread-detail shell — the one place that owns the durable agent + the side-panel slot. Creates the
@@ -42,11 +40,17 @@
 		threadId: threadIdProp,
 		compact = false,
 		initialContent,
+		initialHistory,
 		workspace = null
 	}: {
 		threadId?: string;
 		compact?: boolean;
 		initialContent?: string;
+		initialHistory?: {
+			messages: import('$lib/features/threads/lib/timeline-types').TimelineMessage[];
+			oldestCursor: number | null;
+			hasOlder: boolean;
+		};
 		workspace?: { id: string; name: string } | null;
 	} = $props();
 
@@ -127,6 +131,8 @@
 	const history = createQuery(() => ({
 		queryKey: ['mastra', 'thread-messages', threadIdProp],
 		enabled: isExistingThread && clerkLoaded && Boolean(userId),
+		initialData: initialHistory,
+		staleTime: 30_000,
 		queryFn: async () => {
 			const thread = client.getMemoryThread({ threadId: threadId, agentId: ASTRA_AGENT_ID });
 			const res = await thread.listMessages(historyQueryParams());
@@ -145,7 +151,7 @@
 	// before the fetch runs → the agent seeds with empty `history.data` and the thread renders the empty
 	// hero until a message is sent. `isFetched` stays false while disabled/pending, flipping true only
 	// after the first fetch resolves (success or error).
-	let historySettled = $state(untrack(() => !isExistingThread));
+	let historySettled = $state(untrack(() => !isExistingThread || Boolean(initialHistory)));
 	$effect(() => {
 		if (history.isFetched && !historySettled) historySettled = true;
 	});
@@ -155,34 +161,74 @@
 	// external-source `$effect`. The seed + initial tier are read via `untrack` so a later history refetch
 	// refetch / threadDetail load doesn't tear down and rebuild the agent mid-stream.
 	let agent = $state<ThreadAgent | null>(null);
+	let agentError = $state<string | null>(null);
+	let agentRetryNonce = $state(0);
 	$effect(() => {
 		const tid = threadId;
 		const uid = userId;
+		void agentRetryNonce;
 		if (!tid || !uid || !clerkLoaded || loading) return;
 		const initialHistory = untrack(() => history.data);
 		const seed = initialHistory?.messages ?? [];
 		historyPager.seed(initialHistory);
 		const initialAgentKind = untrack(() => threadAgentKind);
-		const a = new ThreadAgent({
-			getClient: () => client,
-			threadId: tid,
-			getResourceId: () => (clerk.isLoaded ? clerk.auth.userId : null),
-			getWorkspaceId: () => workspace?.id ?? null,
-			queryClient: qc,
-			initialAgentKind,
-			seed
-		});
-		a.start();
-		historyPager.bindAgent(a);
-		agent = a;
+		let disposed = false;
+		let current: ThreadAgent | null = null;
+		agentError = null;
+		void import('$lib/features/threads/state/thread-agent.svelte')
+			.then(({ ThreadAgent: Agent }) => {
+				if (disposed) return;
+				const next = new Agent({
+					getClient: () => client,
+					threadId: tid,
+					getResourceId: () => (clerk.isLoaded ? clerk.auth.userId : null),
+					getWorkspaceId: () => workspace?.id ?? null,
+					queryClient: qc,
+					initialAgentKind,
+					seed
+				});
+				next.start();
+				current = next;
+				historyPager.bindAgent(next);
+				agent = next;
+			})
+			.catch(() => {
+				if (!disposed) agentError = 'Runtime Astra gagal dimuat.';
+			});
 		return () => {
+			disposed = true;
 			historyPager.bindAgent(null);
-			a.destroy();
-			agent = null;
+			current?.destroy();
+			if (agent === current) agent = null;
+		};
+	});
+
+	function retryRuntime(): void {
+		agentError = null;
+		if (history.isError) void history.refetch();
+		agentRetryNonce += 1;
+	}
+
+	type ChatSurfaceComponent = (typeof import('./MastraChatThreadSurface.svelte'))['default'];
+	let ChatSurface = $state<ChatSurfaceComponent | null>(null);
+	$effect(() => {
+		if (!agent || ChatSurface) return;
+		let cancelled = false;
+		void import('./MastraChatThreadSurface.svelte').then(({ default: Surface }) => {
+			if (!cancelled) ChatSurface = Surface;
+		});
+		return () => {
+			cancelled = true;
 		};
 	});
 
 	const sideOpen = $derived(isThreadPanelOpen(panel.mode));
+	type DetailPanelComponent = (typeof import('./DetailPanel.svelte'))['default'];
+	let SidePanel = $state<DetailPanelComponent | null>(null);
+	$effect(() => {
+		if (!sideOpen || SidePanel) return;
+		void import('./DetailPanel.svelte').then(({ default: Panel }) => (SidePanel = Panel));
+	});
 	const isLeftSidebarOpen = $derived(
 		leftSidebar.isMobile ? leftSidebar.openMobile : leftSidebar.open
 	);
@@ -190,41 +236,36 @@
 
 <PageTitle title={pageTitle} />
 
-{#if loading || !agent}
-	<div class="flex h-svh flex-1 items-center justify-center gap-2 text-muted-foreground">
-		<Spinner class="size-4" />
-		<span class="text-sm">Memuat thread…</span>
-	</div>
-{:else}
-	<!--
+<!--
 		Bounded-height root (`h-svh min-h-0 overflow-hidden`). Every layer below (DetailSplitLayout
 		provider, grid, inset, the surface `main`) is `min-h-svh`/`flex-1` with NO fixed height;
 		without this fixed `h-svh` ancestor the chain is content-driven, so the surface's
 		`overflow-y-auto` never engages (the body scrolls instead) and the landing hero's
 		`flex-1 items-center justify-center` centers inside a content-tall region → giant top gap.
 	-->
-	<div class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
-		<DetailSplitLayout
-			{sideOpen}
-			onSideOpenChange={(open) => {
-				if (!open) panel.close();
-			}}
-		>
-			{#snippet main()}
-				<ThreadHeader
-					threadId={threadIdProp}
-					title={headerTitle}
-					isExisting={isExistingThread}
-					recentThreads={recentThreads.data}
-					showLeftTrigger={!isLeftSidebarOpen}
-					onToggleLeftSidebar={() => leftSidebar.toggle()}
-					contextPanelOpen={sideOpen}
-					onOpenContextPanel={() => panel.openContextPanel()}
-					{threadUrlFor}
-				/>
-				<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-					<MastraChatThreadSurface
-						agent={agent!}
+<div class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
+	<DetailSplitLayout
+		{sideOpen}
+		onSideOpenChange={(open) => {
+			if (!open) panel.close();
+		}}
+	>
+		{#snippet main()}
+			<ThreadHeader
+				threadId={threadIdProp}
+				title={headerTitle}
+				isExisting={isExistingThread}
+				recentThreads={recentThreads.data}
+				showLeftTrigger={!isLeftSidebarOpen}
+				onToggleLeftSidebar={() => leftSidebar.toggle()}
+				contextPanelOpen={sideOpen}
+				onOpenContextPanel={() => panel.openContextPanel()}
+				{threadUrlFor}
+			/>
+			<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+				{#if agent && ChatSurface}
+					<ChatSurface
+						{agent}
 						{threadId}
 						{threadAgentKind}
 						{compact}
@@ -233,11 +274,19 @@
 						history={historyPager}
 						{threadUrlFor}
 					/>
-				</div>
-			{/snippet}
-			{#snippet side()}
-				<DetailPanel controller={panel} />
-			{/snippet}
-		</DetailSplitLayout>
-	</div>
-{/if}
+				{:else}
+					<ThreadSnapshotSurface
+						messages={history.data?.messages ?? []}
+						{loading}
+						error={history.isError ? 'Riwayat thread belum dapat dimuat.' : agentError}
+						history={historyPager}
+						onretry={retryRuntime}
+					/>
+				{/if}
+			</div>
+		{/snippet}
+		{#snippet side()}
+			{#if SidePanel}<SidePanel controller={panel} />{/if}
+		{/snippet}
+	</DetailSplitLayout>
+</div>

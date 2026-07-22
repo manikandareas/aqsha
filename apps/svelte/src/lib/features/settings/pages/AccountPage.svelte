@@ -3,7 +3,7 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Input } from '@aqsha/ui-svelte/components/input';
 	import { Icon, Loader2Icon, Trash2Icon } from '$lib/icons';
-	import { getSignOut } from '$lib/auth';
+	import { getAuthState, getSignOut } from '$lib/auth';
 	import { useDeleteAccount, useProfile, useUpdateDisplayName } from '../api';
 	import SettingsHeader from '../components/SettingsHeader.svelte';
 	import {
@@ -14,7 +14,8 @@
 		SettingsRow
 	} from '../components/settings-card';
 
-	const profile = useProfile();
+	const auth = getAuthState();
+	const profile = useProfile(() => auth.isSignedIn);
 	const update = useUpdateDisplayName();
 	const del = useDeleteAccount(getSignOut());
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { Icon, SearchIcon, XIcon } from '$lib/icons';
+	import { getAuthState } from '$lib/auth';
 	import { useExploreSuggest } from '../api';
 
 	/**
@@ -31,7 +32,11 @@
 		return () => clearTimeout(id);
 	});
 
-	const suggest = useExploreSuggest(() => (focused ? debounced : ''));
+	const auth = getAuthState();
+	const suggest = useExploreSuggest(
+		() => (focused ? debounced : ''),
+		() => auth.isSignedIn
+	);
 	const suggestions = $derived(suggest.data ?? []);
 	const open = $derived(focused && draft.trim().length >= 2 && suggestions.length > 0);
 

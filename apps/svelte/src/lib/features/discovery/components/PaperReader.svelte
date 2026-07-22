@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { Icon, BookOpenIcon, DownloadIcon, UserRoundIcon } from '$lib/icons';
+	import { getAuthState } from '$lib/auth';
 	import GenerativeCover from '$lib/components/GenerativeCover.svelte';
 	import { usePaper, useRecordInteraction } from '../api';
 	import { formatCitationCount } from '../format';
@@ -21,14 +23,20 @@
 	 */
 	let { paperKey }: { paperKey: string } = $props();
 
-	const query = usePaper(() => paperKey);
+	const auth = getAuthState();
+	const query = usePaper(
+		() => paperKey,
+		() => auth.isSignedIn
+	);
 	const record = useRecordInteraction();
 	const paper = $derived(query.data);
 
 	// Internal reader href for a related paper (DOI → in-app reader `doi:…`), byte-identical to web
 	// (`encodeURIComponent`); the discovery glob turns the resolve() rule off (external refs alongside).
 	function relatedInternalHref(r: PaperEnrichmentRef): string | null {
-		return r.doi ? `/app/explore/${encodeURIComponent(`doi:${r.doi}`)}` : null;
+		return r.doi
+			? resolve('/app/(product)/explore/[paperRef]', { paperRef: `doi:${r.doi}` })
+			: null;
 	}
 	function refMeta(r: PaperEnrichmentRef): string {
 		return [

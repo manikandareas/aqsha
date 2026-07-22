@@ -7,7 +7,6 @@
 	import PanelCardToolbar from '$lib/components/layout/PanelCardToolbar.svelte';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import ThreadRecentSwitcher from '$lib/features/explore/components/ThreadRecentSwitcher.svelte';
-	import MastraChatThreadSurface from '$lib/features/thread-experience/components/MastraChatThreadSurface.svelte';
 	import { useRecentThreadSummaries } from '$lib/features/threads/use-recent-thread-summaries.svelte';
 	import { Icon, ExternalLinkIcon, MessageSquarePlusIcon } from '$lib/icons';
 	import { getProjectChatRuntime } from './project-chat-runtime-context.svelte';
@@ -29,6 +28,21 @@
 		() => clerk.isLoaded && Boolean(clerk.auth.userId),
 		() => runtime.workspaceId
 	);
+	type ChatSurfaceComponent =
+		(typeof import('$lib/features/thread-experience/components/MastraChatThreadSurface.svelte'))['default'];
+	let ChatSurface = $state<ChatSurfaceComponent | null>(null);
+	$effect(() => {
+		if (!agent || ChatSurface) return;
+		let cancelled = false;
+		void import('$lib/features/thread-experience/components/MastraChatThreadSurface.svelte').then(
+			({ default: Surface }) => {
+				if (!cancelled) ChatSurface = Surface;
+			}
+		);
+		return () => {
+			cancelled = true;
+		};
+	});
 
 	function openFull(): void {
 		if (!runtime.activeThreadId) return;
@@ -93,8 +107,8 @@
 				<Spinner class="size-4" />
 				<span class="text-sm">Memulihkan percakapan…</span>
 			</div>
-		{:else}
-			<MastraChatThreadSurface
+		{:else if ChatSurface}
+			<ChatSurface
 				{agent}
 				threadId={runtime.threadId}
 				threadAgentKind={runtime.threadAgentKind}
@@ -104,6 +118,13 @@
 				{getExtraClientContext}
 				onTurnSent={runtime.onTurnSent}
 			/>
+		{:else}
+			<div class="flex flex-1 flex-col justify-end gap-3 p-4 text-muted-foreground">
+				<div class="h-16 w-2/3 animate-pulse rounded-xl bg-muted"></div>
+				<div class="rounded-2xl border-2 border-border bg-card px-4 py-3 text-sm">
+					Astra sedang disiapkan…
+				</div>
+			</div>
 		{/if}
 	</div>
 </div>

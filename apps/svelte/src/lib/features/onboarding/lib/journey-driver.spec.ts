@@ -55,7 +55,12 @@ describe('journey driver', () => {
 	it('advances on primary and only calls onSubmit at finish', async () => {
 		const session = sessionStub({
 			step: 'source',
-			answers: { ...EMPTY_ANSWERS, background: 'dosen', interests: ['a', 'b', 'c'], source: 'teman' }
+			answers: {
+				...EMPTY_ANSWERS,
+				background: 'dosen',
+				interests: ['a', 'b', 'c'],
+				source: 'teman'
+			}
 		});
 		const onSubmit = vi.fn();
 		const actions = journeyActionsOf(session, onSubmit);

@@ -2,8 +2,6 @@ import { usePinnedThreads, useThreadsList } from './api';
 import { mergeRecentThreadSummaries } from './lib/recent-thread-summaries';
 import type { RecentThreadSummary } from './types';
 
-const always = () => true;
-
 /**
  * Pinned + recent thread list for switchers / landing suggestions. Must be called during component
  * init (uses query context). `data` is a getter so template / `$derived` reads stay reactive.
@@ -13,7 +11,7 @@ const always = () => true;
  * global (unscoped) list — a project view just shows activity order.
  */
 export function useRecentThreadSummaries(
-	enabled: () => boolean = always,
+	enabled: () => boolean,
 	workspaceId: () => string | null = () => null
 ) {
 	const threadsList = useThreadsList(enabled, workspaceId);

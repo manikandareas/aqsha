@@ -23,11 +23,10 @@ describe('reconcilePinnedRefs', () => {
 
 	it('removes keys then prepends new refs that are not already kept', () => {
 		const current = [workspace('a'), workspace('b'), paper('a', 'p1')];
-		const next = reconcilePinnedRefs(
-			current,
-			new Set(['a:', 'a:p1']),
-			[workspace('c'), workspace('b')]
-		);
+		const next = reconcilePinnedRefs(current, new Set(['a:', 'a:p1']), [
+			workspace('c'),
+			workspace('b')
+		]);
 		expect(next).toEqual([workspace('c'), workspace('b')]);
 	});
 

@@ -2,6 +2,7 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, CheckIcon, ExternalLinkIcon, Loader2Icon } from '$lib/icons';
 	import { readableApiErrorMessage } from '$lib/errors';
+	import { getAuthState } from '$lib/auth';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import {
 		type ProductKey,
@@ -28,10 +29,12 @@
 
 	const WINDOWS = [30, 90, 365] as const;
 
-	const billing = useBillingCurrent();
-	const plans = useBillingPlans();
+	const auth = getAuthState();
+	const enabled = () => auth.isSignedIn;
+	const billing = useBillingCurrent(enabled);
+	const plans = useBillingPlans(enabled);
 	let days = $state<(typeof WINDOWS)[number]>(30);
-	const usage = useUsageActivity(() => days);
+	const usage = useUsageActivity(() => days, enabled);
 
 	const checkout = useCheckout();
 	const change = useChangeSubscription();

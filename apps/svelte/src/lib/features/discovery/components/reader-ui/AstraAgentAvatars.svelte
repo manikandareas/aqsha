@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { Avatar, AvatarImage, AvatarFallback, AvatarGroup } from '@aqsha/ui-svelte/components/avatar';
+	import {
+		Avatar,
+		AvatarImage,
+		AvatarFallback,
+		AvatarGroup
+	} from '@aqsha/ui-svelte/components/avatar';
 
 	// Ring pemisah = warna kartu (bukan background), agar celah overlap menyatu mulus
 	// dengan permukaan tombol outline (bg-card) — separasi hanya terlihat saat tumpang tindih.

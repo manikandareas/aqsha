@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
-	import { goto } from '$app/navigation';
+	import { SvelteSet, SvelteURL } from 'svelte/reactivity';
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { useClerkContext } from 'svelte-clerk';
 	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import { Input } from '@aqsha/ui-svelte/components/input';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
-	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Icon, FilterIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, XIcon } from '$lib/icons';
@@ -54,14 +54,16 @@
 	});
 
 	function navigate(patch: Partial<LibraryUrlState>): void {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient URL builder, not reactive state
-		const url = new URL(page.url);
+		const url = new SvelteURL(page.url);
 		url.search = applyLibraryUrl(url.searchParams, patch).toString();
-		void goto(url, { replaceState: true, noScroll: true, keepFocus: true });
+		replaceState(resolve('/app/(product)/library') + url.search + url.hash, page.state);
 	}
 
-	const list = useCitationsList(() => filters);
-	const tags = useCitationTags();
+	const list = useCitationsList(
+		() => filters,
+		() => enabled
+	);
+	const tags = useCitationTags(() => enabled);
 	const copy = useCopyCitation(() => null);
 
 	type DialogKind = 'doi' | 'manual' | 'import' | 'provider' | 'duplicates' | null;
@@ -84,24 +86,17 @@
 	const bulkTag = useBulkTagCitations();
 	const bulkDelete = useBulkDeleteCitations();
 	const mergeMany = useMergeManyCitations();
-	// `useCitationDetail` gates its own query on the id being non-null — no separate `enabled` getter.
-	const editTarget = useCitationDetail(() => editTargetId);
+	const editTarget = useCitationDetail(
+		() => editTargetId,
+		() => enabled
+	);
 
 	const items = $derived<CitationListItem[]>(list.data?.pages.flatMap((p) => p.items) ?? []);
 	const total = $derived(list.data?.pages[0]?.total ?? 0);
 	const hasFilter = $derived(Boolean(filters.q || filters.status || filters.source || filters.tag));
 
-	// Draft input stays locally editable while typing; only overwritten when the URL `q`
-	// changes from outside (back/forward, "bersihkan filter") — guarded so it doesn't
-	// clobber the keystroke that is about to submit it.
-	let searchDraft = $state(untrack(() => urlState.q));
-	let lastQ = untrack(() => urlState.q);
-	$effect(() => {
-		if (urlState.q !== lastQ) {
-			lastQ = urlState.q;
-			searchDraft = urlState.q;
-		}
-	});
+	// Derived dapat dioverride saat mengetik dan otomatis kembali ke URL saat navigasi berubah.
+	let searchDraft = $derived(urlState.q);
 	function submitSearch(event: SubmitEvent) {
 		event.preventDefault();
 		navigate({ q: searchDraft.trim() });
@@ -250,10 +245,18 @@
 
 			<div class="min-h-0 flex-1 overflow-y-auto px-6 pb-8">
 				{#if !enabled || list.isPending}
-					<div class="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-						<Spinner class="size-4" />
-						<span class="text-sm">Memuat perpustakaan…</span>
-					</div>
+					<ul class="grid gap-2" aria-label="Memuat perpustakaan">
+						{#each ['a', 'b', 'c', 'd', 'e', 'f'] as key (key)}
+							<li class="flex items-center gap-3 rounded-md border-2 border-border px-4 py-3">
+								<Skeleton class="size-2 shrink-0 rounded-full" />
+								<div class="min-w-0 flex-1 space-y-2">
+									<Skeleton class="h-3.5 w-2/3" />
+									<Skeleton class="h-3 w-2/5" />
+								</div>
+								<Skeleton class="hidden h-5 w-20 sm:block" />
+							</li>
+						{/each}
+					</ul>
 				{:else if items.length === 0 && !hasFilter}
 					<CitationEmptyState
 						onImportFile={() => (dialog = 'import')}

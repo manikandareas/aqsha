@@ -14,6 +14,7 @@
 		() => clerk.isLoaded && Boolean(clerk.auth.userId)
 	);
 	const projects = $derived<Workspace[]>(list.data?.pages.flatMap((p) => p.items) ?? []);
+	const skeletonItems = [0, 1, 2, 3, 4, 5];
 
 	const newProjectHref = resolve('/app/(product)/projects/new');
 </script>
@@ -32,7 +33,7 @@
 
 	{#if list.isPending}
 		<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-			{#each Array(6) as _, i (i)}
+			{#each skeletonItems as i (i)}
 				<div class="h-44 animate-pulse rounded-lg border-2 border-border bg-muted/40"></div>
 			{/each}
 		</div>

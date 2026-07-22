@@ -75,9 +75,9 @@ describe('isAnswersComplete', () => {
 	it('requires every question step to be valid', () => {
 		expect(isAnswersComplete(EMPTY_ANSWERS)).toBe(false);
 		expect(isAnswersComplete(answers({ background: 'dosen' }))).toBe(false);
-		expect(
-			isAnswersComplete(answers({ background: 'dosen', interests: ['a', 'b', 'c'] }))
-		).toBe(false);
+		expect(isAnswersComplete(answers({ background: 'dosen', interests: ['a', 'b', 'c'] }))).toBe(
+			false
+		);
 		expect(isAnswersComplete(completeAnswers())).toBe(true);
 		expect(
 			isAnswersComplete(
@@ -150,9 +150,7 @@ describe('buildCompletePayload', () => {
 
 	it('returns null when interests are below MIN_INTERESTS', () => {
 		expect(
-			buildCompletePayload(
-				answers({ background: 'dosen', source: 'teman', interests: ['a', 'b'] })
-			)
+			buildCompletePayload(answers({ background: 'dosen', source: 'teman', interests: ['a', 'b'] }))
 		).toBeNull();
 	});
 

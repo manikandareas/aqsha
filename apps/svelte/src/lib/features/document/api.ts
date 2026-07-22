@@ -3,8 +3,6 @@ import { getApiClient } from '$lib/api';
 import { queryKeys, unwrap } from '$lib/query';
 import type { AnnotationRect } from './lib/annotation-selection';
 
-const alwaysTrue = () => true;
-
 /**
  * Hooks dokumen Typst tunggal proyek. Tipe di-mirror manual dari service backend (apps/svelte tidak
  * mengimpor @aqsha/db / @aqsha/services). Save mengembalikan union `stale_write` dan TIDAK men-toast
@@ -24,10 +22,7 @@ export type SaveWorkspaceDocumentResult =
 	| { status: 'stale_write'; currentVersion: number };
 
 /** Sumber Typst proyek (null = belum pernah ditulis; lazy-create saat save pertama). */
-export function useWorkspaceDocument(
-	workspaceId: () => string,
-	enabled: () => boolean = () => true
-) {
+export function useWorkspaceDocument(workspaceId: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.workspaces.document(workspaceId()),
@@ -63,7 +58,7 @@ export function useSaveWorkspaceDocument(workspaceId: () => string) {
 }
 
 /** BibTeX proyek (`refs.bib`) untuk compile preview di klien; paritas dengan compile/ekspor server. */
-export function useWorkspaceBib(workspaceId: () => string, enabled: () => boolean = alwaysTrue) {
+export function useWorkspaceBib(workspaceId: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.workspaces.documentBib(workspaceId()),
@@ -100,10 +95,7 @@ export type AnnotationView = {
 	updatedAt: number;
 };
 
-export function useWorkspaceAnnotations(
-	workspaceId: () => string,
-	enabled: () => boolean = alwaysTrue
-) {
+export function useWorkspaceAnnotations(workspaceId: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.workspaces.annotations(workspaceId()),
@@ -245,7 +237,7 @@ export function normalizePendingProposal(value: unknown): PendingProposalView {
 	return value as PendingProposalView;
 }
 
-export function usePendingProposal(workspaceId: () => string, enabled: () => boolean = alwaysTrue) {
+export function usePendingProposal(workspaceId: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.workspaces.proposals(workspaceId()),

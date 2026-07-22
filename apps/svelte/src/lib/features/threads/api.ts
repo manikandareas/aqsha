@@ -10,6 +10,7 @@ import { getApiClient } from '$lib/api';
 import { apiErrorCode, readableApiErrorMessage } from '$lib/errors';
 import { queryKeys, unwrap } from '$lib/query';
 import { triggerArtifactDownload, triggerBase64Download } from './lib/artifact-download';
+import { threadDetailQueryOptions } from './query-options';
 import type { Artifact, ChatThread, ResearchSource } from './types';
 
 /**
@@ -20,14 +21,12 @@ import type { Artifact, ChatThread, ResearchSource } from './types';
 
 const LIST_PAGE_SIZE = 30;
 
-const always = () => true;
-
 /**
  * List thread (infinite/keyset, DESC activity). `workspaceId` scopes to a project's threads
  * (`null` = global list) — callers pass a getter tracking the active workspace.
  */
 export function useThreadsList(
-	enabled: () => boolean = always,
+	enabled: () => boolean,
 	workspaceId: () => string | null = () => null
 ) {
 	const api = getApiClient();
@@ -53,7 +52,7 @@ export function useThreadsList(
  * Pinned threads (sidebar "Pinned" group) — full fetch (not infinite), DESC `pinnedAt`. Separate from
  * `useThreadsList` because the main list excludes pinned.
  */
-export function usePinnedThreads(enabled: () => boolean = always) {
+export function usePinnedThreads(enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.threads.pinned(),
@@ -63,14 +62,9 @@ export function usePinnedThreads(enabled: () => boolean = always) {
 }
 
 /** Detail of one thread (null when not found / not owned). */
-export function useThread(id: () => string, enabled: () => boolean = always) {
+export function useThread(id: () => string, enabled: () => boolean) {
 	const api = getApiClient();
-	return createQuery(() => ({
-		queryKey: queryKeys.threads.detail(id()),
-		enabled: enabled() && Boolean(id()),
-		queryFn: async () =>
-			(unwrap(await api.threads({ id: id() }).get()) as ChatThread | null) ?? null
-	}));
+	return createQuery(() => threadDetailQueryOptions(api, { id: id(), enabled: enabled() }));
 }
 
 /**
@@ -79,10 +73,7 @@ export function useThread(id: () => string, enabled: () => boolean = always) {
  * Eden-inferred from `GET /threads/send-status`. `feature='deep_research'` (Slice 7.0) → deep-cap-aware
  * status; key is per-feature so its cache stays separate from the normal_chat pre-check.
  */
-export function useSendStatus(
-	feature: 'normal_chat' | 'deep_research' = 'normal_chat',
-	enabled: () => boolean = always
-) {
+export function useSendStatus(feature: 'normal_chat' | 'deep_research', enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.threads.sendStatus(feature),
@@ -102,7 +93,7 @@ export function useSendStatus(
  * `research_sources`. Persisted per thread → visible on reload (Sources panel). Short `staleTime` so a
  * just-finished turn's sources appear after `onFinish`.
  */
-export function useThreadSources(id: () => string, enabled: () => boolean = always) {
+export function useThreadSources(id: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.threads.sources(id()),
@@ -122,7 +113,7 @@ export type ThreadStatsGroup = { toolCallId: string; group: StatsGroup };
  * Invalidated when a turn transitions to `ready` (like `useThreadSources`). Payload parsed with zod
  * (chat-core contract) → corrupt groups are dropped, not fatal to render.
  */
-export function useThreadStatsBlocks(id: () => string, enabled: () => boolean = always) {
+export function useThreadStatsBlocks(id: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.threads.statsBlocks(id()),
@@ -267,12 +258,13 @@ export function usePinThread() {
 /** Artifacts attached to a thread (Slice 6.7) — headless (workspaceId=null). */
 export function useThreadArtifacts(
 	threadId: () => string | null,
+	enabled: () => boolean,
 	opts?: { pollWhilePending?: boolean }
 ) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.threads.artifacts(threadId() ?? ''),
-		enabled: Boolean(threadId()),
+		enabled: enabled() && Boolean(threadId()),
 		queryFn: async () =>
 			(unwrap(await api.threads({ id: threadId() ?? '' }).artifacts.get()) as { items: Artifact[] })
 				.items,

@@ -19,6 +19,7 @@
 	} from '$lib/icons';
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import { cn } from '@aqsha/ui-svelte/utils';
+	import { getAuthState } from '$lib/auth';
 	import {
 		useCitationDetail,
 		useCitationRender,
@@ -48,10 +49,13 @@
 		onAddToChat?: (citation: { id: string; title: string }) => void;
 	} = $props();
 
-	const detail = useCitationDetail(() => citationId);
+	const auth = getAuthState();
+	const enabled = () => auth.isSignedIn;
+	const detail = useCitationDetail(() => citationId, enabled);
 	const render = useCitationRender(
 		() => workspaceId,
-		() => ({ styleId: null, ids: [citationId] })
+		() => ({ styleId: null, ids: [citationId] }),
+		() => enabled() && Boolean(citationId)
 	);
 	const copyCitation = useCopyCitation(() => workspaceId);
 	const updateCitation = useUpdateCitation();

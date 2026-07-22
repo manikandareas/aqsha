@@ -1,7 +1,9 @@
 import { error } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import type { EntryGenerator, PageServerLoad } from './$types';
 import { createPageMetadata } from '$lib/seo';
-import { getPublishedEntry } from '$lib/features/changelog/lib/entries';
+import { getPublishedEntry, publishedEntries } from '$lib/features/changelog/lib/entries';
+
+export const entries: EntryGenerator = () => publishedEntries().map(({ slug }) => ({ slug }));
 
 /** Changelog entry detail — page metadata. */
 export const load: PageServerLoad = ({ params }) => {

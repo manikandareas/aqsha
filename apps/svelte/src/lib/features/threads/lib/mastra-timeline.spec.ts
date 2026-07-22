@@ -530,9 +530,7 @@ describe('mastraMessagesToTimeline (rehydrate)', () => {
 		]);
 
 		expect(out[0].parts.some((p) => p.kind === 'document-proposal')).toBe(false);
-		expect(out[0].parts).toContainEqual(
-			expect.objectContaining({ kind: 'tool', id: 'tool:c4' })
-		);
+		expect(out[0].parts).toContainEqual(expect.objectContaining({ kind: 'tool', id: 'tool:c4' }));
 	});
 
 	it('keeps malformed document-edit results as ordinary tool rows', () => {

@@ -1426,9 +1426,7 @@ function replaceWithDocumentProposal(
 	model: DocumentProposalCardModel
 ): MastraTimelineState {
 	return mutateMessage(state, msgIdx, (parts) => {
-		const without = parts.filter(
-			(p) => !(p.kind === 'tool' && p.model.toolCallId === toolCallId)
-		);
+		const without = parts.filter((p) => !(p.kind === 'tool' && p.model.toolCallId === toolCallId));
 		return [
 			...without,
 			{ kind: 'document-proposal', id: `document-proposal:${toolCallId}`, model }

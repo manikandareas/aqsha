@@ -137,11 +137,17 @@
 			commandOpen = true;
 		}
 	}
+
+	type StaticNavRoute =
+		| '/app/(product)'
+		| '/app/(product)/library'
+		| '/app/(product)/explore'
+		| '/app/settings/overview';
 </script>
 
 <svelte:window onkeydown={handleShortcut} />
 
-{#snippet navItem(href: string, label: string, icon: IconSvgElement, active: boolean)}
+{#snippet navItem(route: StaticNavRoute, label: string, icon: IconSvgElement, active: boolean)}
 	<Sidebar.MenuItem class="min-w-0 overflow-hidden">
 		<Sidebar.MenuButton
 			isActive={active}
@@ -150,7 +156,7 @@
 			tooltipContent={label}
 		>
 			{#snippet child({ props })}
-				<a {...props} {href}>
+				<a {...props} href={resolve(route)}>
 					<Icon {icon} class="size-3.5 shrink-0 group-data-[collapsible=icon]:size-4" />
 					<span>{label}</span>
 				</a>
@@ -186,25 +192,10 @@
 		</div>
 
 		<Sidebar.Menu class="gap-1 group-data-[collapsible=icon]:items-center">
-			{@render navItem(resolve('/app/(product)'), 'Beranda', HomeIcon, isHomeActive)}
-			{@render navItem(
-				resolve('/app/(product)/library'),
-				'Perpustakaan',
-				BookOpenIcon,
-				isLibraryActive
-			)}
-			{@render navItem(
-				resolve('/app/(product)/explore'),
-				'Jelajahi',
-				TrendingUpIcon,
-				isExploreActive
-			)}
-			{@render navItem(
-				resolve('/app/settings/overview'),
-				'Pengaturan',
-				SettingsIcon,
-				isSettingsActive
-			)}
+			{@render navItem('/app/(product)', 'Beranda', HomeIcon, isHomeActive)}
+			{@render navItem('/app/(product)/library', 'Perpustakaan', BookOpenIcon, isLibraryActive)}
+			{@render navItem('/app/(product)/explore', 'Jelajahi', TrendingUpIcon, isExploreActive)}
+			{@render navItem('/app/settings/overview', 'Pengaturan', SettingsIcon, isSettingsActive)}
 		</Sidebar.Menu>
 	</Sidebar.Header>
 
@@ -350,6 +341,7 @@
 													class={sidebarSubItemBaseClass}
 												>
 													{#snippet child({ props })}
+														<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- this legacy child path has no route ID yet. -->
 														<a {...props} href={referencesHref}>
 															<Icon icon={Quote} class="shrink-0" />
 															<span>Referensi</span>

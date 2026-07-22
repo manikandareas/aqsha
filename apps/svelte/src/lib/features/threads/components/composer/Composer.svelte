@@ -26,6 +26,7 @@
 		PaperclipIcon,
 		SquareIcon
 	} from '$lib/icons';
+	import { getAuthState } from '$lib/auth';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useBillingCurrent } from '$lib/features/settings/api';
@@ -95,6 +96,8 @@
 	);
 
 	const mentions = getComposerMentions();
+	const auth = getAuthState();
+	const authReady = () => auth.isSignedIn;
 
 	let content = $state(untrack(() => initialContent ?? ''));
 	let richContent = $state(untrack(() => initialContent ?? ''));
@@ -104,8 +107,8 @@
 	// @mention workspace picker: workspace list feeds the top-level palette; drilling fetches artifacts
 	// on demand (query dormant until `drillWorkspaceId` is set by the tokenized editor).
 	let drillWorkspaceId = $state<string | null>(null);
-	const workspacesQuery = useWorkspacesList(() => false);
-	const contextItemsQuery = useContextPickerArtifacts(() => drillWorkspaceId);
+	const workspacesQuery = useWorkspacesList(() => false, authReady);
+	const contextItemsQuery = useContextPickerArtifacts(() => drillWorkspaceId, authReady);
 	const contextWorkspaces: ContextWorkspaceOption[] = $derived(
 		(workspacesQuery.data?.pages ?? []).flatMap((page) =>
 			page.items.map((w) => ({ workspaceId: w.id, name: w.name, emoji: w.emoji ?? undefined }))
@@ -130,15 +133,17 @@
 	const hydrate = useHydrateContext();
 	const attachmentUpload = useThreadAttachments(() => threadId ?? '');
 	const removeAttachment = useRemoveThreadAttachment(() => threadId ?? '');
-	const billing = useBillingCurrent();
+	const billing = useBillingCurrent(authReady);
 
 	// D5: large attachments index async (initial `pending`). Poll the thread artifact list ONLY while a
 	// pending upload exists; the live chip status is derived from the poll (not duplicated in local state) +
 	// a one-time toast per artifact if indexing fails.
 	const hasPendingUpload = $derived(attachments.some((a) => a.indexingStatus === 'pending'));
-	const threadArtifacts = useThreadArtifacts(() => (hasPendingUpload ? (threadId ?? null) : null), {
-		pollWhilePending: true
-	});
+	const threadArtifacts = useThreadArtifacts(
+		() => (hasPendingUpload ? (threadId ?? null) : null),
+		authReady,
+		{ pollWhilePending: true }
+	);
 	const attachmentsView = $derived(
 		attachments.map((a) => {
 			const live = threadArtifacts.data?.find((it) => it._id === a.artifactId)?.indexingStatus;

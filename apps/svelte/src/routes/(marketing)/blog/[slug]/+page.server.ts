@@ -1,7 +1,9 @@
 import { error } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import type { EntryGenerator, PageServerLoad } from './$types';
 import { createPageMetadata, siteUrl, type PageSeo } from '$lib/seo';
-import { getPublishedPost } from '$lib/features/blog/lib/posts';
+import { getPublishedPost, publishedPosts } from '$lib/features/blog/lib/posts';
+
+export const entries: EntryGenerator = () => publishedPosts().map(({ slug }) => ({ slug }));
 
 /** Blog post detail — page metadata + BlogPosting JSON-LD. */
 export const load: PageServerLoad = ({ params }) => {

@@ -1,22 +1,27 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { SvelteURL } from 'svelte/reactivity';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Icon, ChevronRightIcon, PanelLeftIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { panelHeaderBarClass } from '$lib/components/layout/panel-surface';
+	import { DeferredQueryRegion, type DeferredQueryResult } from '$lib/query';
 	import { FEED_TOPIC_LABELS, type FeedTopic } from '$lib/features/discovery/types';
 	import { applyExploreUrl, readExploreUrl } from '../explore-url-model';
 	import ExploreHero from './ExploreHero.svelte';
 	import ExploreFindings from './ExploreFindings.svelte';
+	import ExploreFeedSkeleton from './ExploreFeedSkeleton.svelte';
 
 	/**
 	 * Explore surface — paper discovery. Sticky glass header (breadcrumb + left-sidebar toggle) over
 	 * the scrolling feed. Empty `q` → personal/topic feed (Jelajah); non-empty `q` → search results
-	 * (Selidiki). `q` + `topic` live in the URL (pure codec + `page.url`/`goto`). Browse-only: the research
+	 * (Selidiki). `q` + `topic` live in the URL tanpa server navigation ulang. Browse-only: the research
 	 * chat lives inside a project now, so there is no embedded Astra panel here.
 	 */
+	let { feedResult }: { feedResult: Promise<DeferredQueryResult> } = $props();
 
 	// Left-nav sidebar (AppShell provider).
 	const leftSidebar = Sidebar.useSidebar();
@@ -28,15 +33,18 @@
 	const investigate = $derived(q.trim().length >= 2);
 
 	function navigate(patch: Partial<{ q: string; topic: FeedTopic | null }>): void {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- transient URL builder, not reactive state
-		const url = new URL(page.url);
+		const url = new SvelteURL(page.url);
 		url.search = applyExploreUrl(url.searchParams, patch).toString();
-		// Replace history entry — same-page URL patch; resolve() can't model an edited search param.
-		void goto(url, { replaceState: true, noScroll: true, keepFocus: true });
+		replaceState(resolve('/app/(product)/explore') + url.search + url.hash, page.state);
 	}
 
 	const setTopic = (next: FeedTopic | null) => navigate({ topic: next });
 	const submitQuery = (next: string) => navigate({ q: next.trim() ? next.trim() : '' });
+	const searchModeSpacing = (active: boolean) =>
+		cn(
+			'transition-[padding] duration-200 ease-out motion-reduce:transition-none',
+			active ? 'pt-16' : 'pt-8'
+		);
 
 	const isLeftSidebarOpen = $derived(
 		leftSidebar.isMobile ? leftSidebar.openMobile : leftSidebar.open
@@ -84,7 +92,24 @@
 				onSubmitQuery={submitQuery}
 				compact={investigate}
 			/>
-			<ExploreFindings {topic} query={q} />
+			<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
+				{#snippet pending()}
+					<section class={searchModeSpacing(investigate)}>
+						<div class="@container/feed"><ExploreFeedSkeleton /></div>
+					</section>
+				{/snippet}
+				{#snippet failed(_error, retry)}
+					<section class={searchModeSpacing(investigate)}>
+						<div class="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3">
+							<p class="text-[13px] font-medium text-destructive">Temuan belum dapat dimuat.</p>
+							<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
+								Coba lagi
+							</Button>
+						</div>
+					</section>
+				{/snippet}
+				<ExploreFindings {topic} query={q} />
+			</DeferredQueryRegion>
 		</div>
 	</div>
 </main>

@@ -1,27 +1,16 @@
-import {
-	createInfiniteQuery,
-	createMutation,
-	createQuery,
-	keepPreviousData
-} from '@tanstack/svelte-query';
+import { createInfiniteQuery, createMutation, createQuery } from '@tanstack/svelte-query';
 import { getApiClient } from '$lib/api';
 import { queryKeys, unwrap } from '$lib/query';
-import type { DiscoveryItemRef, ExplorePaper, FeedItem, FeedMode, FeedTopic } from './types';
+import type { DiscoveryItemRef, ExplorePaper, FeedMode, FeedTopic } from './types';
+import { feedInfiniteQueryOptions, paperSearchInfiniteQueryOptions } from './query-options';
+
+export type { PaperSearchPage, SearchPaper } from './query-options';
 
 /**
  * Discovery query/mutation hooks. Called during component init (query + api-client context). Reactive
  * inputs are passed as getters (see `features/threads/api.ts`). Query keys, page size, stale policy,
  * and the `keepPreviousData` fade match the product contract.
  */
-
-const FEED_PAGE_SIZE = 20;
-
-// Only papers carry research value; claim/topic/idea kinds are pruned.
-const VISIBLE_KINDS = ['paper'] as const;
-
-type FeedPage = { items: FeedItem[]; nextCursor: string | null };
-
-const always = () => true;
 
 /**
  * Feed infinite-scroll keyset (For You/Top/Topics). `nextCursor` null = last page. A page can shrink
@@ -31,41 +20,13 @@ const always = () => true;
 export function useFeedInfinite(
 	mode: () => FeedMode,
 	topic: () => FeedTopic | null,
-	enabled: () => boolean = always
+	enabled: () => boolean
 ) {
 	const api = getApiClient();
-	return createInfiniteQuery(() => ({
-		queryKey: queryKeys.feed.list({ mode: mode(), topic: topic() }),
-		enabled: enabled(),
-		// Switching topic keeps the old feed (faded) while the new one loads — avoids a full spinner
-		// flash when moving between topics in Jelajahi.
-		placeholderData: keepPreviousData,
-		initialPageParam: null as string | null,
-		queryFn: async ({ pageParam }: { pageParam: string | null }) => {
-			const t = topic();
-			return unwrap(
-				await api.feed.get({
-					query: {
-						limit: FEED_PAGE_SIZE,
-						mode: mode(),
-						kinds: [...VISIBLE_KINDS],
-						...(t ? { topic: t } : {}),
-						...(pageParam ? { cursor: pageParam } : {})
-					}
-				})
-			) as FeedPage;
-		},
-		getNextPageParam: (last: FeedPage) => last.nextCursor
-	}));
+	return createInfiniteQuery(() =>
+		feedInfiniteQueryOptions(api, { mode: mode(), topic: topic(), enabled: enabled() })
+	);
 }
-
-export type SearchPaper = Omit<ExplorePaper, 'lastSeenAt'>;
-export type PaperSearchPage = {
-	items: SearchPaper[];
-	cached?: boolean;
-	/** Next page (OpenAlex basic-paging) for load-more; null = exhausted. */
-	nextPage: number | null;
-};
 
 /**
  * Live academic paper search — waterfall OpenAlex→arXiv→Crossref via /papers/search (mode=search),
@@ -78,31 +39,13 @@ export function usePaperSearch(
 	enabled: () => boolean
 ) {
 	const api = getApiClient();
-	return createInfiniteQuery(() => {
-		const trimmed = q().trim();
-		const from = fromYear();
-		return {
-			queryKey: queryKeys.papers.search({ query: trimmed, fromYear: from ?? null }),
-			enabled: enabled() && trimmed.length > 0,
-			// Old results stay visible (faded) as the query changes → smooth transition, no spinner.
-			placeholderData: keepPreviousData,
-			staleTime: 5 * 60_000,
-			initialPageParam: 1 as number,
-			queryFn: async ({ pageParam }: { pageParam: number }) =>
-				unwrap(
-					await api.papers.search.get({
-						query: {
-							query: trimmed,
-							mode: 'search',
-							limit: 12,
-							page: pageParam,
-							...(from ? { fromYear: from } : {})
-						}
-					})
-				) as PaperSearchPage,
-			getNextPageParam: (last: PaperSearchPage) => last.nextPage
-		};
-	});
+	return createInfiniteQuery(() =>
+		paperSearchInfiniteQueryOptions(api, {
+			query: q(),
+			fromYear: fromYear(),
+			enabled: enabled()
+		})
+	);
 }
 
 /** Hide a discovery item (+ interest −1). Optimistic removal is handled by the caller. */
@@ -127,7 +70,7 @@ export function useRecordInteraction() {
  * Paper reader (getPaperDetail: cache/cold-resolve + OpenAlex enrichment). `null` = unresolved. The key
  * rides as a QUERY PARAM — the canonical key contains `/` (DOI/url) which would split an Eden path param.
  */
-export function usePaper(key: () => string, enabled: () => boolean = always) {
+export function usePaper(key: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.papers.detail(key()),

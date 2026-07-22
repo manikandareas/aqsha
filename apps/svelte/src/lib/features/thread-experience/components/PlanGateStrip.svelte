@@ -32,6 +32,6 @@
 		meta={`${planGate.subQuestions.length} sub-pertanyaan`}
 		{onOpenPanel}
 	>
-		<PlanGateActions onApprove={onApprove} onDecline={onDecline} />
+		<PlanGateActions {onApprove} {onDecline} />
 	</ToolCard>
 </div>

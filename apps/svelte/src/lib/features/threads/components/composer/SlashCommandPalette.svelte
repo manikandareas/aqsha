@@ -29,6 +29,7 @@
 		WrenchIcon,
 		FolderIcon
 	} from '$lib/icons';
+	import { getAuthState } from '$lib/auth';
 	import { useBillingCurrent } from '$lib/features/settings/api';
 	import { deepRunsQuota } from '$lib/features/settings/lib/billing-derived';
 	import ComposerPopoverShell from './ComposerPopoverShell.svelte';
@@ -92,7 +93,8 @@
 	};
 
 	// Deep Research quota overlaid on the `/deep` item (app-wide cache, no extra fetch).
-	const billing = useBillingCurrent();
+	const auth = getAuthState();
+	const billing = useBillingCurrent(() => auth.isSignedIn);
 
 	// Flat index across groups (matches keyboard nav order in TokenizedPromptInput).
 	const layout = $derived.by(() => {

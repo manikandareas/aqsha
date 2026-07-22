@@ -11,6 +11,10 @@ declare global {
 			message: string;
 			code?: string;
 		}
+
+		interface PageData {
+			bootstrap?: import('$lib/query').QueryBootstrap;
+		}
 	}
 }
 

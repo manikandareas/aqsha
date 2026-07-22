@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, untrack, type Snippet } from 'svelte';
-	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { goto } from '$app/navigation';
+	import { SvelteURL, SvelteURLSearchParams } from 'svelte/reactivity';
+	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ContextRef } from '@aqsha/chat-core';
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
@@ -10,7 +10,7 @@
 	import { useThread } from '$lib/features/threads/api';
 	import { ASTRA_AGENT_ID, createMastraClient } from '$lib/features/threads/lib/mastra-client';
 	import { mastraMessagesToTimeline } from '$lib/features/threads/lib/mastra-timeline';
-	import { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
+	import type { ThreadAgent } from '$lib/features/threads/state/thread-agent.svelte';
 	import { ProjectChatSession } from '../lib/project-chat-session.svelte';
 	import {
 		setProjectChatRuntime,
@@ -77,13 +77,12 @@
 
 	function bindThreadToUrl(nextThreadId: string | null): void {
 		// Same-page search-param patch — resolve() can't model an edited query string.
-		const url = new URL(page.url);
+		const url = new SvelteURL(page.url);
 		const search = new SvelteURLSearchParams(url.searchParams);
 		if (nextThreadId) search.set('thread', nextThreadId);
 		else search.delete('thread');
 		url.search = search.toString();
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- URL search patch
-		void goto(url, { replaceState: true, noScroll: true, keepFocus: true });
+		replaceState(url, page.state);
 	}
 
 	function promoteThread(promotedThreadId: string): void {
@@ -158,20 +157,29 @@
 		const seed = untrack(() => (history.data?.threadId === tid ? history.data.messages : []));
 		const initialAgentKind = untrack(() => threadAgentKind);
 		disposeAgent();
-		const nextAgent = new ThreadAgent({
-			getClient: () => client,
-			threadId: tid,
-			getResourceId: () => (clerk.isLoaded ? clerk.auth.userId : null),
-			getWorkspaceId: () => workspaceId,
-			queryClient: qc,
-			initialAgentKind,
-			seed,
-			onAccepted: () => promoteThread(tid),
-			onSettled: () => handleSettled(tid)
-		});
-		nextAgent.start();
-		agentKey = nextAgentKey;
-		agent = nextAgent;
+		let cancelled = false;
+		void import('$lib/features/threads/state/thread-agent.svelte').then(
+			({ ThreadAgent: Agent }) => {
+				if (cancelled) return;
+				const nextAgent = new Agent({
+					getClient: () => client,
+					threadId: tid,
+					getResourceId: () => (clerk.isLoaded ? clerk.auth.userId : null),
+					getWorkspaceId: () => workspaceId,
+					queryClient: qc,
+					initialAgentKind,
+					seed,
+					onAccepted: () => promoteThread(tid),
+					onSettled: () => handleSettled(tid)
+				});
+				nextAgent.start();
+				agentKey = nextAgentKey;
+				agent = nextAgent;
+			}
+		);
+		return () => {
+			cancelled = true;
+		};
 	});
 	onDestroy(disposeAgent);
 

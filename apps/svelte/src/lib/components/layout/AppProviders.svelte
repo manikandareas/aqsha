@@ -11,7 +11,7 @@
 	 * ber-auth + viewer state per-request (bukan singleton module), memasangnya ke context untuk
 	 * feature, dan menjalankan user-sync.
 	 */
-	let { children }: { children: Snippet } = $props();
+	let { children, syncUser = true }: { children: Snippet; syncUser?: boolean } = $props();
 
 	const clerk = useClerkContext();
 
@@ -23,5 +23,7 @@
 	viewerContext.set(new ViewerIdentityState());
 </script>
 
-<UserSync />
+{#if syncUser}
+	<UserSync />
+{/if}
 {@render children()}

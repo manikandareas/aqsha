@@ -26,38 +26,42 @@ export type PendingKey = ProductKey | 'portal' | 'cancel';
 export type { ProductKey };
 
 /** Snapshot billing berjalan (plan + saldo kredit + status langganan). */
-export function useBillingCurrent() {
+export function useBillingCurrent(enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.billing.current(),
+		enabled: enabled(),
 		queryFn: async () => unwrap(await api.billing.current.get())
 	}));
 }
 
 /** Katalog plan publik + produk Mayar. */
-export function useBillingPlans() {
+export function useBillingPlans(enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.billing.plans(),
+		enabled: enabled(),
 		queryFn: async () => unwrap(await api.billing.plans.get()),
 		staleTime: 5 * 60_000
 	}));
 }
 
 /** Timeseries usage harian (30/90/365). `days` is read reactively via the getter. */
-export function useUsageActivity(days: () => number) {
+export function useUsageActivity(days: () => number, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.billing.usage(days()),
+		enabled: enabled(),
 		queryFn: async () => unwrap(await api.billing.usage.activity.get({ query: { days: days() } }))
 	}));
 }
 
 /** Profil user (display name). */
-export function useProfile() {
+export function useProfile(enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.user.me(),
+		enabled: enabled(),
 		queryFn: async () => unwrap(await api.users.me.get())
 	}));
 }
@@ -135,10 +139,11 @@ export function useUpdateDisplayName() {
 }
 
 /** Preferensi Astra + minat riset (Settings → Personalisasi, IMP-2). */
-export function usePreferences() {
+export function usePreferences(enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.preferences.detail(),
+		enabled: enabled(),
 		queryFn: async () => unwrap(await api.preferences.get())
 	}));
 }
@@ -179,10 +184,11 @@ export function useUpdateInterests() {
 }
 
 /** Daftar perangkat/sesi aktif (diproksi ke Clerk Backend lewat api). */
-export function useSessions() {
+export function useSessions(enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.security.sessions(),
+		enabled: enabled(),
 		queryFn: async () => unwrap(await api.security.sessions.get())
 	}));
 }
@@ -202,10 +208,11 @@ export function useRevokeSession() {
 }
 
 /** Status koneksi semua provider referensi (Settings → Integrasi). */
-export function useIntegrations() {
+export function useIntegrations(enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.integrations.list(),
+		enabled: enabled(),
 		queryFn: async () => unwrap(await api.integrations.get()) as IntegrationStatusView[]
 	}));
 }

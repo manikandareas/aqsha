@@ -2,6 +2,7 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import { Icon, Loader2Icon, LogOutIcon } from '$lib/icons';
+	import { getAuthState } from '$lib/auth';
 	import { useRevokeSession, useSessions } from '../api';
 	import {
 		SettingsPanel,
@@ -10,7 +11,8 @@
 		SettingsRow
 	} from '../components/settings-card';
 
-	const sessions = useSessions();
+	const auth = getAuthState();
+	const sessions = useSessions(() => auth.isSignedIn);
 	const revoke = useRevokeSession();
 
 	const rtf = new Intl.RelativeTimeFormat('id', { numeric: 'auto' });

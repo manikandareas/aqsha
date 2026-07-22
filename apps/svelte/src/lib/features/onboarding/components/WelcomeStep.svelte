@@ -1,4 +1,5 @@
 <script lang="ts">
+	/* eslint-disable svelte/no-navigation-without-resolve -- the citation target is an external URL */
 	import { FEYNMAN_QUOTE, ONBOARDING_COPY } from '../lib/onboarding-content';
 	import StepHeading from './StepHeading.svelte';
 

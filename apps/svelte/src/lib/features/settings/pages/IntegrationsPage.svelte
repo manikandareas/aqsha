@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
+	import { getAuthState } from '$lib/auth';
 	import { useIntegrations } from '../api';
 	import {
 		INTEGRATION_ERROR_MESSAGES,
@@ -16,7 +18,8 @@
 	 * (Zotero) / disconnect / sync. Connection lifecycle is account-level; per-workspace data pulls live
 	 * in the Sitasi tab.
 	 */
-	const integrations = useIntegrations();
+	const auth = getAuthState();
+	const integrations = useIntegrations(() => auth.isSignedIn);
 
 	// Toast the OAuth callback result, then strip the query so it does not repeat on refresh.
 	$effect(() => {
@@ -29,7 +32,7 @@
 		} else if (error) {
 			toast.error(INTEGRATION_ERROR_MESSAGES[error] ?? 'Koneksi gagal.');
 		}
-		void goto('/app/settings/integrations', {
+		void goto(resolve('/app/(console)/settings/integrations'), {
 			replaceState: true,
 			noScroll: true,
 			keepFocus: true

@@ -2,6 +2,7 @@ import {
 	createInfiniteQuery,
 	createMutation,
 	createQuery,
+	keepPreviousData,
 	useQueryClient
 } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
@@ -44,8 +45,6 @@ import type {
 
 const LIST_PAGE_SIZE = 50;
 
-const alwaysTrue = () => true;
-
 export type CitationListFilters = {
 	q: string;
 	status: 'verified' | 'needs_review' | 'incomplete' | null;
@@ -66,14 +65,12 @@ function useInvalidateCitations() {
 }
 
 /** List referensi perpustakaan akun (infinite/keyset) + `total` untuk count toolbar. */
-export function useCitationsList(
-	filters: () => CitationListFilters,
-	enabled: () => boolean = alwaysTrue
-) {
+export function useCitationsList(filters: () => CitationListFilters, enabled: () => boolean) {
 	const api = getApiClient();
 	return createInfiniteQuery(() => ({
 		queryKey: queryKeys.citations.list(filters()),
 		enabled: enabled(),
+		placeholderData: keepPreviousData,
 		initialPageParam: null as string | null,
 		queryFn: async ({ pageParam }: { pageParam: string | null }) => {
 			const f = filters();
@@ -94,19 +91,20 @@ export function useCitationsList(
 	}));
 }
 
-export function useCitationTags() {
+export function useCitationTags(enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.citations.tags(),
+		enabled: enabled(),
 		queryFn: async () => unwrap(await api.citations.tags.get()) as string[]
 	}));
 }
 
-export function useCitationDetail(citationId: () => string | null) {
+export function useCitationDetail(citationId: () => string | null, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.citations.detail(citationId() ?? ''),
-		enabled: Boolean(citationId()),
+		enabled: enabled() && Boolean(citationId()),
 		queryFn: async () =>
 			unwrap(await api.citations({ citationId: citationId() ?? '' }).get()) as CitationDetail
 	}));
@@ -181,7 +179,7 @@ export function useMergeCitations() {
 }
 
 /** Grup kandidat duplikat perpustakaan (dialog "Kelola duplikat"). */
-export function useDuplicateGroups(enabled: () => boolean = alwaysTrue) {
+export function useDuplicateGroups(enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.citations.duplicates(),
@@ -294,10 +292,7 @@ export function useImportCommit() {
 type IntegrationProviderKey = 'mendeley' | 'zotero';
 
 /** Folder/collection provider untuk picker penarikan. Account-level. */
-export function useProviderFolders(
-	provider: () => IntegrationProviderKey,
-	enabled: () => boolean = alwaysTrue
-) {
+export function useProviderFolders(provider: () => IntegrationProviderKey, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.integrations.folders(provider()),
@@ -350,7 +345,7 @@ export function useProviderSyncCommit(provider: () => IntegrationProviderKey) {
 export function useCitationRender(
 	workspaceId: () => string | null,
 	params: () => { styleId: CitationStyleId | null; ids: string[] },
-	enabled: () => boolean = alwaysTrue
+	enabled: () => boolean
 ) {
 	const api = getApiClient();
 	return createQuery(() => ({
@@ -382,7 +377,7 @@ export function useRenderDocumentCitations(
 	workspaceId: () => string,
 	clusters: () => DocumentCitationCluster[],
 	styleId: () => CitationStyleId | null,
-	enabled: () => boolean = alwaysTrue
+	enabled: () => boolean
 ) {
 	const api = getApiClient();
 	return createQuery(() => {
@@ -423,11 +418,11 @@ export function useCopyCitation(workspaceId: () => string | null) {
 	}));
 }
 
-export function useCitationSettings(workspaceId: () => string) {
+export function useCitationSettings(workspaceId: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.citations.settings(workspaceId()),
-		enabled: Boolean(workspaceId()),
+		enabled: enabled() && Boolean(workspaceId()),
 		queryFn: async () =>
 			unwrap(
 				await api.workspaces({ id: workspaceId() })['citation-settings'].get()
@@ -486,10 +481,7 @@ export function useExportCitations() {
 
 // ── Koleksi sumber per proyek (workspace_citation_links) ────────────────────
 
-export function useWorkspaceCitations(
-	workspaceId: () => string,
-	enabled: () => boolean = alwaysTrue
-) {
+export function useWorkspaceCitations(workspaceId: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.citations.links(workspaceId()),
@@ -540,7 +532,6 @@ export function useUnlinkCitation() {
 		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal melepas sumber dari proyek.'))
 	}));
 }
-
 
 // ── Simpan citation-first dari pencarian/feed ────────────────────────────────
 

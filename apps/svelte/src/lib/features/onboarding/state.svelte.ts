@@ -12,7 +12,7 @@ const INCOMPLETE_ANSWERS_MESSAGE = 'Jawaban onboarding belum lengkap.';
  * Onboarding flow state. Function-local `$state` (created per component init, NOT module scope) holds
  * the step + answers; the pure machine (`onboarding-machine.ts`) owns validation/transition logic. The
  * `complete` mutation posts to the API and, on success, sets the onboarding-status cache to
- * `{ completed: true }` synchronously (no window refetch) so the OnboardingGate does not bounce the
+ * `{ completed: true }` synchronously so status consumers stay consistent while the completion
  * just-finished user off `/finish`.
  *
  * Must be called during component init (uses the query + api-client context).

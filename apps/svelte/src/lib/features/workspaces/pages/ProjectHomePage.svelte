@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
-	import { browser } from '$app/environment';
 	import { toast } from 'svelte-sonner';
 	import { useClerkContext } from 'svelte-clerk';
 	import { useQueryClient } from '@tanstack/svelte-query';
@@ -22,13 +21,7 @@
 		projectPageAmbientRefs,
 		setComposerMentions
 	} from '$lib/features/threads/state/composer-mentions.svelte';
-	import {
-		Icon,
-		Code2Icon,
-		FileDownIcon,
-		FileTextIcon,
-		MessageSquareIcon
-	} from '$lib/icons';
+	import { Icon, Code2Icon, FileDownIcon, FileTextIcon, MessageSquareIcon } from '$lib/icons';
 	import ProjectChatPane from '../components/ProjectChatPane.svelte';
 	import ProjectChatRuntimeProvider from '../components/ProjectChatRuntimeProvider.svelte';
 	import { useWorkspace } from '../api';
@@ -54,6 +47,7 @@
 		reduceProjectActivation,
 		type ProjectActivationEvent
 	} from '../lib/project-activation';
+	import { ProjectActivationController } from '../lib/project-activation-controller';
 	import {
 		useWorkspaceDocument,
 		useSaveWorkspaceDocument,
@@ -88,6 +82,7 @@
 			event
 		);
 	}
+	const activationController = new ProjectActivationController(dispatchActivation);
 	const backgroundQueriesActive = $derived(enabled && activation.shellPainted);
 	const documentQueriesActive = $derived(enabled && activation.documentRuntimeActive);
 	const qc = useQueryClient();
@@ -160,15 +155,18 @@
 	});
 
 	$effect(() => {
-		return runtime.mountClient(activation.documentRuntimeActive, documentQuery.isSuccess);
+		return runtime.mountEngine(activation.documentRuntimeActive, documentQuery.isSuccess);
 	});
 
 	$effect(() => {
 		const s = runtime.source;
 		const b = bibQuery.data?.bib ?? '';
 		const path = runtime.mainFilePath;
+		// typstProject jadi non-null setelah engine mount — pastikan push ikut jalan.
+		const project = runtime.typstProject;
 		void s;
 		void path;
+		void project;
 		runtime.pushSource(b);
 	});
 
@@ -363,9 +361,7 @@
 	type LeftMode = 'chat' | 'editor';
 	type MobileMode = LeftMode | 'preview';
 
-	let host = $state<HTMLDivElement | null>(null);
-	let measured = $state(false);
-	let wide = $state(false);
+	const wide = $derived(activation.wide === true);
 	let leftMode = $state<LeftMode>('chat');
 	let mobileMode = $state<MobileMode>('chat');
 	let editorVisited = $state(false);
@@ -378,41 +374,17 @@
 		)
 	);
 
-	$effect(() => {
-		if (!browser || !host) return;
-		const el = host;
-		const measure = () => {
-			wide = el.clientWidth >= 900;
-			dispatchActivation({ type: 'layout-measured', wide });
-			if (wide) previewVisited = true;
-			measured = true;
-		};
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(el);
-		return () => ro.disconnect();
-	});
-
-	$effect(() => {
-		if (!browser || !workspace.data || !measured) return;
-		// Guard shellPainted di-untrack: dispatch frame pertama mengubah `activation`; bila tracked,
-		// effect re-run dan cleanup meng-cancel frame kedua sebelum `desktop-delay-complete` terkirim.
-		if (untrack(() => activation.shellPainted)) return;
-		let secondFrame = 0;
-		const firstFrame = requestAnimationFrame(() => {
-			dispatchActivation({ type: 'shell-painted' });
-			secondFrame = requestAnimationFrame(() => {
-				dispatchActivation({ type: 'desktop-delay-complete' });
-			});
-		});
-		return () => {
-			cancelAnimationFrame(firstFrame);
-			if (secondFrame) cancelAnimationFrame(secondFrame);
-		};
-	});
+	function attachWorkspace(node: HTMLDivElement): () => void {
+		return activationController.attach(node);
+	}
 
 	function activateDocumentRuntime(): void {
-		dispatchActivation({ type: 'open-document-surface' });
+		activationController.activateNow();
+	}
+
+	function prepareDocumentRuntime(): void {
+		activateDocumentRuntime();
+		runtime.preloadModules();
 	}
 
 	function selectLeftMode(value: string): void {
@@ -454,8 +426,8 @@
 			<ToggleGroup.Item
 				value="editor"
 				class={toggleItemClass}
-				onpointerenter={() => runtime.preloadModules()}
-				onfocus={() => runtime.preloadModules()}
+				onpointerenter={prepareDocumentRuntime}
+				onfocus={prepareDocumentRuntime}
 			>
 				<Icon icon={Code2Icon} class="size-3" /> Editor
 				{#if proposalHunkCount > 0}
@@ -481,8 +453,8 @@
 			<ToggleGroup.Item
 				value="editor"
 				class={toggleItemClass}
-				onpointerenter={() => runtime.preloadModules()}
-				onfocus={() => runtime.preloadModules()}
+				onpointerenter={prepareDocumentRuntime}
+				onfocus={prepareDocumentRuntime}
 			>
 				<Icon icon={Code2Icon} class="size-3" /> Editor
 				{#if proposalHunkCount > 0}
@@ -494,8 +466,8 @@
 			<ToggleGroup.Item
 				value="preview"
 				class={toggleItemClass}
-				onpointerenter={() => runtime.preloadModules()}
-				onfocus={() => runtime.preloadModules()}
+				onpointerenter={prepareDocumentRuntime}
+				onfocus={prepareDocumentRuntime}
 			>
 				<Icon icon={FileTextIcon} class="size-3" /> Preview
 			</ToggleGroup.Item>
@@ -562,6 +534,7 @@
 						editable={runtime.editable}
 						diagnostics={runtime.diagnostics}
 						mainFilePath={runtime.mainFilePath}
+						project={runtime.typstProject}
 						onChange={(next) => runtime.onEditorChange(next)}
 					/>
 				{/if}
@@ -677,7 +650,7 @@
 	</div>
 {:else}
 	<div
-		bind:this={host}
+		{@attach attachWorkspace}
 		class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background md:h-[calc(100svh-1rem)]"
 	>
 		<ProjectChatRuntimeProvider
@@ -685,12 +658,7 @@
 			onTurnSent={handleTurnSent}
 			onAgentSettled={handleAgentSettled}
 		>
-			{#if !measured}
-				<div class="flex min-h-0 flex-1 items-center justify-center gap-2 text-muted-foreground">
-					<Spinner class="size-4" />
-					<span class="text-sm">Menyiapkan workspace…</span>
-				</div>
-			{:else if wide}
+			{#if wide}
 				<Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
 					<Resizable.Pane defaultSize={44} minSize={28}>
 						<div class="flex h-full min-h-0 flex-col overflow-hidden">

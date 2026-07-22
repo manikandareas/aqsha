@@ -1,15 +1,16 @@
 import { untrack } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
 import { contextRefKey, type ContextRef } from '@aqsha/chat-core';
 import type { ComposerMentions } from '../../state/composer-mentions.svelte';
 
 /** Drop `removeKeys`, then prepend `addRefs` not already present (dedup by key). */
 export function reconcilePinnedRefs(
 	current: ContextRef[],
-	removeKeys: Set<string>,
+	removeKeys: ReadonlySet<string>,
 	addRefs: ContextRef[]
 ): ContextRef[] {
 	const kept = current.filter((ref) => !removeKeys.has(contextRefKey(ref)));
-	const keptKeys = new Set(kept.map(contextRefKey));
+	const keptKeys = new SvelteSet(kept.map(contextRefKey));
 	const toAdd = addRefs.filter((ref) => !keptKeys.has(contextRefKey(ref)));
 	return [...toAdd, ...kept];
 }
@@ -28,11 +29,9 @@ export function useComposerContextRefEpochMerges(
 		const epoch = mentions.ambientEpoch;
 		if (epoch === ambientMerge.epoch) return;
 		const ambientRefs = mentions.ambientContextRefs;
-		const ambientKeys = new Set([...ambientMerge.refs, ...ambientRefs].map(contextRefKey));
+		const ambientKeys = new SvelteSet([...ambientMerge.refs, ...ambientRefs].map(contextRefKey));
 		ambientMerge = { epoch, refs: ambientRefs };
-		setContextRefs(
-			reconcilePinnedRefs(untrack(getContextRefs), ambientKeys, ambientRefs)
-		);
+		setContextRefs(reconcilePinnedRefs(untrack(getContextRefs), ambientKeys, ambientRefs));
 	});
 
 	let selectionMerge = { epoch: -1, keys: [] as string[] };
@@ -41,11 +40,9 @@ export function useComposerContextRefEpochMerges(
 		if (epoch === selectionMerge.epoch) return;
 		const selectionRefs = mentions.selectionRefs;
 		const nextKeys = selectionRefs.map(contextRefKey);
-		const nextKeySet = new Set(nextKeys);
-		const removedKeys = new Set(selectionMerge.keys.filter((k) => !nextKeySet.has(k)));
+		const nextKeySet = new SvelteSet(nextKeys);
+		const removedKeys = new SvelteSet(selectionMerge.keys.filter((k) => !nextKeySet.has(k)));
 		selectionMerge = { epoch, keys: nextKeys };
-		setContextRefs(
-			reconcilePinnedRefs(untrack(getContextRefs), removedKeys, selectionRefs)
-		);
+		setContextRefs(reconcilePinnedRefs(untrack(getContextRefs), removedKeys, selectionRefs));
 	});
 }

@@ -20,7 +20,12 @@ function mulberry32(seed: number): () => number {
 	};
 }
 
-export function buildStarfield(count: number, width: number, height: number, seed = 7): FieldStar[] {
+export function buildStarfield(
+	count: number,
+	width: number,
+	height: number,
+	seed = 7
+): FieldStar[] {
 	const rand = mulberry32(seed);
 	return Array.from({ length: count }, () => ({
 		x: Math.round(rand() * width * 10) / 10,

@@ -1,10 +1,14 @@
-import { handleErrorWithSentry } from '@sentry/sveltekit';
 import type { HandleClientError } from '@sveltejs/kit';
 import { publicEnv } from '$lib/env/public';
-import { initClientSentry } from '$lib/observability';
 
-// Init Sentry browser SDK sedini mungkin (module load = sebelum app hydrate). DSN kosong → no-op.
-initClientSentry(publicEnv);
+if (publicEnv.PUBLIC_SENTRY_DSN) {
+	const init = () =>
+		void import('$lib/observability/sentry').then(({ initClientSentry }) =>
+			initClientSentry(publicEnv)
+		);
+	if ('requestIdleCallback' in window) window.requestIdleCallback(init, { timeout: 2_000 });
+	else globalThis.setTimeout(init, 0);
+}
 
 /**
  * Unexpected client error → Sentry (via `handleErrorWithSentry`) + shape `App.Error` rendered by
@@ -12,7 +16,10 @@ initClientSentry(publicEnv);
  */
 const handleClientError: HandleClientError = ({ error }) => {
 	console.error('[svelte:client] unexpected error', error);
+	if (publicEnv.PUBLIC_SENTRY_DSN) {
+		void import('@sentry/sveltekit').then((sentry) => sentry.captureException(error));
+	}
 	return { message: 'Terjadi kesalahan tak terduga.', code: 'unexpected' };
 };
 
-export const handleError = handleErrorWithSentry(handleClientError);
+export const handleError = handleClientError;

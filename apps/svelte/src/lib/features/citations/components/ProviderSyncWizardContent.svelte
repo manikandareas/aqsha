@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
 	import { Button } from '@aqsha/ui-svelte/components/button';
+	import { getAuthState } from '$lib/auth';
 	import { useIntegrations } from '$lib/features/settings/api';
 	import type { IntegrationProviderKey } from '$lib/features/settings/lib/integrations';
 	import ProviderSyncFlow from './ProviderSyncFlow.svelte';
@@ -13,7 +14,8 @@
 		onDone: () => void;
 	} = $props();
 
-	const integrations = useIntegrations();
+	const auth = getAuthState();
+	const integrations = useIntegrations(() => auth.isSignedIn);
 	const connected = $derived(
 		(integrations.data ?? []).filter((i) => i.available && i.status === 'connected')
 	);

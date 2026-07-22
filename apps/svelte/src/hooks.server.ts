@@ -4,7 +4,6 @@ import { redirect, type Handle, type HandleFetch, type HandleServerError } from 
 import { withClerkHandler } from 'svelte-clerk/server';
 import { serverEnv } from '$lib/server/env';
 import { publicEnv } from '$lib/env/public';
-import { createServerApiClient } from '$lib/server/api';
 import { initServerSentry } from '$lib/observability';
 import { seoAllowIndexing } from '$lib/seo/config';
 
@@ -43,29 +42,15 @@ function isAgentProxyPath(pathname: string): boolean {
 }
 
 /**
- * Auth + onboarding gate. Runs AFTER `clerk` → `locals.auth` is populated. Non-public routes require
- * a session; `/app` also requires completed onboarding (redirect before render, no flash). `/onboarding`
- * sits outside `/app` → session only, not onboarding-gated (prevents redirect loop).
+ * Auth gate. Runs AFTER `clerk` so `locals.auth` is populated. Onboarding checks live in the route
+ * layouts that own `/app` and `/onboarding`, preventing repeated checks on child navigation.
  */
 const guard: Handle = async ({ event, resolve }) => {
 	const path = event.url.pathname;
 	if (isAgentProxyPath(path) || isPublicPath(path)) return resolve(event);
 
-	const { userId, getToken } = event.locals.auth();
+	const { userId } = event.locals.auth();
 	if (!userId) redirect(303, publicEnv.PUBLIC_CLERK_SIGN_IN_URL);
-
-	if ((path === '/app' || path.startsWith('/app/')) && !event.isSubRequest) {
-		let needsOnboarding = false;
-		try {
-			const api = createServerApiClient(() => getToken());
-			const { data } = await api.onboarding.status.get();
-			needsOnboarding = Boolean(data && !data.completed);
-		} catch {
-			// Transient error (API blip) → do not block /app; redirect only on positive `!completed`.
-		}
-		// redirect() di luar try agar throw-nya tak tertelan catch.
-		if (needsOnboarding) redirect(303, '/onboarding');
-	}
 
 	return resolve(event);
 };

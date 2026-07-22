@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Icon, Loader2Icon } from '$lib/icons';
+	import { getAuthState } from '$lib/auth';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { useWorkspacesList } from '../api';
 	import { workspaceEmoji } from '../utils/workspace-emoji';
@@ -19,7 +20,11 @@
 		disabled?: boolean;
 	} = $props();
 
-	const list = useWorkspacesList(() => false);
+	const auth = getAuthState();
+	const list = useWorkspacesList(
+		() => false,
+		() => auth.isSignedIn
+	);
 	const items = $derived(
 		(list.data?.pages ?? []).flatMap((page) => page.items).filter((w) => w.id !== excludeId)
 	);

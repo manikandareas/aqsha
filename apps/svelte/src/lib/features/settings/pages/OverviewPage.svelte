@@ -2,6 +2,7 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import { Icon, ArrowUpRightIcon } from '$lib/icons';
+	import { getAuthState } from '$lib/auth';
 	import { useBillingCurrent, useProfile, useUsageActivity } from '../api';
 	import CreditMeter from '../components/CreditMeter.svelte';
 	import UsageChart from '../components/UsageChart.svelte';
@@ -14,9 +15,11 @@
 		SettingsPill
 	} from '../components/settings-card';
 
-	const billing = useBillingCurrent();
-	const usage = useUsageActivity(() => 365);
-	const profile = useProfile();
+	const auth = getAuthState();
+	const enabled = () => auth.isSignedIn;
+	const billing = useBillingCurrent(enabled);
+	const usage = useUsageActivity(() => 365, enabled);
+	const profile = useProfile(enabled);
 </script>
 
 <SettingsHeader

@@ -14,7 +14,10 @@
 <div class="text-center">
 	<StepHeading title={copy.title} subtitle={copy.description} />
 
-	<div class="stagger mx-auto flex max-w-2xl flex-wrap justify-center gap-2" style="--stagger-step: 30ms">
+	<div
+		class="stagger mx-auto flex max-w-2xl flex-wrap justify-center gap-2"
+		style="--stagger-step: 30ms"
+	>
 		{#each INTEREST_OPTIONS as option, i (option.id)}
 			<div style="--i: {i}">
 				<InterestChip selected={value.includes(option.id)} onclick={() => ontoggle(option.id)}>

@@ -4,6 +4,7 @@
 	import { Icon, Loader2Icon } from '$lib/icons';
 	import { INTEREST_OPTIONS, MIN_INTERESTS } from '$lib/features/onboarding/lib/onboarding-options';
 	import { cn } from '@aqsha/ui-svelte/utils';
+	import { getAuthState } from '$lib/auth';
 	import { usePreferences, useUpdateInterests, useUpdatePreferences } from '../api';
 	import PreferenceSelect from './PreferenceSelect.svelte';
 	import SettingsHeader from '../components/SettingsHeader.svelte';
@@ -42,7 +43,8 @@
 	];
 	const CUSTOM_MAX = 500;
 
-	const prefs = usePreferences();
+	const auth = getAuthState();
+	const prefs = usePreferences(() => auth.isSignedIn);
 	const updatePrefs = useUpdatePreferences();
 	const updateInterests = useUpdateInterests();
 

@@ -28,6 +28,7 @@
 	} from '$lib/icons';
 	import { panelBodyPaddingClass } from '$lib/components/layout/panel-surface';
 	import { cn } from '@aqsha/ui-svelte/utils';
+	import { getAuthState } from '$lib/auth';
 	import {
 		type CitationListFilters,
 		EMPTY_CITATION_FILTERS,
@@ -99,21 +100,23 @@
 	let editTargetId = $state<string | null>(null);
 	let selectionMode = $state(false);
 	const selectedIds = new SvelteSet<string>();
+	const auth = getAuthState();
+	const enabled = () => auth.isSignedIn && Boolean(workspaceId);
 
 	// Bulk bar local state (mode seleksi).
 	let tagOpen = $state(false);
 	let tagDraft = $state('');
 	let confirmBulkDelete = $state(false);
 
-	const list = useCitationsList(() => filters);
-	const tags = useCitationTags();
+	const list = useCitationsList(() => filters, enabled);
+	const tags = useCitationTags(enabled);
 	const createCitation = useCreateCitation();
 	const deleteCitation = useDeleteCitation();
 	const copyCitation = useCopyCitation(() => workspaceId);
 	const bulkTag = useBulkTagCitations();
 	const bulkDelete = useBulkDeleteCitations();
 	const mergeMany = useMergeManyCitations();
-	const editDetail = useCitationDetail(() => editTargetId);
+	const editDetail = useCitationDetail(() => editTargetId, enabled);
 	const updateCitation = useUpdateCitation();
 
 	const items = $derived((list.data?.pages ?? []).flatMap((page) => page.items));

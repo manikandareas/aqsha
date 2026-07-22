@@ -6,6 +6,7 @@
 	import { Icon, CheckCircle2Icon, SparklesIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { readableApiErrorMessage } from '$lib/errors';
+	import { getAuthState } from '$lib/auth';
 	import {
 		useFeedInfinite,
 		useHideDiscovery,
@@ -43,17 +44,19 @@
 	const q = $derived(query.trim());
 	const searchMode = $derived(q.length > 0);
 	const mode = $derived<FeedMode>(topic ? 'topics' : 'foryou');
+	const auth = getAuthState();
+	const authReady = () => auth.isSignedIn;
 
 	// Two infinite queries (browse feed + live paper search); one is enabled at a time.
 	const feedQuery = useFeedInfinite(
 		() => mode,
 		() => topic,
-		() => !searchMode
+		() => authReady() && !searchMode
 	);
 	const searchQuery = usePaperSearch(
 		() => query,
 		() => undefined,
-		() => searchMode
+		() => authReady() && searchMode
 	);
 	const hide = useHideDiscovery();
 	const record = useRecordInteraction();
@@ -97,8 +100,7 @@
 
 	// Reset the budget when the session (mode/topic/query) changes.
 	$effect(() => {
-		// eslint-disable-next-line @typescript-eslint/no-unused-expressions -- reactive dep read only
-		sessionKey;
+		if (sessionKey.length === 0) return;
 		autoLoadCount = 0;
 		prevRaw = 0;
 	});

@@ -7,7 +7,10 @@ import type { TransitionConfig } from 'svelte/transition';
 
 type PageMotion = { direction?: 1 | -1; reduce?: boolean };
 
-export function pageEnter(_node: Element, { direction = 1, reduce = false }: PageMotion = {}): TransitionConfig {
+export function pageEnter(
+	_node: Element,
+	{ direction = 1, reduce = false }: PageMotion = {}
+): TransitionConfig {
 	if (reduce) return { duration: 0 };
 	return {
 		duration: 320,
@@ -17,7 +20,10 @@ export function pageEnter(_node: Element, { direction = 1, reduce = false }: Pag
 	};
 }
 
-export function pageExit(_node: Element, { direction = 1, reduce = false }: PageMotion = {}): TransitionConfig {
+export function pageExit(
+	_node: Element,
+	{ direction = 1, reduce = false }: PageMotion = {}
+): TransitionConfig {
 	if (reduce) return { duration: 0, css: () => 'opacity: 1' };
 	return {
 		duration: 200,

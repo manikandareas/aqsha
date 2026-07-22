@@ -1,5 +1,5 @@
 // Explore URL state codec — single source of truth for `q` (search) + `topic` (feed scope).
-// Pure functions here; `ExplorePage` reads `page.url` and writes via `goto`. Contract-tested
+// Pure functions here; `ExplorePage` reads `page.url` and writes via shallow `replaceState`. Contract-tested
 // (`explore-url-model.spec.ts`): default `q` ("") and `null` topic omit their param; invalid topic
 // parses to `null`; other params preserved; round-trip stable.
 

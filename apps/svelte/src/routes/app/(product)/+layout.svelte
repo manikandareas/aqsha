@@ -1,14 +1,16 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
-	import type { LayoutData } from './$types';
+	import { QueryHydrationBoundary } from '$lib/query';
+	import type { LayoutProps } from './$types';
 
 	/**
 	 * Product shell layout — wraps every `/app` surface in the persistent `AppShell` (sidebar + inset).
 	 */
-	let { data, children }: { data: LayoutData; children: Snippet } = $props();
+	let { data, children }: LayoutProps = $props();
 </script>
 
-<AppShell open={data.sidebarOpen}>
-	{@render children()}
-</AppShell>
+<QueryHydrationBoundary state={data.workspaceBootstrap.critical}>
+	<AppShell open={data.sidebarOpen}>
+		{@render children()}
+	</AppShell>
+</QueryHydrationBoundary>

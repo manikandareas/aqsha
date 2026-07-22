@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	historyQueryParams,
-	chronologicalHistoryBatch,
-	prependUniqueById
-} from './thread-history';
+import { historyQueryParams, chronologicalHistoryBatch, prependUniqueById } from './thread-history';
 
 describe('thread history batches', () => {
 	it('turns a newest-first server batch into chronological order', () => {
@@ -29,7 +25,12 @@ describe('thread history batches', () => {
 			{ id: 'm2', createdAt: 2 },
 			{ id: 'm3', createdAt: 3 }
 		];
-		expect(prependUniqueById(existing, [{ id: 'm1', createdAt: 1 }, { id: 'm2', createdAt: 2 }])).toEqual([
+		expect(
+			prependUniqueById(existing, [
+				{ id: 'm1', createdAt: 1 },
+				{ id: 'm2', createdAt: 2 }
+			])
+		).toEqual([
 			{ id: 'm1', createdAt: 1 },
 			{ id: 'm2', createdAt: 2 },
 			{ id: 'm3', createdAt: 3 }

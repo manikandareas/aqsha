@@ -1,6 +1,7 @@
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import type { AgentKind } from '@aqsha/chat-core';
+import { getAuthState } from '$lib/auth';
 import { useBillingCurrent } from '$lib/features/settings/api';
 
 /** Composer agent tier — a contract alias of `AgentKind` (`@aqsha/chat-core`). */
@@ -14,7 +15,8 @@ export type ComposerAgentKind = AgentKind;
  * query context). Returns getters so reads stay reactive in the template.
  */
 export function useComposerAgentSelection(threadDefault: () => ComposerAgentKind = () => 'lite') {
-	const billing = useBillingCurrent();
+	const auth = getAuthState();
+	const billing = useBillingCurrent(() => auth.isSignedIn);
 	let override = $state<ComposerAgentKind | null>(null);
 
 	const canUsePro = $derived(billing.data ? billing.data.planKey !== 'free' : false);

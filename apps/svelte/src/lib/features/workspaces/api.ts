@@ -8,64 +8,39 @@ import { toast } from 'svelte-sonner';
 import { getApiClient } from '$lib/api';
 import { readableApiErrorMessage } from '$lib/errors';
 import { queryKeys, unwrap } from '$lib/query';
-import type { Workspace, WorkspaceKind, WorkspaceKindInfo } from './types';
+import type { WorkspaceKind, WorkspaceKindInfo } from './types';
+import { workspaceDetailQueryOptions, workspaceListQueryOptions } from './query-options';
 
 /**
  * Workspace query/mutation hooks. Reactive scalar inputs (`id`, `workspaceId`) are getters
  * (svelte-query idiom). Query keys, stale policy, invalidation, and toast copy match the product contract.
  */
 
-const LIST_PAGE_SIZE = 25;
-
-const alwaysFalse = () => false;
-const alwaysTrue = () => true;
-
-export type WorkspaceListPage = {
-	items: Workspace[];
-	nextCursor: string | null;
-};
+export type { WorkspaceListPage } from './query-options';
 
 /**
  * List workspaces (infinite/keyset). `nextCursor` null = halaman terakhir. `enabled` gate = Clerk
  * `isLoaded` dari composite hooks: firing SEBELUM clerk-js load = 401 tokenless
  * → data kosong sesaat pada hard-reload rute authed dalam.
  */
-export function useWorkspacesList(
-	includeArchived: () => boolean = alwaysFalse,
-	enabled: () => boolean = alwaysTrue
-) {
+export function useWorkspacesList(includeArchived: () => boolean, enabled: () => boolean) {
 	const api = getApiClient();
-	return createInfiniteQuery(() => ({
-		queryKey: queryKeys.workspaces.list({ includeArchived: includeArchived() }),
-		enabled: enabled(),
-		initialPageParam: null as string | null,
-		queryFn: async ({ pageParam }: { pageParam: string | null }) =>
-			unwrap(
-				await api.workspaces.get({
-					query: {
-						limit: LIST_PAGE_SIZE,
-						includeArchived: includeArchived(),
-						...(pageParam ? { cursor: pageParam } : {})
-					}
-				})
-			) as WorkspaceListPage,
-		getNextPageParam: (last: WorkspaceListPage) => last.nextCursor
-	}));
+	return createInfiniteQuery(() =>
+		workspaceListQueryOptions(api, {
+			includeArchived: includeArchived(),
+			enabled: enabled()
+		})
+	);
 }
 
 /** Detail satu workspace (null bila tak ditemukan / bukan milik user). */
-export function useWorkspace(id: () => string, enabled: () => boolean = alwaysTrue) {
+export function useWorkspace(id: () => string, enabled: () => boolean) {
 	const api = getApiClient();
-	return createQuery(() => ({
-		queryKey: queryKeys.workspaces.detail(id()),
-		enabled: enabled() && Boolean(id()),
-		// Eden infers kind/stage as loose `string`; narrow to the domain unions like the sibling hooks.
-		queryFn: async () => unwrap(await api.workspaces({ id: id() }).get()) as Workspace
-	}));
+	return createQuery(() => workspaceDetailQueryOptions(api, { id: id(), enabled: enabled() }));
 }
 
 /** Folder aktif suatu workspace. */
-export function useFolders(workspaceId: () => string, enabled: () => boolean = alwaysTrue) {
+export function useFolders(workspaceId: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.folders.list(workspaceId()),

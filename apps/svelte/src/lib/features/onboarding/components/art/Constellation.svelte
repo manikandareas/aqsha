@@ -14,10 +14,7 @@
 	 * star. Selecting a chip lights its star, and stars link into a constellation in selection
 	 * order. Decorative — chips stay the semantic multi-select.
 	 */
-	let {
-		selected,
-		class: className = ''
-	}: { selected: string[]; class?: string } = $props();
+	let { selected, class: className = '' }: { selected: string[]; class?: string } = $props();
 
 	const reduce = $derived(prefersReducedMotion.current);
 	const chosen = $derived(new Set(selected));
@@ -63,7 +60,9 @@
 				>
 					<circle cx={at.x} cy={at.y} r="9" fill="var(--mint)" opacity="0.18" />
 					<path
-						d="M{at.x} {at.y - 6.5} L{at.x + 1.6} {at.y - 1.6} L{at.x + 6.5} {at.y} L{at.x + 1.6} {at.y + 1.6} L{at.x} {at.y + 6.5} L{at.x - 1.6} {at.y + 1.6} L{at.x - 6.5} {at.y} L{at.x - 1.6} {at.y - 1.6} Z"
+						d="M{at.x} {at.y - 6.5} L{at.x + 1.6} {at.y - 1.6} L{at.x + 6.5} {at.y} L{at.x +
+							1.6} {at.y + 1.6} L{at.x} {at.y + 6.5} L{at.x - 1.6} {at.y + 1.6} L{at.x -
+							6.5} {at.y} L{at.x - 1.6} {at.y - 1.6} Z"
 						fill="var(--mint)"
 						stroke="var(--mint-strong)"
 						stroke-width="1"

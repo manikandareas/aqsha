@@ -3,7 +3,11 @@
 	import { fade, fly, scale } from 'svelte/transition';
 	import { Icon, FlagIcon } from '$lib/icons';
 	import { INTEREST_STAR_GLYPH } from '../lib/journey-art';
-	import { buildFinishReflection, EINSTEIN_QUOTE, ONBOARDING_COPY } from '../lib/onboarding-content';
+	import {
+		buildFinishReflection,
+		EINSTEIN_QUOTE,
+		ONBOARDING_COPY
+	} from '../lib/onboarding-content';
 	import type { OnboardingAnswers } from '../lib/onboarding-machine';
 	import StepHeading from './StepHeading.svelte';
 

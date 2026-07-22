@@ -26,10 +26,13 @@ export function agentIdFor(agentKind: AgentKind): string {
  * durable thread uses server-side cancel (`abortThread`) so the subscription/run is decoupled from the
  * fetch connection.
  */
-export function createMastraClient(getToken: TokenGetter): MastraClient {
+export function createMastraClient(
+	getToken: TokenGetter,
+	server?: { baseUrl: string; apiPrefix: string }
+): MastraClient {
 	return new MastraClient({
-		baseUrl: typeof window !== 'undefined' ? window.location.origin : '',
-		apiPrefix: '/mastra-api',
+		baseUrl: server?.baseUrl ?? (typeof window !== 'undefined' ? window.location.origin : ''),
+		apiPrefix: server?.apiPrefix ?? '/mastra-api',
 		fetch: async (input, init) => {
 			const token = await getToken();
 			const headers = new Headers(init?.headers);

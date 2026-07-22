@@ -3,6 +3,7 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { CheckIcon, Icon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
+	import { getAuthState } from '$lib/auth';
 	import { useCitationSettings, useUpdateCitationSettings } from '../api';
 	import { BIBLIOGRAPHY_SORT_OPTIONS, CITATION_STYLE_OPTIONS } from '../types';
 
@@ -20,7 +21,11 @@
 		onOpenChange: (open: boolean) => void;
 	} = $props();
 
-	const settings = useCitationSettings(() => workspaceId);
+	const auth = getAuthState();
+	const settings = useCitationSettings(
+		() => workspaceId,
+		() => auth.isSignedIn
+	);
 	const update = useUpdateCitationSettings(() => workspaceId);
 </script>
 

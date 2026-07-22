@@ -20,9 +20,7 @@
 		value: WorkspaceKindInfo;
 	} = $props();
 
-	const fields = $derived(
-		WORKSPACE_KIND_INFO_FIELDS[kind] as readonly WorkspaceKindInfoField[]
-	);
+	const fields = $derived(WORKSPACE_KIND_INFO_FIELDS[kind] as readonly WorkspaceKindInfoField[]);
 </script>
 
 {#each fields as field (field)}

@@ -16,8 +16,6 @@ import { queryKeys, unwrap } from '$lib/query';
 
 const LIST_PAGE_SIZE = 30;
 
-const alwaysTrue = () => true;
-
 export type ArtifactListItem = {
 	_id: string;
 	title: string;
@@ -45,8 +43,8 @@ export type ArtifactListPage = {
 /** List artifact aktif workspace (opsional folder), keyset infinite. `enabled` = Clerk-loaded gate. */
 export function useArtifacts(
 	workspaceId: () => string,
-	folderId: () => string | null = () => null,
-	enabled: () => boolean = alwaysTrue
+	folderId: () => string | null,
+	enabled: () => boolean
 ) {
 	const api = getApiClient();
 	return createInfiniteQuery(() => ({
@@ -72,18 +70,21 @@ export function useArtifacts(
  * non-paginated. `enabled` di-drive UI (hanya fetch saat user men-drill ke
  * workspace di palette).
  */
-export function useContextPickerArtifacts(workspaceId: () => string | null) {
+export function useContextPickerArtifacts(
+	workspaceId: () => string | null,
+	enabled: () => boolean
+) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: ['artifacts', 'context-picker', workspaceId()] as const,
-		enabled: workspaceId() !== null,
+		enabled: enabled() && workspaceId() !== null,
 		queryFn: async () =>
 			unwrap(await api.workspaces({ id: workspaceId() ?? '' }).artifacts['context-picker'].get())
 	}));
 }
 
 /** Detail artifact (null bila tak ditemukan / bukan milik user). */
-export function useArtifact(id: () => string, enabled: () => boolean = alwaysTrue) {
+export function useArtifact(id: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.artifacts.detail(id()),
@@ -93,7 +94,7 @@ export function useArtifact(id: () => string, enabled: () => boolean = alwaysTru
 }
 
 /** Render payload (discriminated union) untuk reader. */
-export function useArtifactRender(id: () => string, enabled: () => boolean = alwaysTrue) {
+export function useArtifactRender(id: () => string, enabled: () => boolean) {
 	const api = getApiClient();
 	return createQuery(() => ({
 		queryKey: queryKeys.artifacts.render(id()),

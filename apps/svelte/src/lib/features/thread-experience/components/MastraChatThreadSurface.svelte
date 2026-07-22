@@ -7,6 +7,7 @@
 	import type { ContextRef } from '@aqsha/chat-core';
 	import type { StatsGroup } from '@aqsha/chat-core/stats-viz';
 	import { queryKeys } from '$lib/query';
+	import { getAuthState } from '$lib/auth';
 	import {
 		useSendStatus,
 		useThreadArtifacts,
@@ -87,6 +88,8 @@
 
 	const qc = useQueryClient();
 	const panel = getThreadPanel();
+	const auth = getAuthState();
+	const authReady = () => auth.isSignedIn;
 
 	// Bridge the panel controller's openers to in-message cards (MessageInteractions).
 	setMessageInteractions(
@@ -103,10 +106,10 @@
 	);
 
 	const hasMessages = () => agent.messages.length > 0;
-	const canFetchThreadExtras = () => threadPersisted && hasMessages();
-	const sendStatus = useSendStatus('normal_chat');
+	const canFetchThreadExtras = () => authReady() && threadPersisted && hasMessages();
+	const sendStatus = useSendStatus('normal_chat', authReady);
 	// FE-11: `/deep` pre-check (non-consuming) — checked on submit so cap-exhaustion surfaces before the run.
-	const deepSendStatus = useSendStatus('deep_research');
+	const deepSendStatus = useSendStatus('deep_research', authReady);
 
 	const busy = $derived(agent.status !== 'ready');
 	const notice = $derived<ComposerNotice | null>(blockedNotice(sendStatus.data));
@@ -135,9 +138,11 @@
 		return map;
 	});
 
-	const threadArtifacts = useThreadArtifacts(() => (canFetchThreadExtras() ? threadId : null), {
-		pollWhilePending: true
-	});
+	const threadArtifacts = useThreadArtifacts(
+		() => (canFetchThreadExtras() ? threadId : null),
+		authReady,
+		{ pollWhilePending: true }
+	);
 	const attachmentsByMessage = $derived(
 		bucketMessageAttachments(agent.messages, threadArtifacts.data)
 	);

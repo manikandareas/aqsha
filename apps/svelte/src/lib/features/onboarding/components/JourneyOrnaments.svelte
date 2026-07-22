@@ -145,7 +145,8 @@
 			class="lip-static flex items-center gap-2.5 rounded-full border-2 border-border bg-card py-2 pr-5 pl-4"
 		>
 			<Icon icon={SearchIcon} class="size-4 shrink-0 text-muted-foreground" />
-			<span class="font-hand text-xl leading-none text-foreground">mari susun risetmu bersama!</span>
+			<span class="font-hand text-xl leading-none text-foreground">mari susun risetmu bersama!</span
+			>
 		</div>
 	</div>
 </div>
