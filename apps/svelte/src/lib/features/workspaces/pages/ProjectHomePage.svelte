@@ -3,11 +3,6 @@
 	import { toast } from 'svelte-sonner';
 	import { useClerkContext } from 'svelte-clerk';
 	import { useQueryClient } from '@tanstack/svelte-query';
-	import {
-		buildDocumentAnnotationMentionLabel,
-		type ContextRef,
-		MAX_CONTEXT_ANNOTATIONS
-	} from '@aqsha/chat-core';
 	import * as Resizable from '@aqsha/ui-svelte/components/resizable';
 	import * as ToggleGroup from '@aqsha/ui-svelte/components/toggle-group';
 	import { Button } from '@aqsha/ui-svelte/components/button';
@@ -41,7 +36,8 @@
 		renameSection
 	} from '$lib/features/document/lib/section-transforms';
 	import { DocumentWorkspaceRuntime } from '$lib/features/document/lib/document-workspace-runtime.svelte';
-	import type { AnnotationDraft } from '$lib/features/document/lib/annotation-selection';
+	import { ProjectAnnotationBridge } from '../lib/project-annotation-bridge.svelte';
+	import { ProjectProposalController } from '../lib/project-proposal-controller.svelte';
 	import {
 		initialProjectActivation,
 		reduceProjectActivation,
@@ -59,8 +55,7 @@
 		useMarkAnnotationsSent,
 		usePendingProposal,
 		useAcceptProposal,
-		useRejectProposal,
-		type TypstCompileError
+		useRejectProposal
 	} from '$lib/features/document/api';
 
 	/**
@@ -121,19 +116,6 @@
 	const rejectProposal = useRejectProposal(() => workspaceId);
 	const exportPdf = useExportPdf(() => workspaceId);
 
-	$effect(() => {
-		const current = proposal.data;
-		proposalReviewInteractions.set(
-			current
-				? {
-						proposalId: current.id,
-						hunkCount: current.hunks?.length ?? 0,
-						review: beginProposalReview
-					}
-				: null
-		);
-	});
-
 	const runtime = new DocumentWorkspaceRuntime({
 		workspaceId: () => workspaceId,
 		mainTypFilename: () => resolveMainTypFilename(workspace.data?.kind),
@@ -193,151 +175,32 @@
 		runtime.retryPreview(bibQuery.data?.bib ?? '', retryDocumentRuntime);
 	}
 
-	// ── Anotasi ────────────────────────────────────────────────────────────
-	// Anotasi hidup sebagai chip di composer (selection channel), bukan antrian panel: buat dari
-	// mode anotasi preview → chip; hapus chip = batal ikut kirim (anotasi tetap `open` di server).
-	let activeAnnotationId = $state<string | null>(null);
-	let activeTocIndex = $state(0);
+	const annotationBridge = new ProjectAnnotationBridge({
+		workspaceId: () => workspaceId,
+		mentions,
+		getAnnotations: () => annotations.data ?? [],
+		create: (input, handlers) => createAnnotation.mutate(input, handlers),
+		markSent: (input) => markSent.mutate(input),
+		scrollToText: (text) => previewRef?.scrollToHeading(text)
+	});
 
-	const selectedAnnotationIds = $derived(
-		new Set(
-			mentions.selectionRefs.flatMap((r) =>
-				r.kind === 'document-annotation' ? [r.annotationId] : []
-			)
-		)
-	);
+	const proposalController = new ProjectProposalController({
+		getProposal: () => proposal.data ?? null,
+		interactions: proposalReviewInteractions,
+		mentions,
+		selectMode: (mode) => selectLeftMode(mode),
+		accept: (input, handlers) => acceptProposal.mutate(input, handlers),
+		reject: (proposalId, handlers) => rejectProposal.mutate(proposalId, handlers),
+		reload: () => void reloadFromServer(),
+		onSettled: () => {
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.proposals(workspaceId) });
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.annotations(workspaceId) });
+		}
+	});
 
-	function handleCreateAnnotation(
-		draft: AnnotationDraft,
-		note: string,
-		elementLabel: string
-	): void {
-		const canAddToComposer =
-			mentions.selectionRefs.filter((r) => r.kind === 'document-annotation').length <
-			MAX_CONTEXT_ANNOTATIONS;
-		createAnnotation.mutate(
-			{
-				kind: 'pin',
-				page: draft.page,
-				rects: draft.rects,
-				selectedText: draft.selectedText,
-				note
-			},
-			{
-				onSuccess: (a) => {
-					if (!canAddToComposer) {
-						toast.info(
-							`Anotasi tersimpan. Lepas chip konteks untuk menambah lagi (maksimal ${MAX_CONTEXT_ANNOTATIONS}).`
-						);
-						return;
-					}
-					const selectedText = a.selectedText ?? draft.selectedText;
-					mentions.addSelectionRef({
-						kind: 'document-annotation',
-						workspaceId,
-						annotationId: a.id,
-						page: a.page,
-						selectedText,
-						note: a.note ?? note,
-						elementLabel,
-						label: buildDocumentAnnotationMentionLabel(elementLabel, selectedText)
-					});
-				},
-				onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menyimpan anotasi.'))
-			}
-		);
-	}
-
-	function focusAnnotation(id: string): void {
-		activeAnnotationId = id;
-		const target = (annotations.data ?? []).find((a) => a.id === id);
-		if (target?.selectedText) previewRef?.scrollToHeading(target.selectedText);
-	}
-
-	function handleTurnSent(threadId: string, sentRefs: ContextRef[]): void {
-		const ids = sentRefs.flatMap((r) => (r.kind === 'document-annotation' ? [r.annotationId] : []));
-		if (ids.length === 0) return;
-		markSent.mutate({ ids, threadId });
-	}
-
-	function handleAgentSettled(): void {
-		proposalAcceptErrors = null;
-		void qc.invalidateQueries({ queryKey: queryKeys.workspaces.proposals(workspaceId) });
-		void qc.invalidateQueries({ queryKey: queryKeys.workspaces.annotations(workspaceId) });
-	}
-
-	// ── Proposal ─────────────────────────────────────────────────────────────
-	let proposalAcceptErrors = $state<TypstCompileError[] | null>(null);
-	let reviewingProposalId = $state<string | null>(null);
-	const proposalHunkCount = $derived(proposal.data?.hunks?.length ?? 0);
-	const reviewingProposal = $derived(
-		reviewingProposalId !== null && reviewingProposalId === proposal.data?.id
-	);
-
-	function beginProposalReview(): void {
-		const current = proposal.data;
-		if (!current) return;
-		reviewingProposalId = current.id;
-		selectLeftMode('editor');
-	}
-
-	function exitProposalReview(): void {
-		reviewingProposalId = null;
-		proposalAcceptErrors = null;
-	}
-
-	function handleAcceptProposal(acceptedHunkIndexes: number[] | undefined): void {
-		const p = proposal.data;
-		if (!p) return;
-		proposalAcceptErrors = null;
-		acceptProposal.mutate(
-			{ proposalId: p.id, acceptedHunkIndexes },
-			{
-				onSuccess: (res) => {
-					if (res.status === 'accepted') {
-						proposalReviewInteractions.set(null);
-						toast.success('Suntingan diterapkan.');
-						exitProposalReview();
-						void reloadFromServer();
-					} else if (res.status === 'compile_error') {
-						proposalAcceptErrors = res.compileErrors;
-						toast.warning('Hasil pilihan hunk gagal compile. Ubah pilihan atau tolak.');
-					} else {
-						toast.warning('Sumber sudah berubah — usulan dibatalkan. Minta Astra menyusun ulang.');
-					}
-				},
-				onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menerapkan usulan.'))
-			}
-		);
-	}
-
-	function handleRejectProposal(): void {
-		const p = proposal.data;
-		if (!p) return;
-		proposalAcceptErrors = null;
-		rejectProposal.mutate(p.id, {
-			onSuccess: () => {
-				proposalReviewInteractions.set(null);
-				exitProposalReview();
-			},
-			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal menolak usulan.'))
-		});
-	}
-
-	function requestProposalResubmit(): void {
-		const current = proposal.data;
-		if (!current) return;
-		rejectProposal.mutate(current.id, {
-			onSuccess: () => {
-				proposalReviewInteractions.set(null);
-				exitProposalReview();
-				mentions.setComposerDraft(current.resubmitInstruction || current.summary);
-				selectLeftMode('chat');
-			},
-			onError: (error) =>
-				toast.error(readableApiErrorMessage(error, 'Gagal menyiapkan usulan ulang.'))
-		});
-	}
+	$effect(() => {
+		proposalController.syncInteraction();
+	});
 
 	// ── Ekspor ─────────────────────────────────────────────────────────────
 	function triggerDownload(url: string): void {
@@ -367,6 +230,7 @@
 	let editorVisited = $state(false);
 	let previewVisited = $state(false);
 	let annotationMode = $state(false);
+	let activeTocIndex = $state(0);
 
 	const visibleAnnotationIds = $derived(
 		(annotations.data ?? []).flatMap((annotation) =>
@@ -430,9 +294,9 @@
 				onfocus={prepareDocumentRuntime}
 			>
 				<Icon icon={Code2Icon} class="size-3" /> Editor
-				{#if proposalHunkCount > 0}
+				{#if proposalController.hunkCount > 0}
 					<span class="rounded-full bg-primary px-1.5 text-micro leading-4 text-primary-foreground"
-						>{proposalHunkCount}</span
+						>{proposalController.hunkCount}</span
 					>
 				{/if}
 			</ToggleGroup.Item>
@@ -457,9 +321,9 @@
 				onfocus={prepareDocumentRuntime}
 			>
 				<Icon icon={Code2Icon} class="size-3" /> Editor
-				{#if proposalHunkCount > 0}
+				{#if proposalController.hunkCount > 0}
 					<span class="rounded-full bg-primary px-1.5 text-micro leading-4 text-primary-foreground"
-						>{proposalHunkCount}</span
+						>{proposalController.hunkCount}</span
 					>
 				{/if}
 			</ToggleGroup.Item>
@@ -486,17 +350,17 @@
 {#snippet editorPanel()}
 	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
 		<PanelCardToolbar title={leftToggle} />
-		{#if reviewingProposal && proposal.data}
+		{#if proposalController.reviewing && proposal.data}
 			<div class="min-h-0 flex-1 overflow-y-auto p-3">
 				<ProposalReviewCard
 					proposal={proposal.data}
 					source={proposal.data.currentSource}
 					accepting={acceptProposal.isPending}
-					acceptErrors={proposalAcceptErrors}
-					onAccept={handleAcceptProposal}
-					onReject={handleRejectProposal}
-					onExitReview={exitProposalReview}
-					onResubmit={requestProposalResubmit}
+					acceptErrors={proposalController.acceptErrors}
+					onAccept={proposalController.accept}
+					onReject={proposalController.reject}
+					onExitReview={proposalController.exitReview}
+					onResubmit={proposalController.resubmit}
 				/>
 			</div>
 		{:else}
@@ -607,13 +471,13 @@
 					source={runtime.source}
 					mainFilePath={runtime.mainFilePath}
 					annotations={annotations.data ?? []}
-					{activeAnnotationId}
-					{selectedAnnotationIds}
+					activeAnnotationId={annotationBridge.activeId}
+					selectedAnnotationIds={annotationBridge.selectedIds}
 					outlineTitles={runtime.outline.map((entry) => entry.title)}
-					{proposalHunkCount}
-					onReviewProposal={beginProposalReview}
-					onCreateAnnotation={handleCreateAnnotation}
-					onSelectAnnotation={focusAnnotation}
+					proposalHunkCount={proposalController.hunkCount}
+					onReviewProposal={proposalController.beginReview}
+					onCreateAnnotation={annotationBridge.create}
+					onSelectAnnotation={annotationBridge.focus}
 					onActiveHeading={(index: number) => (activeTocIndex = index)}
 				/>
 				<TocOverlay
@@ -658,8 +522,8 @@
 	>
 		<ProjectChatRuntimeProvider
 			{workspaceId}
-			onTurnSent={handleTurnSent}
-			onAgentSettled={handleAgentSettled}
+			onTurnSent={annotationBridge.markTurnSent}
+			onAgentSettled={proposalController.agentSettled}
 		>
 			{#if wide}
 				<Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">

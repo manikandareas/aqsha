@@ -1,13 +1,8 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { QueryClient } from '@tanstack/svelte-query';
-import {
-	type AgentKind,
-	type AskQuestionsResumeData,
-	normalizeAskQuestions
-} from '@aqsha/chat-core';
+import { type AgentKind, type AskQuestionsResumeData } from '@aqsha/chat-core';
 import { readableApiErrorMessage } from '$lib/errors';
 import { queryKeys } from '$lib/query';
-import { agentIdFor } from '../lib/mastra-client';
 import { createChunkReplayFilter } from '../lib/chunk-replay';
 import {
 	type DeepFailure,
@@ -15,21 +10,21 @@ import {
 	type DeepRun,
 	type DeepRunSnapshot,
 	type WorkflowStepsSnapshot,
-	activeHeavyDeepStep,
 	clearDeepRunId,
-	DANGLING_TURN_ERROR,
-	DEEP_HEAVY_STALL_MS,
-	DEEP_HEAVY_STEP_MESSAGE,
-	DEEP_STALL_MESSAGE,
-	DEEP_STALL_MS,
 	DEEP_WORKFLOW_ID,
 	deepFailureFromSteps,
 	deepNoticeFromResult,
-	discoverDeepRunId,
 	getDeepRunId,
 	iterateStream,
 	setDeepRunId
 } from '../lib/deep-workflow';
+import {
+	MastraThreadClient,
+	type MemoryMessage,
+	type WorkflowClient
+} from '../lib/mastra-thread-client';
+import { ThreadSubscriptionLoop } from '../lib/thread-subscription-loop';
+import { HitlBridge } from '../lib/hitl-bridge';
 import {
 	dropLastTurn,
 	initialMastraTimeline,
@@ -50,6 +45,8 @@ import {
 } from '../lib/mastra-timeline';
 import type { TimelineMessage } from '../lib/timeline-types';
 import { prependUniqueById } from '../lib/thread-history';
+import { ChatSendQueue, type QueuedSend, type QueuedSendInput } from './chat-send-queue.svelte';
+import { DeepRunController } from './deep-run-controller.svelte';
 
 // ── Durable-thread chat + `/deep` Workflow agent (Svelte 5 runes state class) ─────────────────────
 //
@@ -61,37 +58,7 @@ import { prependUniqueById } from '../lib/thread-history';
 // pure; this class drives them. Subscription + re-attach poll lifecycles are owned imperatively
 // (`start()`/`destroy()` from the consuming `$effect`), NOT per-field reflexes.
 
-/** Subscription handle from `agent.subscribeToThread` (subset used here). */
-type ThreadSubscription = {
-	processDataStream: (o: {
-		onChunk: (c: unknown) => void;
-		reconnect?: boolean | { maxRetries?: number; delayMs?: number };
-	}) => Promise<void>;
-	abort: () => Promise<boolean>;
-	unsubscribe: () => void;
-};
-
-/** Workflow client (subset of `getWorkflow(id)` used). */
-type WorkflowClient = {
-	createRun: (p: { runId?: string; resourceId: string }) => Promise<DeepRun>;
-	runById: (runId: string) => Promise<DeepRunSnapshot>;
-};
-
-/** A message held while a run is active, re-sent when the thread returns to `ready` (DUR-6). */
-type QueuedSend = {
-	id: string;
-	mode: 'chat' | 'deep';
-	text: string;
-	display: string;
-	clientContext?: string[];
-	richText?: string;
-	attachmentIds?: string[];
-	agentKind: AgentKind;
-	/** Present ⇒ SERVER queue (`queueMessage`, plain chat) — runs even if the tab closes, not cancellable. */
-	serverRunId?: string;
-};
-
-/** Context of the last-sent turn, for regenerate (FE-8). */
+/** Context of the last-sent turn, retained so regenerate preserves its mode and inputs. */
 type LastSentTurn = {
 	mode: 'chat' | 'deep';
 	text: string;
@@ -135,10 +102,6 @@ export type ThreadAgentOptions = {
 const SUBSCRIBE_DEGRADED_ERROR =
 	'Koneksi ke Astra tidak stabil. Jawaban mungkin tertunda; kami mencoba menyambung ulang.';
 
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-let queuedSeq = 0;
-
 /** Last user message text in the timeline (for regenerate). */
 function lastUserText(messages: readonly TimelineMessage[]): string | null {
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -154,15 +117,13 @@ function lastUserText(messages: readonly TimelineMessage[]): string | null {
 	return null;
 }
 
-type ServerMessageLike = { id: string; role?: string };
-
 /**
  * Ids of the last [user, assistant] pair in server memory (to delete on regenerate). Durable-thread
  * `sendMessage` stores user input as a SIGNAL (`role:"signal"`), so matching by `role==="user"` would
- * MISS it → a duplicate user bubble after refresh (G6). Match positionally: the last assistant + all
+ * MISS it and duplicate the user bubble after refresh. Match positionally: the last assistant + all
  * non-assistant messages just before it, regardless of label.
  */
-export function lastTurnMessageIds(messages: readonly ServerMessageLike[]): string[] {
+export function lastTurnMessageIds(messages: readonly MemoryMessage[]): string[] {
 	let lastAssistant = -1;
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
 		if (messages[i]!.role === 'assistant') {
@@ -191,11 +152,8 @@ export function lastTurnMessageIds(messages: readonly ServerMessageLike[]): stri
 	return ids;
 }
 
-/** A cancellable token for a re-attach poll loop. */
-type PollToken = { cancelled: boolean };
-
 export class ThreadAgent {
-	readonly #getClient: () => MastraClient;
+	readonly #mastra: MastraThreadClient;
 	readonly #threadId: string;
 	readonly #getResourceId: () => string | null | undefined;
 	readonly #getWorkspaceId: () => string | null;
@@ -204,11 +162,14 @@ export class ThreadAgent {
 	readonly #onRequestDocumentEdit?: (edit: { artifactId: string; instruction: string }) => void;
 	readonly #onAccepted?: () => void;
 	readonly #onSettled?: () => void;
+	readonly #subscription: ThreadSubscriptionLoop;
+	readonly #deepController: DeepRunController;
+	readonly #hitl: HitlBridge;
 
 	// Reactive state (reduces per chunk / drives the UI).
 	#timeline = $state.raw<MastraTimelineState>(initialMastraTimeline());
 	#sentKind = $state<AgentKind | null>(null);
-	#queued = $state<QueuedSend[]>([]);
+	readonly #queue = new ChatSendQueue();
 	#deepStalled = $state<string | null>(null);
 	#deepFailed = $state<DeepFailure | null>(null);
 	#deepNotice = $state<DeepNotice | null>(null);
@@ -218,25 +179,17 @@ export class ThreadAgent {
 	}
 
 	// Non-reactive handles / registries / buffers.
-	#sub: ThreadSubscription | null = null;
 	#replay = createChunkReplayFilter();
-	#cancelled = false;
-	#started = false;
-	#subEpoch = 0;
 	#prevStatus: MastraStatus = 'ready';
 	#pendingDeltas: MastraChunk[] = [];
 	#deltaFlushScheduled = false;
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- non-reactive dedup registry (never read reactively)
 	#docEditKeys = new Set<string>();
-	#dispatchingQueue = false;
 	#lastSend: LastSentTurn | null = null;
 	#deepRun: DeepRun | null = null;
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- non-reactive server-run registry
-	#queuedServerRuns = new Map<string, { display: string; attachmentIds?: string[] }>();
-	#pollToken: PollToken | null = null;
 
 	constructor(opts: ThreadAgentOptions) {
-		this.#getClient = opts.getClient;
+		this.#mastra = new MastraThreadClient(opts.getClient);
 		this.#threadId = opts.threadId;
 		this.#getResourceId = opts.getResourceId;
 		this.#getWorkspaceId = opts.getWorkspaceId ?? (() => null);
@@ -246,6 +199,40 @@ export class ThreadAgent {
 		this.#onAccepted = opts.onAccepted;
 		this.#onSettled = opts.onSettled;
 		this.#timeline = initialMastraTimeline(opts.seed ?? []);
+		this.#subscription = new ThreadSubscriptionLoop({
+			getResourceId: this.#getResourceId,
+			connect: (resourceId) =>
+				this.#mastra.agent(this.committedAgentKind).subscribeToThread({
+					threadId: this.#threadId,
+					resourceId
+				}),
+			onChunk: this.#onChunk,
+			onConnected: () => this.#clearDegraded(),
+			onFailure: (attempt, error) => this.#noteFailure(attempt, error)
+		});
+		this.#deepController = new DeepRunController({
+			threadId: this.#threadId,
+			getResourceId: this.#getResourceId,
+			getClient: () => this.#mastra.raw,
+			getMessages: () => this.#timeline.messages,
+			getStatus: () => this.#timeline.status,
+			getRun: () => this.#deepRun,
+			setRun: (run) => (this.#deepRun = run),
+			setStalled: (message) => (this.#deepStalled = message),
+			workflow: () => this.#workflow(),
+			fetchRun: (runId) => this.#fetchDeepRun(runId),
+			apply: (update) => this.#apply(update),
+			applyTerminal: (runId, status, steps, result) =>
+				this.#applyDeepTerminal(runId, status, steps, result),
+			queryClient: this.#qc
+		});
+		this.#hitl = new HitlBridge({
+			threadId: this.#threadId,
+			getResourceId: this.#getResourceId,
+			getAgentKind: () => this.committedAgentKind,
+			getAgent: (kind) => this.#mastra.agent(kind),
+			apply: (update) => this.#apply(update)
+		});
 	}
 
 	// ── reactive getters (the UI reads these) ──────────────────────────────────────────────────────
@@ -268,7 +255,7 @@ export class ThreadAgent {
 		return this.#timeline.askGate ?? null;
 	}
 	get queued(): QueuedSend[] {
-		return this.#queued;
+		return this.#queue.items;
 	}
 	get deepStalled(): string | null {
 		return this.#deepStalled;
@@ -294,65 +281,18 @@ export class ThreadAgent {
 
 	/** Begin the subscription + the initial `/deep` re-attach poll. Idempotent; call once from `$effect`. */
 	start(): void {
-		if (this.#started) return;
-		this.#started = true;
-		void this.#subscribeLoop();
-		this.#scheduleReattach();
+		this.#subscription.start();
+		this.#deepController.schedule();
 	}
 
 	/** Tear down the subscription + poll (call from the `$effect` cleanup / on unmount). */
 	destroy(): void {
-		this.#cancelled = true;
-		this.#subEpoch += 1;
-		if (this.#pollToken) this.#pollToken.cancelled = true;
-		this.#pollToken = null;
-		this.#sub?.unsubscribe();
-		this.#sub = null;
-	}
-
-	// ── subscription lifecycle (E1) ────────────────────────────────────────────────────────────────
-
-	async #subscribeLoop(): Promise<void> {
-		let failures = 0;
-		while (!this.#cancelled) {
-			const resourceId = this.#getResourceId();
-			if (!resourceId) {
-				await delay(300);
-				continue;
-			}
-			const myEpoch = this.#subEpoch;
-			try {
-				const agent = this.#getClient().getAgent(agentIdFor(this.committedAgentKind));
-				const sub = (await agent.subscribeToThread({
-					threadId: this.#threadId,
-					resourceId
-				})) as unknown as ThreadSubscription;
-				if (this.#cancelled || myEpoch !== this.#subEpoch) {
-					sub.unsubscribe();
-					continue;
-				}
-				this.#sub = sub;
-				failures = 0;
-				this.#clearDegraded();
-				await sub.processDataStream({
-					onChunk: this.#onChunk,
-					reconnect: { maxRetries: 20, delayMs: 1000 }
-				});
-				if (this.#cancelled) return;
-				if (myEpoch !== this.#subEpoch) continue;
-				await delay(1000);
-			} catch (err) {
-				if (this.#cancelled) return;
-				this.#noteFailure((failures += 1), err);
-				await delay(1000);
-			}
-		}
+		this.#subscription.destroy();
+		this.#deepController.destroy();
 	}
 
 	#cycleSubscription(): void {
-		this.#subEpoch += 1;
-		this.#sub?.unsubscribe();
-		this.#sub = null;
+		this.#subscription.cycle();
 	}
 
 	#noteFailure(attempt: number, err: unknown): void {
@@ -369,11 +309,11 @@ export class ThreadAgent {
 		}
 	}
 
-	// ── chunk router (chat) + high-frequency delta batching (IMP-10) ───────────────────────────────
+	// ── chunk router (chat) + high-frequency delta batching ────────────────────────────────────────
 
 	#onChunk = (chunk: unknown): void => {
 		const c0 = chunk as MastraChunk;
-		if (!this.#replay(c0)) return; // duplicate replay (FE-2)
+		if (!this.#replay(c0)) return; // Durable reconnects can replay chunks already reduced locally.
 		if (c0?.type === 'text-delta' || c0?.type === 'reasoning-delta') {
 			this.#pendingDeltas.push(c0);
 			if (!this.#deltaFlushScheduled) {
@@ -391,13 +331,11 @@ export class ThreadAgent {
 			return;
 		}
 		this.#flushDeltas();
-		// DUR-6: a queued SERVER run (queueMessage) starting → birth its user bubble + placeholder BEFORE
+		// A queued server run must create its user bubble + placeholder before
 		// the reducer processes `start` (ensureActiveAssistant uses this placeholder).
 		if (c0?.type === 'start' && c0.runId) {
-			const queuedInfo = this.#queuedServerRuns.get(c0.runId);
+			const queuedInfo = this.#queue.consumeServerRun(c0.runId);
 			if (queuedInfo) {
-				this.#queuedServerRuns.delete(c0.runId);
-				this.#queued = this.#queued.filter((i) => i.serverRunId !== c0.runId);
 				this.#apply((s) =>
 					startAssistantTurn(s, queuedInfo.display, c0.runId!, queuedInfo.attachmentIds)
 				);
@@ -460,7 +398,7 @@ export class ThreadAgent {
 		this.#commitAgentKind(kind);
 	}
 
-	// ── send (chat) + queue-while-busy (DUR-6) ─────────────────────────────────────────────────────
+	// ── send (chat) + queue-while-busy ─────────────────────────────────────────────────────────────
 
 	/** Body RequestContext scope proyek — key non-`aqsha__` = boleh dikirim klien (di-merge server Mastra). */
 	#workspaceRequestContext(): { requestContext?: Record<string, string> } {
@@ -497,7 +435,7 @@ export class ThreadAgent {
 		const display = opts.richText ?? text;
 		this.#apply((s) => startAssistantTurn(s, display, turnSeed, opts.attachmentIds));
 		try {
-			const agent = this.#getClient().getAgent(agentIdFor(agentKind));
+			const agent = this.#mastra.agent(agentKind);
 			await agent.sendMessage({
 				message: display,
 				resourceId,
@@ -523,12 +461,11 @@ export class ThreadAgent {
 	}
 
 	/**
-	 * DUR-6 queue: plain chat over a chat run → SERVER queue (`queueMessage`; runtime auto-starts a new
+	 * Plain chat over a chat run uses the server queue (`queueMessage`; runtime auto-starts a new
 	 * run when the active one finishes, runs even if the tab closes). Everything else (context/attachment/
 	 * different tier, all `/deep`, or while a `/deep` run is active) → CLIENT queue dispatched on ready.
 	 */
-	async #enqueueWhileBusy(item: Omit<QueuedSend, 'id' | 'serverRunId'>): Promise<void> {
-		const id = `q:${this.#now()}:${(queuedSeq += 1)}`;
+	async #enqueueWhileBusy(item: QueuedSendInput): Promise<void> {
 		const resourceId = this.#getResourceId();
 		const deepActive = this.#deepRun !== null || getDeepRunId(this.#threadId) !== null;
 		const activeChatRunId = deepActive ? null : (this.#timeline.activeRunId ?? null);
@@ -541,17 +478,7 @@ export class ThreadAgent {
 			item.agentKind === this.committedAgentKind;
 		if (canServerQueue) {
 			try {
-				const agent = this.#getClient().getAgent(
-					agentIdFor(this.committedAgentKind)
-				) as unknown as {
-					queueMessage: (p: {
-						runId: string;
-						message: string;
-						resourceId: string;
-						threadId: string;
-						requestContext?: Record<string, string>;
-					}) => Promise<{ runId?: string }>;
-				};
+				const agent = this.#mastra.agent(this.committedAgentKind);
 				const res = await agent.queueMessage({
 					runId: activeChatRunId,
 					message: item.display,
@@ -560,27 +487,21 @@ export class ThreadAgent {
 					...this.#workspaceRequestContext()
 				});
 				if (typeof res.runId === 'string') {
-					this.#queuedServerRuns.set(res.runId, {
-						display: item.display,
-						attachmentIds: item.attachmentIds
-					});
-					this.#queued = [...this.#queued, { ...item, id, serverRunId: res.runId }];
+					this.#queue.addServer(item, res.runId, this.#now());
 					return;
 				}
 			} catch {
 				/* queueMessage failed → fall back to the client queue (still sent, just needs a live tab) */
 			}
 		}
-		this.#queued = [...this.#queued, { ...item, id }];
+		this.#queue.addClient(item, this.#now());
 	}
 
 	/** Dispatch the first CLIENT-queued item when the thread returns to ready (re-entrancy guarded). */
 	#maybeDispatchQueue(): void {
-		if (this.status !== 'ready' || this.#dispatchingQueue) return;
-		const next = this.#queued.find((i) => i.serverRunId === undefined);
+		if (this.status !== 'ready') return;
+		const next = this.#queue.beginClientDispatch();
 		if (!next) return;
-		this.#dispatchingQueue = true;
-		this.#queued = this.#queued.filter((i) => i.id !== next.id);
 		const opts: SendOptions = {
 			clientContext: next.clientContext,
 			richText: next.richText,
@@ -589,25 +510,25 @@ export class ThreadAgent {
 		};
 		const run = next.mode === 'deep' ? this.sendDeep(next.text, opts) : this.send(next.text, opts);
 		void run.finally(() => {
-			this.#dispatchingQueue = false;
+			this.#queue.finishClientDispatch();
 			this.#maybeDispatchQueue();
 		});
 	}
 
 	cancelQueued(id: string): void {
 		// Server-queued items can't be cancelled (no unqueue API) → only client items.
-		this.#queued = this.#queued.filter((i) => i.id !== id || i.serverRunId !== undefined);
+		this.#queue.cancelClient(id);
 	}
 
 	// ── stop / regenerate ──────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Stop the active turn. Chat → server abort → the reducer settles on the `abort` chunk. `/deep` →
-	 * cancel the Workflow run server-side (FE-4); a persisted-but-detached run (post-refresh RUNNING) is
-	 * cancelled lazily. The B1 failure card is intentionally left alone. Client queue is cleared.
+	 * cancel the Workflow run server-side; a persisted-but-detached run (post-refresh RUNNING) is
+	 * cancelled lazily. A failure card is intentionally left alone. Client queue is cleared.
 	 */
 	stop(): void {
-		this.#queued = this.#queued.filter((i) => i.serverRunId !== undefined);
+		this.#queue.dropClientItems();
 		this.#deepStalled = null;
 		const run = this.#deepRun;
 		const settleDeepStop = () => {
@@ -634,14 +555,14 @@ export class ThreadAgent {
 			// Post-refresh window before Clerk resolves resourceId → no-op; a later click cancels for real.
 			return;
 		}
-		void this.#sub?.abort().catch(() => {});
+		void this.#subscription.abort()?.catch(() => {});
 		this.#apply((s) => settleAssistantTurn(s));
 	}
 
 	/**
-	 * Regenerate (G6): re-run the last user message without a duplicate. A `/deep` turn regenerates AS
+	 * Re-run the last user message without a duplicate. A `/deep` turn regenerates as
 	 * `/deep` (not downgraded to chat, which would orphan its report + sources). Deletes the last
-	 * [user, assistant] pair from server memory first, then re-sends with the original context/tier (FE-8).
+	 * [user, assistant] pair from server memory first, then re-sends with the original context and tier.
 	 */
 	async regenerate(): Promise<void> {
 		const resourceId = this.#getResourceId();
@@ -674,7 +595,7 @@ export class ThreadAgent {
 
 		this.#apply((s) => startRegenerate(s));
 		try {
-			const agent = this.#getClient().getAgent(agentIdFor(this.committedAgentKind));
+			const agent = this.#mastra.agent(this.committedAgentKind);
 			await this.#deleteLastServerTurn();
 			await agent.sendMessage({
 				message: lastMatches ? (last!.richText ?? last!.text) : text,
@@ -700,14 +621,7 @@ export class ThreadAgent {
 	}
 
 	async #deleteLastServerTurn(): Promise<void> {
-		const thread = (
-			this.#getClient() as unknown as {
-				getMemoryThread: (o: { threadId: string; agentId: string }) => {
-					listMessages: () => Promise<{ messages?: ServerMessageLike[] }>;
-					deleteMessages: (ids: string[]) => Promise<unknown>;
-				};
-			}
-		).getMemoryThread({ threadId: this.#threadId, agentId: agentIdFor(this.committedAgentKind) });
+		const thread = this.#mastra.memoryThread(this.#threadId, this.committedAgentKind);
 		const res = await thread.listMessages();
 		const staleIds = lastTurnMessageIds(res.messages ?? []);
 		if (staleIds.length > 0) await thread.deleteMessages(staleIds);
@@ -721,28 +635,10 @@ export class ThreadAgent {
 	// ── HITL: tool approval (requireApproval) + ask-questions resume (tool + workflow) ──────────────
 
 	async approve(toolCallId: string): Promise<void> {
-		await this.#respond(toolCallId, true);
+		await this.#hitl.respond(toolCallId, true);
 	}
 	async decline(toolCallId: string): Promise<void> {
-		await this.#respond(toolCallId, false);
-	}
-
-	async #respond(toolCallId: string, approved: boolean): Promise<void> {
-		const resourceId = this.#getResourceId();
-		if (!resourceId) return;
-		this.#apply((s) => ({
-			...s,
-			approvals: s.approvals.filter((a) => a.toolCallId !== toolCallId)
-		}));
-		try {
-			const agent = this.#getClient().getAgent(agentIdFor(this.committedAgentKind));
-			await agent.sendToolApproval({ resourceId, threadId: this.#threadId, toolCallId, approved });
-		} catch (err) {
-			this.#apply((s) => ({
-				...s,
-				error: readableApiErrorMessage(err, 'Gagal memproses persetujuan.')
-			}));
-		}
+		await this.#hitl.respond(toolCallId, false);
 	}
 
 	async resolveAsk(resume: AskQuestionsResumeData): Promise<void> {
@@ -765,7 +661,7 @@ export class ThreadAgent {
 				this.#maybeReattachAfterStreamClose(run.runId);
 			} catch (err) {
 				if (await this.#clearDeepRunIdUnlessAlive(run.runId)) {
-					this.#bumpReattach();
+					this.#deepController.schedule();
 					return;
 				}
 				this.#apply((s) => ({
@@ -776,36 +672,13 @@ export class ThreadAgent {
 			return;
 		}
 		// source === "tool" (chat): resume the tool-suspend via `sendToolApproval` carrying `resumeData`.
-		const resourceId = this.#getResourceId();
-		if (!resourceId || !gate.toolCallId) {
-			this.#apply((s) => ({
-				...settleAssistantTurn(s),
-				error:
-					'Gagal mengirim jawaban klarifikasi (sesi tidak lengkap). Coba mulai ulang pertanyaanmu.'
-			}));
-			return;
-		}
-		try {
-			const agent = this.#getClient().getAgent(agentIdFor(this.committedAgentKind));
-			await agent.sendToolApproval({
-				resourceId,
-				threadId: this.#threadId,
-				toolCallId: gate.toolCallId,
-				approved: true,
-				resumeData: resume
-			});
-		} catch (err) {
-			this.#apply((s) => ({
-				...settleAssistantTurn(s),
-				error: readableApiErrorMessage(err, 'Gagal mengirim jawaban.')
-			}));
-		}
+		await this.#hitl.resolveChatAsk(gate, resume);
 	}
 
 	// ── `/deep` Workflow orchestration ─────────────────────────────────────────────────────────────
 
 	#workflow(): WorkflowClient {
-		return this.#getClient().getWorkflow(DEEP_WORKFLOW_ID) as unknown as WorkflowClient;
+		return this.#mastra.workflow(DEEP_WORKFLOW_ID);
 	}
 
 	async #fetchDeepRun(runId: string): Promise<DeepRunSnapshot | null> {
@@ -826,7 +699,7 @@ export class ThreadAgent {
 		void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.all });
 	}
 
-	/** B1: single terminal handler (live path + poll re-attach) so semantics can't drift. */
+	/** One terminal handler serves live streams and poll re-attachment so semantics cannot drift. */
 	#applyDeepTerminal(
 		runId: string,
 		status: string,
@@ -862,7 +735,7 @@ export class ThreadAgent {
 		const st = await this.#fetchDeepRun(runId);
 		if (!st) {
 			this.#deepRun = null;
-			this.#bumpReattach();
+			this.#deepController.schedule();
 			return;
 		}
 		this.#applyDeepTerminal(runId, st.status ?? '', st.steps ?? {}, st.result);
@@ -903,8 +776,8 @@ export class ThreadAgent {
 		const status = await this.#deepRunStatus(runId);
 		if (status === 'running' || status === 'suspended' || status === 'waiting') return true;
 		this.#deepRun = null;
-		if (status === '') this.#bumpReattach();
-		if (status === '' || status === 'failed') return false; // failed key = B1 recovery, keep it
+		if (status === '') this.#deepController.schedule();
+		if (status === '' || status === 'failed') return false; // Keep failed keys available for recovery.
 		clearDeepRunId(this.#threadId);
 		return false;
 	}
@@ -912,7 +785,7 @@ export class ThreadAgent {
 	#maybeReattachAfterStreamClose(runId: string): void {
 		if (this.#deepRun?.runId !== runId) return; // normal terminal → runId already cleared
 		if (this.#timeline.planGate || this.#timeline.askGate) return; // normal suspend-close (HITL)
-		this.#bumpReattach();
+		this.#deepController.schedule();
 	}
 
 	async sendDeep(question: string, opts: SendOptions = {}): Promise<void> {
@@ -964,7 +837,7 @@ export class ThreadAgent {
 			this.#maybeReattachAfterStreamClose(run.runId);
 		} catch (err) {
 			if (await this.#clearDeepRunIdUnlessAlive(this.#deepRun?.runId)) {
-				this.#bumpReattach();
+				this.#deepController.schedule();
 				return;
 			}
 			this.#apply((s) => ({
@@ -990,7 +863,7 @@ export class ThreadAgent {
 			this.#maybeReattachAfterStreamClose(run.runId);
 		} catch (err) {
 			if (await this.#clearDeepRunIdUnlessAlive(run.runId)) {
-				this.#bumpReattach();
+				this.#deepController.schedule();
 				return;
 			}
 			this.#apply((s) => ({
@@ -1010,7 +883,7 @@ export class ThreadAgent {
 		this.#deepNotice = null;
 	}
 
-	/** DUR-5: restart a stalled run from its last active step (`.restart`), snapshot-based. */
+	/** Restart a stalled run from its last active snapshot (`.restart`). */
 	async restartDeep(): Promise<void> {
 		const resourceId = this.#getResourceId();
 		if (!resourceId) return;
@@ -1021,7 +894,7 @@ export class ThreadAgent {
 			const run = await this.#workflow().createRun({ runId, resourceId });
 			this.#deepRun = run;
 			await run.restart({});
-			this.#bumpReattach();
+			this.#deepController.schedule();
 		} catch (err) {
 			if ((await this.#deepRunStatus(runId)) === 'pending') {
 				this.#apply((s) => ({
@@ -1037,7 +910,7 @@ export class ThreadAgent {
 		}
 	}
 
-	/** B1: retry a failed run FROM the failed step via time-travel (`.timeTravelStream`) — no new debit. */
+	/** Retry from the failed step via time travel without creating a newly billed run. */
 	async retryDeep(): Promise<void> {
 		const failure = this.#deepFailed;
 		const resourceId = this.#getResourceId();
@@ -1065,7 +938,7 @@ export class ThreadAgent {
 			const snap = await this.#fetchDeepRun(failure.runId);
 			const status = snap?.status ?? '';
 			if (status === 'running' || status === 'suspended' || status === 'waiting') {
-				this.#bumpReattach();
+				this.#deepController.schedule();
 				return;
 			}
 			if (status === 'success' || status === 'canceled') {
@@ -1080,145 +953,6 @@ export class ThreadAgent {
 		}
 	}
 
-	// ── `/deep` re-attach poll (runById, step-level) ────────────────────────────────────────────────
-
-	/** FE-5: re-run the re-attach poll without waiting for a manual refresh (stream broke, run alive). */
-	#bumpReattach(): void {
-		this.#scheduleReattach();
-	}
-
-	#scheduleReattach(): void {
-		if (this.#pollToken) this.#pollToken.cancelled = true;
-		const token: PollToken = { cancelled: false };
-		this.#pollToken = token;
-		void this.#reattachPoll(token);
-	}
-
-	async #reattachPoll(token: PollToken): Promise<void> {
-		const resourceId = this.#getResourceId();
-		if (!resourceId) return;
-		let runId = getDeepRunId(this.#threadId);
-		if (!runId) {
-			const msgs = this.#timeline.messages;
-			const last = msgs[msgs.length - 1];
-			if (!last || last.role !== 'user') return;
-			runId = await discoverDeepRunId(this.#getClient(), this.#threadId, resourceId);
-			if (token.cancelled) return;
-			if (!runId) {
-				setTimeout(() => {
-					if (token.cancelled) return;
-					const m = this.#timeline.messages;
-					const l = m[m.length - 1];
-					if (this.status !== 'ready' || !l || l.role !== 'user') return;
-					this.#apply((s) =>
-						s.status === 'ready' && !s.error ? { ...s, error: DANGLING_TURN_ERROR } : s
-					);
-				}, 5000);
-				return;
-			}
-			setDeepRunId(this.#threadId, runId);
-		}
-		// Immediate "working" indicator if the turn genuinely dangles.
-		this.#apply((s) => {
-			if (s.status !== 'ready') return s;
-			const l = s.messages[s.messages.length - 1];
-			return l && l.role === 'user' ? { ...s, status: 'submitted' } : s;
-		});
-		const rid = runId;
-		const wf = this.#workflow();
-		let errors = 0;
-		let sourcesSeeded = false;
-		let sourcesRefreshed = false;
-		let progressSig = '';
-		let progressAt = Date.now();
-		while (!token.cancelled) {
-			const wfState = await this.#fetchDeepRun(rid);
-			if (token.cancelled) return;
-			if (!wfState) {
-				errors += 1;
-				if (errors >= 8) {
-					this.#apply((s) => settleAssistantTurn(s));
-					return;
-				}
-				await delay(2500);
-				continue;
-			}
-			errors = 0;
-			const status = wfState.status;
-			const steps = wfState.steps ?? {};
-			if (status === 'suspended') {
-				this.#deepStalled = null;
-				if (this.#deepRun === null) {
-					this.#deepRun = await wf.createRun({ runId: rid, resourceId });
-				}
-				const clarifyStep = steps['clarify'];
-				if (clarifyStep?.status === 'suspended' && clarifyStep.suspendPayload) {
-					const questions = normalizeAskQuestions(clarifyStep.suspendPayload.questions);
-					if (questions.length === 0) {
-						this.#apply((s) => settleWorkflowTurn(seedWorkflowProgress(s, rid, steps), rid));
-						return;
-					}
-					const findings = clarifyStep.suspendPayload.findings;
-					this.#apply((s) => ({
-						...seedWorkflowProgress(s, rid, steps),
-						askGate: {
-							source: 'workflow',
-							questions,
-							...(typeof findings === 'string' && findings ? { findings } : {}),
-							runId: rid
-						}
-					}));
-					return;
-				}
-				const sp = steps['approve-plan']?.suspendPayload ?? {};
-				const subQuestions = Array.isArray(sp.subQuestions)
-					? sp.subQuestions.filter((x): x is string => typeof x === 'string')
-					: [];
-				this.#apply((s) => ({
-					...seedWorkflowProgress(s, rid, steps),
-					planGate: { plan: typeof sp.plan === 'string' ? sp.plan : '', subQuestions }
-				}));
-				return;
-			}
-			if (status === 'success' || status === 'failed' || status === 'canceled') {
-				this.#applyDeepTerminal(rid, status, steps, wfState.result);
-				return;
-			}
-			// Stop during RUNNING cleared/changed the key → settle & exit; don't re-seed progress.
-			if (getDeepRunId(this.#threadId) !== rid) {
-				this.#deepStalled = null;
-				this.#apply((s) => settleWorkflowTurn(s, rid));
-				return;
-			}
-			this.#apply((s) => seedWorkflowProgress(s, rid, steps));
-			const sig = `${status}|${Object.entries(steps)
-				.map(([id, st]) => `${id}:${String(st?.status ?? '')}`)
-				.sort()
-				.join(',')}`;
-			if (sig !== progressSig) {
-				progressSig = sig;
-				progressAt = Date.now();
-				this.#deepStalled = null;
-			} else if (status === 'running' || status === 'waiting' || status === 'pending') {
-				const heavyStep = activeHeavyDeepStep(steps);
-				if (Date.now() - progressAt >= (heavyStep ? DEEP_HEAVY_STALL_MS : DEEP_STALL_MS)) {
-					this.#deepStalled =
-						(heavyStep && DEEP_HEAVY_STEP_MESSAGE[heavyStep]) || DEEP_STALL_MESSAGE;
-				}
-			}
-			if (!sourcesSeeded && steps['search-literature']) {
-				sourcesSeeded = true;
-				void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.sources(this.#threadId) });
-			}
-			if (!sourcesRefreshed && steps['search-literature']?.status === 'success') {
-				sourcesRefreshed = true;
-				void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.sources(this.#threadId) });
-			}
-			await delay(2500);
-		}
-	}
-
-	/** `Date.now()` behind a method so tests can hold it deterministic if needed. */
 	#now(): number {
 		return Date.now();
 	}
