@@ -6,8 +6,14 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./core": "./src/core.ts",
+    "./prompt-commands": "./src/prompt-commands.ts",
+    "./context": "./src/context.ts",
+    "./ask-questions": "./src/ask-questions.ts",
     "./deep-viz": "./src/deep-viz.ts",
-    "./stats-viz": "./src/stats-viz.ts"
+    "./stats-viz": "./src/stats-viz.ts",
+    "./timeline": "./src/timeline/index.ts",
+    "./composer-editor": "./src/composer-editor/index.ts"
   },
   "scripts": {
     "test": "bun test --timeout 30000",
