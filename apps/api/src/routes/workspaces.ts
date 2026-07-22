@@ -227,7 +227,7 @@ export const workspaces = new Elysia()
       body: t.Object({
         kind: annotationKindSchema,
         page: t.Numeric(),
-        rects: t.Array(annotationRectSchema, { minItems: 1, maxItems: 32 }),
+        rects: t.Array(annotationRectSchema, { minItems: 1 }),
         selectedText: t.Optional(t.String()),
         note: t.Optional(t.String()),
       }),

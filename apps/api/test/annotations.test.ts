@@ -34,7 +34,7 @@ describe("annotations routes", () => {
     const res = await req("POST", `/workspaces/nonexistent_${suffix}/annotations`, `tok_${OWNER}`, {
       kind: "pin",
       page: 1,
-      rects: [{ x: 0, y: 0, w: 0, h: 0 }],
+      rects: Array.from({ length: 40 }, (_, index) => ({ x: 0, y: index / 40, w: 1, h: 0.02 })),
     });
     expect(res.status).toBe(404);
     const body = (await res.json()) as { code?: string };

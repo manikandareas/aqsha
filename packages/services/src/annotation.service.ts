@@ -25,7 +25,6 @@ export type AnnotationView = {
 };
 
 const ANNOTATION_NOTE_MAX = 2000;
-const SELECTED_TEXT_MAX = 2000;
 
 function toView(row: DocumentAnnotation): AnnotationView {
   return {
@@ -104,7 +103,7 @@ export const AnnotationService = {
       kind: input.kind,
       page: input.page,
       rects: input.rects,
-      selectedText: input.selectedText?.slice(0, SELECTED_TEXT_MAX) ?? null,
+      selectedText: input.selectedText ?? null,
       note: input.note ?? null,
       status: "open",
       threadId: null,

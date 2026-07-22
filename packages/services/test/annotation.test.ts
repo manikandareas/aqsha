@@ -39,17 +39,18 @@ describe("AnnotationService", () => {
 
   itest("create anotasi highlight (selectedText+page+rects) → open", async () => {
     await seed();
+    const selectedText = "kutipan persis di preview ".repeat(100);
     const view = await AnnotationService.create(db, {
       ownerUserId: OWNER,
       workspaceId: WS,
       kind: "highlight",
       page: 2,
       rects: [{ x: 10, y: 20, w: 100, h: 12 }],
-      selectedText: "kutipan persis di preview",
+      selectedText,
       note: "perbaiki kalimat ini",
     });
     expect(view.status).toBe("open");
-    expect(view.selectedText).toBe("kutipan persis di preview");
+    expect(view.selectedText).toBe(selectedText);
     expect(view.page).toBe(2);
     annotationId = view.id;
   });
