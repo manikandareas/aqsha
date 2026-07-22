@@ -11,6 +11,8 @@
 		"dev": "vite dev",
 		"content": "content-collections build",
 		"build": "content-collections build && vite build",
+		"bundle:report": "bun scripts/check-bundle-budget.mjs --report",
+		"bundle:budget": "bun scripts/check-bundle-budget.mjs",
 		"start": "node build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
