@@ -84,15 +84,6 @@ export function useExportPdf(workspaceId: () => string) {
 	}));
 }
 
-/** Ekspor dokumen penuh ke DOCX (pandoc `-f typst --citeproc`) → signed URL unduhan. */
-export function useExportDocx(workspaceId: () => string) {
-	const api = getApiClient();
-	return createMutation(() => ({
-		mutationFn: async () =>
-			unwrap(await api.workspaces({ id: workspaceId() }).export.docx.post()) as ExportResult
-	}));
-}
-
 // ── Anotasi preview dokumen ────────────────────────────────────────────────
 
 export type AnnotationView = {

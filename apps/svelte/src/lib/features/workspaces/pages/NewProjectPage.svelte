@@ -94,7 +94,7 @@
 					await uploadGuideline.mutateAsync({ file: guidelineFile });
 				} catch {
 					toast.warning(
-						'Proyek dibuat, tapi pedoman gagal diunggah. Unggah lagi dari Detail proyek.'
+						'Proyek dibuat, tapi pedoman gagal diunggah. Unggah ulang dari halaman proyek.'
 					);
 				}
 			}
@@ -149,7 +149,7 @@
 			</Button>
 			<h1 class="font-heading text-2xl font-bold">Proyek {WORKSPACE_KIND_LABELS[kind]} baru</h1>
 			<p class="text-sm text-muted-foreground">
-				Semua isian opsional — bisa dilengkapi kapan pun dari Detail proyek.
+				Semua isian opsional — bisa dilengkapi kapan pun dari halaman proyek.
 			</p>
 		</header>
 

@@ -1,59 +1,43 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import type { ContextRef } from '@aqsha/chat-core';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { useClerkContext } from 'svelte-clerk';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import PanelCardToolbar from '$lib/components/layout/PanelCardToolbar.svelte';
-	import ExploreThreadChat from '$lib/features/explore/components/ExploreThreadChat.svelte';
+	import { Spinner } from '$lib/components/ui/spinner';
 	import ThreadRecentSwitcher from '$lib/features/explore/components/ThreadRecentSwitcher.svelte';
+	import MastraChatThreadSurface from '$lib/features/thread-experience/components/MastraChatThreadSurface.svelte';
 	import { useRecentThreadSummaries } from '$lib/features/threads/use-recent-thread-summaries.svelte';
 	import { Icon, ExternalLinkIcon, MessageSquarePlusIcon } from '$lib/icons';
+	import { getProjectChatRuntime } from './project-chat-runtime-context.svelte';
 
 	let {
-		workspaceId,
 		leading,
-		getExtraClientContext,
-		onTurnSent,
-		onAgentSettled
+		getExtraClientContext
 	}: {
-		workspaceId: string;
 		/** Rendered on the toolbar's left — the page's chat/editor panel toggle. */
 		leading?: Snippet;
 		getExtraClientContext?: () => string[];
-		onTurnSent?: (threadId: string, sentContextRefs: ContextRef[]) => void;
-		onAgentSettled?: (threadId: string) => void;
 	} = $props();
 
+	const runtime = getProjectChatRuntime();
+	const agent = $derived(runtime.agent);
+	const phaseKind = $derived(runtime.phase.kind);
 	const clerk = useClerkContext();
 	const recentThreads = useRecentThreadSummaries(
 		() => clerk.isLoaded && Boolean(clerk.auth.userId),
-		() => workspaceId
+		() => runtime.workspaceId
 	);
 
-	let activeThreadId = $state<string | null>(null);
-	let chatMountKey = $state(0);
-
-	function selectThread(id: string | null): void {
-		activeThreadId = id;
-		chatMountKey += 1;
-	}
-
 	function openFull(): void {
-		if (!activeThreadId) return;
+		if (!runtime.activeThreadId) return;
 		void goto(
 			resolve('/app/(product)/projects/[projectId]/threads/[threadId]', {
-				projectId: workspaceId,
-				threadId: activeThreadId
+				projectId: runtime.workspaceId,
+				threadId: runtime.activeThreadId
 			})
 		);
-	}
-
-	// Keep the new thread mounted when its first turn promotes it to a durable thread.
-	function handleAgentSettled(threadId: string): void {
-		if (activeThreadId === null) activeThreadId = threadId;
-		onAgentSettled?.(threadId);
 	}
 </script>
 
@@ -63,7 +47,7 @@
 			{#if leading}{@render leading()}{/if}
 		{/snippet}
 		{#snippet actions()}
-			{#if activeThreadId}
+			{#if runtime.activeThreadId}
 				<Button
 					type="button"
 					variant="ghost"
@@ -76,10 +60,10 @@
 				</Button>
 			{/if}
 			<ThreadRecentSwitcher
-				title={activeThreadId ? 'Thread' : 'Chat baru'}
+				title={runtime.activeThreadId ? 'Thread' : 'Chat baru'}
 				threads={recentThreads.data}
-				onSelectThread={(id) => selectThread(id)}
-				onNewThread={() => selectThread(null)}
+				onSelectThread={runtime.selectThread}
+				onNewThread={runtime.startNewThread}
 				newLabel="Chat baru"
 				emptyLabel="Belum ada thread di proyek ini"
 			/>
@@ -89,7 +73,7 @@
 				size="icon"
 				class="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
 				aria-label="Chat baru"
-				onclick={() => selectThread(null)}
+				onclick={runtime.startNewThread}
 			>
 				<Icon icon={MessageSquarePlusIcon} class="size-3.5" />
 			</Button>
@@ -97,14 +81,29 @@
 	</PanelCardToolbar>
 
 	<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-		{#key chatMountKey}
-			<ExploreThreadChat
-				{activeThreadId}
-				{workspaceId}
+		{#if phaseKind === 'restore_failed'}
+			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+				<p class="text-sm text-destructive">Percakapan tidak tersedia atau gagal dipulihkan.</p>
+				<Button type="button" size="sm" variant="outline" onclick={runtime.retryRestore}>
+					Coba lagi
+				</Button>
+			</div>
+		{:else if phaseKind === 'restoring' || !agent}
+			<div class="flex flex-1 items-center justify-center gap-2 py-10 text-muted-foreground">
+				<Spinner class="size-4" />
+				<span class="text-sm">Memulihkan percakapan…</span>
+			</div>
+		{:else}
+			<MastraChatThreadSurface
+				{agent}
+				threadId={runtime.threadId}
+				threadAgentKind={runtime.threadAgentKind}
+				threadPersisted={runtime.threadPersisted}
+				compact
+				bindUrlOnSend={false}
 				{getExtraClientContext}
-				{onTurnSent}
-				onAgentSettled={handleAgentSettled}
+				onTurnSent={runtime.onTurnSent}
 			/>
-		{/key}
+		{/if}
 	</div>
 </div>

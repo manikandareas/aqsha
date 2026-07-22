@@ -37,8 +37,13 @@ export class AnnotationAgentation {
 	}
 
 	toggle(): void {
-		this.enabled = !this.enabled;
-		if (!this.enabled) {
+		this.setEnabled(!this.enabled);
+	}
+
+	setEnabled(next: boolean): void {
+		if (this.enabled === next) return;
+		this.enabled = next;
+		if (!next) {
 			this.hover = null;
 			this.closeComposer();
 		}

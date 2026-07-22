@@ -65,7 +65,7 @@
 	onDestroy(clearTimers);
 </script>
 
-<div class="flex items-center gap-1">
+<div class="flex items-center gap-0.5">
 	<span class="rounded-full p-0.5" style:background={progressBackground}>
 		<Button
 			type="button"
@@ -73,10 +73,13 @@
 			variant="ghost"
 			aria-label="Bersihkan anotasi"
 			disabled={disabled || isClearing}
-			class="rounded-full"
+			class="size-7 rounded-full bg-transparent hover:bg-transparent disabled:bg-transparent motion-safe:active:scale-[0.97] {disabled ||
+			isClearing
+				? 'text-muted-foreground'
+				: 'text-foreground hover:text-foreground'}"
 			onclick={startClear}
 		>
-			<Icon icon={Trash2Icon} class="size-4" />
+			<Icon icon={Trash2Icon} class="size-3.5" />
 		</Button>
 	</span>
 
@@ -86,10 +89,10 @@
 			size="icon-sm"
 			variant="ghost"
 			aria-label="Batal clear"
-			class="rounded-full"
+			class="size-7 rounded-full bg-transparent text-foreground hover:bg-transparent hover:text-foreground motion-safe:active:scale-[0.97]"
 			onclick={resetCountdown}
 		>
-			<Icon icon={XIcon} class="size-4" />
+			<Icon icon={XIcon} class="size-3.5" />
 		</Button>
 	{/if}
 </div>

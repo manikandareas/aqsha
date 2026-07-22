@@ -223,7 +223,7 @@
 				{#if projects.length > 0}
 					<Sidebar.Menu class="min-w-0 gap-1 overflow-hidden">
 						{#each projects as project (project.id)}
-							{@const active = project.id === selectedProjectId}
+							{@const inProject = project.id === selectedProjectId}
 							{@const detailHref = resolve('/app/(product)/projects/[projectId]', {
 								projectId: project.id
 							})}
@@ -237,13 +237,13 @@
 												type="button"
 												class={cn(
 													'flex size-6 shrink-0 items-center justify-center rounded-sm transition-colors duration-150 ease-out hover:bg-muted/60',
-													active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+													inProject ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
 												)}
 												aria-label={open ? 'Tutup isi proyek' : 'Buka isi proyek'}
 												aria-expanded={open}
 												onclick={() => setProjectExpanded(project.id, !open)}
 											>
-												{#if active || open}
+												{#if inProject || open}
 													<Icon
 														icon={ChevronRightIcon}
 														class={cn(
@@ -268,10 +268,11 @@
 													</span>
 												{/if}
 											</button>
+											<!-- Parent never takes the active (primary) surface — only child rows do. -->
 											<Sidebar.MenuButton
-												isActive={active}
+												isActive={false}
 												size="rail"
-												class={cn(sidebarItemClass(active), 'min-w-0 flex-1 overflow-hidden')}
+												class={cn(sidebarItemClass(false), 'min-w-0 flex-1 overflow-hidden')}
 											>
 												{#snippet child({ props })}
 													<a {...props} href={detailHref}>

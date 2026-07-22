@@ -1,7 +1,7 @@
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import TypstPreview from './TypstPreview.svelte';
+import TypstPreviewAnnotationHarness from './TypstPreviewAnnotationHarness.svelte';
 
 /**
  * Alur mode anotasi ala agentation di atas SVG sintetis ber-semantic-layer (`foreignObject >
@@ -57,7 +57,7 @@ function scroller(): HTMLElement {
 
 describe('TypstPreview mode anotasi', () => {
 	it('hover blok heading menampilkan badge label + outline', async () => {
-		render(TypstPreview, { svg: SVG, outlineTitles: [HEADING] });
+		render(TypstPreviewAnnotationHarness, { svg: SVG, outlineTitles: [HEADING] });
 		await nextFrame();
 		await enableModeAndHoverHeading(scroller());
 
@@ -67,7 +67,11 @@ describe('TypstPreview mode anotasi', () => {
 
 	it('klik blok membuka popover inline; submit meneruskan draft + catatan', async () => {
 		const onCreateAnnotation = vi.fn();
-		render(TypstPreview, { svg: SVG, outlineTitles: [HEADING], onCreateAnnotation });
+		render(TypstPreviewAnnotationHarness, {
+			svg: SVG,
+			outlineTitles: [HEADING],
+			onCreateAnnotation
+		});
 		await nextFrame();
 		const el = scroller();
 		await enableModeAndHoverHeading(el);
@@ -106,7 +110,11 @@ describe('TypstPreview mode anotasi', () => {
 
 	it('Escape menutup popover tanpa membuat anotasi; dua paragraf rapat = satu blok paragraf', async () => {
 		const onCreateAnnotation = vi.fn();
-		render(TypstPreview, { svg: SVG, outlineTitles: [HEADING], onCreateAnnotation });
+		render(TypstPreviewAnnotationHarness, {
+			svg: SVG,
+			outlineTitles: [HEADING],
+			onCreateAnnotation
+		});
 		await nextFrame();
 		const el = scroller();
 		await page.getByRole('button', { name: 'Nyalakan mode anotasi' }).click();
@@ -140,7 +148,7 @@ describe('TypstPreview mode anotasi', () => {
 	});
 
 	it('membatalkan Clear mempertahankan overlay anotasi sent', async () => {
-		render(TypstPreview, {
+		render(TypstPreviewAnnotationHarness, {
 			svg: SVG,
 			annotations: [
 				{
@@ -163,7 +171,7 @@ describe('TypstPreview mode anotasi', () => {
 
 	it('meneruskan snapshot anotasi sent ke Clear setelah tiga detik', async () => {
 		const onDismissAnnotations = vi.fn().mockResolvedValue(undefined);
-		render(TypstPreview, {
+		render(TypstPreviewAnnotationHarness, {
 			svg: SVG,
 			annotations: [
 				{

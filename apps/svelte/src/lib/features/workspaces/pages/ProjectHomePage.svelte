@@ -10,9 +10,7 @@
 		MAX_CONTEXT_ANNOTATIONS
 	} from '@aqsha/chat-core';
 	import * as Resizable from '@aqsha/ui-svelte/components/resizable';
-	import * as Sheet from '@aqsha/ui-svelte/components/sheet';
 	import * as ToggleGroup from '@aqsha/ui-svelte/components/toggle-group';
-	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { PageTitle } from '$lib/seo';
 	import { Spinner } from '$lib/components/ui/spinner';
@@ -27,18 +25,16 @@
 	import {
 		Icon,
 		Code2Icon,
-		DownloadIcon,
+		FileDownIcon,
 		FileTextIcon,
-		Library,
-		MessageSquareIcon,
-		MoreHorizontalIcon
+		MessageSquareIcon
 	} from '$lib/icons';
 	import ProjectChatPane from '../components/ProjectChatPane.svelte';
-	import ProjectHeader from '../components/ProjectHeader.svelte';
-	import ProjectSourcesPanel from '../components/ProjectSourcesPanel.svelte';
+	import ProjectChatRuntimeProvider from '../components/ProjectChatRuntimeProvider.svelte';
 	import { useWorkspace } from '../api';
 	import { projectDisplayTitle } from '../types';
 	import TocOverlay from '$lib/features/document/components/TocOverlay.svelte';
+	import AnnotationModeControls from '$lib/features/document/components/AnnotationModeControls.svelte';
 	import ProposalReviewCard from '$lib/features/document/components/ProposalReviewCard.svelte';
 	import {
 		ProposalReviewInteractions,
@@ -62,7 +58,6 @@
 		useSaveWorkspaceDocument,
 		useWorkspaceBib,
 		useExportPdf,
-		useExportDocx,
 		useWorkspaceAnnotations,
 		useCreateAnnotation,
 		useDismissWorkspaceAnnotations,
@@ -129,7 +124,6 @@
 	const acceptProposal = useAcceptProposal(() => workspaceId);
 	const rejectProposal = useRejectProposal(() => workspaceId);
 	const exportPdf = useExportPdf(() => workspaceId);
-	const exportDocx = useExportDocx(() => workspaceId);
 
 	$effect(() => {
 		const current = proposal.data;
@@ -361,13 +355,6 @@
 		});
 	}
 
-	function downloadDocx(): void {
-		exportDocx.mutate(undefined, {
-			onSuccess: (r) => triggerDownload(r.url),
-			onError: (err) => toast.error(readableApiErrorMessage(err, 'Gagal mengekspor DOCX.'))
-		});
-	}
-
 	// ── Layout ───────────────────────────────────────────────────────────────
 	type LeftMode = 'chat' | 'editor';
 	type MobileMode = LeftMode | 'preview';
@@ -379,8 +366,13 @@
 	let mobileMode = $state<MobileMode>('chat');
 	let editorVisited = $state(false);
 	let previewVisited = $state(false);
-	let sourcesOpen = $state(false);
-	let detailsOpen = $state(false);
+	let annotationMode = $state(false);
+
+	const visibleAnnotationIds = $derived(
+		(annotations.data ?? []).flatMap((annotation) =>
+			annotation.status === 'open' || annotation.status === 'sent' ? [annotation.id] : []
+		)
+	);
 
 	$effect(() => {
 		if (!browser || !host) return;
@@ -510,12 +502,7 @@
 {#snippet chatPanel()}
 	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
 		<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-			<ProjectChatPane
-				{workspaceId}
-				leading={leftToggle}
-				onTurnSent={handleTurnSent}
-				onAgentSettled={handleAgentSettled}
-			/>
+			<ProjectChatPane leading={leftToggle} />
 		</div>
 	</div>
 {/snippet}
@@ -595,31 +582,27 @@
 				{#if !wide}{@render leftToggle()}{/if}
 			{/snippet}
 			{#snippet actions()}
-				<Button type="button" variant="outline" size="sm" onclick={() => (sourcesOpen = true)}>
-					<Icon icon={Library} class="size-4" />
-					<span class="hidden sm:inline">Sumber</span>
-				</Button>
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Button {...props} type="button" variant="ghost" size="icon" aria-label="Menu proyek">
-								<Icon icon={MoreHorizontalIcon} class="size-4" />
-							</Button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content align="end">
-						<DropdownMenu.Item disabled={exportPdf.isPending} onSelect={downloadPdf}>
-							<Icon icon={DownloadIcon} class="size-4" /> Unduh PDF
-						</DropdownMenu.Item>
-						<DropdownMenu.Item disabled={exportDocx.isPending} onSelect={downloadDocx}>
-							<Icon icon={DownloadIcon} class="size-4" /> Unduh DOCX
-						</DropdownMenu.Item>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item onSelect={() => (detailsOpen = true)}
-							>Detail proyek</DropdownMenu.Item
-						>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
+				<div class="flex items-center gap-2" data-annotation-ui>
+					<AnnotationModeControls
+						bind:annotationMode
+						visibleIds={visibleAnnotationIds}
+						disabled={visibleAnnotationIds.length === 0}
+						onDismiss={async (ids) => {
+							await dismissAnnotations.mutateAsync({ ids });
+						}}
+					/>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						class="shrink-0 gap-1"
+						disabled={exportPdf.isPending}
+						onclick={downloadPdf}
+					>
+						<Icon icon={FileDownIcon} class="size-3.5" />
+						Download
+					</Button>
+				</div>
 			{/snippet}
 		</PanelCardToolbar>
 		<div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -640,6 +623,7 @@
 				{@const Preview = runtime.Preview}
 				<Preview
 					bind:this={previewRef}
+					bind:annotationMode
 					svg={runtime.previewSvg}
 					annotations={annotations.data ?? []}
 					{activeAnnotationId}
@@ -648,9 +632,6 @@
 					{proposalHunkCount}
 					onReviewProposal={beginProposalReview}
 					onCreateAnnotation={handleCreateAnnotation}
-					onDismissAnnotations={async (ids) => {
-						await dismissAnnotations.mutateAsync({ ids });
-					}}
 					onSelectAnnotation={focusAnnotation}
 					onActiveHeading={(index: number) => (activeTocIndex = index)}
 				/>
@@ -694,85 +675,67 @@
 		bind:this={host}
 		class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background md:h-[calc(100svh-1rem)]"
 	>
-		{#if !measured}
-			<div class="flex min-h-0 flex-1 items-center justify-center gap-2 text-muted-foreground">
-				<Spinner class="size-4" />
-				<span class="text-sm">Menyiapkan workspace…</span>
-			</div>
-		{:else if wide}
-			<Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
-				<Resizable.Pane defaultSize={44} minSize={28}>
-					<div class="flex h-full min-h-0 flex-col overflow-hidden">
-						<div
-							class={leftMode === 'chat' ? 'contents' : 'hidden'}
-							aria-hidden={leftMode !== 'chat'}
-						>
-							{@render chatPanel()}
-						</div>
-						{#if editorVisited}
-							<div
-								class={leftMode === 'editor' ? 'contents' : 'hidden'}
-								aria-hidden={leftMode !== 'editor'}
-							>
-								{@render editorPanel()}
-							</div>
-						{/if}
-					</div>
-				</Resizable.Pane>
-				<Resizable.Handle withHandle aria-label="Ubah lebar panel kerja dan preview" />
-				<Resizable.Pane defaultSize={56} minSize={34}>
-					{@render previewPanel()}
-				</Resizable.Pane>
-			</Resizable.PaneGroup>
-		{:else}
-			<div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-				<div
-					class={mobileMode === 'chat' ? 'contents' : 'hidden'}
-					aria-hidden={mobileMode !== 'chat'}
-				>
-					{@render chatPanel()}
+		<ProjectChatRuntimeProvider
+			{workspaceId}
+			onTurnSent={handleTurnSent}
+			onAgentSettled={handleAgentSettled}
+		>
+			{#if !measured}
+				<div class="flex min-h-0 flex-1 items-center justify-center gap-2 text-muted-foreground">
+					<Spinner class="size-4" />
+					<span class="text-sm">Menyiapkan workspace…</span>
 				</div>
-				{#if editorVisited}
-					<div
-						class={mobileMode === 'editor' ? 'contents' : 'hidden'}
-						aria-hidden={mobileMode !== 'editor'}
-					>
-						{@render editorPanel()}
-					</div>
-				{/if}
-				{#if previewVisited}
-					<div
-						class={mobileMode === 'preview' ? 'contents' : 'hidden'}
-						aria-hidden={mobileMode !== 'preview'}
-					>
+			{:else if wide}
+				<Resizable.PaneGroup direction="horizontal" class="min-h-0 flex-1">
+					<Resizable.Pane defaultSize={44} minSize={28}>
+						<div class="flex h-full min-h-0 flex-col overflow-hidden">
+							<div
+								class={leftMode === 'chat' ? 'contents' : 'hidden'}
+								aria-hidden={leftMode !== 'chat'}
+							>
+								{@render chatPanel()}
+							</div>
+							{#if editorVisited}
+								<div
+									class={leftMode === 'editor' ? 'contents' : 'hidden'}
+									aria-hidden={leftMode !== 'editor'}
+								>
+									{@render editorPanel()}
+								</div>
+							{/if}
+						</div>
+					</Resizable.Pane>
+					<Resizable.Handle withHandle aria-label="Ubah lebar panel kerja dan preview" />
+					<Resizable.Pane defaultSize={56} minSize={34}>
 						{@render previewPanel()}
+					</Resizable.Pane>
+				</Resizable.PaneGroup>
+			{:else}
+				<div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+					<div
+						class={mobileMode === 'chat' ? 'contents' : 'hidden'}
+						aria-hidden={mobileMode !== 'chat'}
+					>
+						{@render chatPanel()}
 					</div>
-				{/if}
-			</div>
-		{/if}
+					{#if editorVisited}
+						<div
+							class={mobileMode === 'editor' ? 'contents' : 'hidden'}
+							aria-hidden={mobileMode !== 'editor'}
+						>
+							{@render editorPanel()}
+						</div>
+					{/if}
+					{#if previewVisited}
+						<div
+							class={mobileMode === 'preview' ? 'contents' : 'hidden'}
+							aria-hidden={mobileMode !== 'preview'}
+						>
+							{@render previewPanel()}
+						</div>
+					{/if}
+				</div>
+			{/if}
+		</ProjectChatRuntimeProvider>
 	</div>
-
-	<Sheet.Root bind:open={sourcesOpen}>
-		<Sheet.Content side="right" class="gap-0 p-0 sm:max-w-[30rem]">
-			<Sheet.Header class="border-b-2 border-border px-5 py-4">
-				<Sheet.Title>Sumber proyek</Sheet.Title>
-				<Sheet.Description>Sumber perpustakaan yang tertaut ke proyek ini.</Sheet.Description>
-			</Sheet.Header>
-			<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-				<ProjectSourcesPanel {workspaceId} />
-			</div>
-		</Sheet.Content>
-	</Sheet.Root>
-
-	<Sheet.Root bind:open={detailsOpen}>
-		<Sheet.Content side="right" class="gap-0 p-0 sm:max-w-[32rem]">
-			<Sheet.Header class="sr-only">
-				<Sheet.Title>Detail proyek</Sheet.Title>
-				<Sheet.Description>Ubah judul, info, dan tenggat proyek.</Sheet.Description>
-			</Sheet.Header>
-			<div class="min-h-0 flex-1 overflow-y-auto pt-12">
-				<ProjectHeader workspace={workspace.data} />
-			</div>
-		</Sheet.Content>
-	</Sheet.Root>
 {/if}

@@ -123,6 +123,13 @@ export type ThreadAgentOptions = {
 	 * so leaving this undefined makes the detector a safe no-op instead of a dead affordance.
 	 */
 	onRequestDocumentEdit?: (edit: { artifactId: string; instruction: string }) => void;
+	/**
+	 * Dipanggil setelah Mastra meng-ack turn (`sendMessage` / `createRun` resolve pada JSON
+	 * `{ accepted: true }` — bukan akhir stream). Aman untuk bind URL / promote draft.
+	 */
+	onAccepted?: () => void;
+	/** Dipanggil satu kali setiap lifecycle run bertransisi dari aktif kembali ke `ready`. */
+	onSettled?: () => void;
 };
 
 const SUBSCRIBE_DEGRADED_ERROR =
@@ -195,6 +202,8 @@ export class ThreadAgent {
 	readonly #qc: QueryClient;
 	readonly #initialAgentKind: AgentKind;
 	readonly #onRequestDocumentEdit?: (edit: { artifactId: string; instruction: string }) => void;
+	readonly #onAccepted?: () => void;
+	readonly #onSettled?: () => void;
 
 	// Reactive state (reduces per chunk / drives the UI).
 	#timeline = $state.raw<MastraTimelineState>(initialMastraTimeline());
@@ -234,6 +243,8 @@ export class ThreadAgent {
 		this.#qc = opts.queryClient;
 		this.#initialAgentKind = opts.initialAgentKind ?? 'lite';
 		this.#onRequestDocumentEdit = opts.onRequestDocumentEdit;
+		this.#onAccepted = opts.onAccepted;
+		this.#onSettled = opts.onSettled;
 		this.#timeline = initialMastraTimeline(opts.seed ?? []);
 	}
 
@@ -394,7 +405,6 @@ export class ThreadAgent {
 		}
 		this.#apply((s) => reduceMastraChunk(s, c0));
 		this.#detectDocumentEdit(c0);
-		this.#afterStructural();
 	};
 
 	#flushDeltas(): void {
@@ -403,16 +413,17 @@ export class ThreadAgent {
 		if (batch.length === 0) return;
 		this.#pendingDeltas = [];
 		this.#apply((s) => batch.reduce((acc, c) => reduceMastraChunk(acc, c), s));
-		this.#afterStructural();
 	}
 
 	#apply(fn: (s: MastraTimelineState) => MastraTimelineState): void {
 		this.#timeline = fn(this.#timeline);
+		this.#afterStructural();
 	}
 
 	#afterStructural(): void {
 		const now = this.#timeline.status;
 		if (this.#prevStatus !== 'ready' && now === 'ready') {
+			this.#onSettled?.();
 			void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.all });
 			void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.statsBlocks(this.#threadId) });
 			void this.#qc.invalidateQueries({ queryKey: queryKeys.threads.artifacts(this.#threadId) });
@@ -502,6 +513,7 @@ export class ThreadAgent {
 						}
 					: {})
 			});
+			this.#onAccepted?.();
 		} catch (err) {
 			this.#apply((s) => ({
 				...settleAssistantTurn(s),
@@ -938,6 +950,7 @@ export class ThreadAgent {
 			this.#deepFailed = null;
 			this.#deepNotice = null;
 			setDeepRunId(this.#threadId, run.runId);
+			this.#onAccepted?.();
 			const inputData: Record<string, unknown> = {
 				question,
 				threadId: this.#threadId,

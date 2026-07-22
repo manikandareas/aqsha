@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import { browser } from '$app/environment';
 	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Icon, Loader2Icon, MinusIcon, PlusIcon, MessageSquarePlusIcon } from '$lib/icons';
+	import { Icon, Loader2Icon, MinusIcon, PlusIcon } from '$lib/icons';
 	import { normalizeHeadingText } from '../lib/outline';
 	import {
 		type AnnotationDraft,
@@ -12,13 +12,12 @@
 		pageElements
 	} from '../lib/annotation-selection';
 	import { AnnotationAgentation } from '../lib/annotation-agentation.svelte';
-	import AnnotationClearToolbar from './AnnotationClearToolbar.svelte';
 	import AnnotationModeLayer from './AnnotationModeLayer.svelte';
 
 	/**
 	 * Preview dokumen Typst: memasang SVG terseleksi yang sudah selesai di-compile dan dirender worker.
-	 * Mode anotasi (toggle kanan-bawah) → hover blok semantik → popover komentar inline
-	 * (`onCreateAnnotation`). Sorotan anotasi digambar sebagai overlay ternormalisasi.
+	 * Mode anotasi dikontrol dari luar (`annotationMode`) — hover blok semantik → popover komentar
+	 * inline (`onCreateAnnotation`). Sorotan anotasi digambar sebagai overlay ternormalisasi.
 	 * `svg` null (compile gagal total) mempertahankan render terakhir supaya baca tak terlempar.
 	 */
 	type PreviewAnnotation = {
@@ -37,9 +36,9 @@
 		onCreateAnnotation,
 		onSelectAnnotation,
 		onActiveHeading,
-		onDismissAnnotations,
 		proposalHunkCount = 0,
-		onReviewProposal
+		onReviewProposal,
+		annotationMode = $bindable(false)
 	}: {
 		svg: string | null;
 		annotations?: PreviewAnnotation[];
@@ -49,9 +48,10 @@
 		onCreateAnnotation?: (draft: AnnotationDraft, note: string, elementLabel: string) => void;
 		onSelectAnnotation?: (id: string) => void;
 		onActiveHeading?: (index: number) => void;
-		onDismissAnnotations?: (ids: string[]) => Promise<void>;
 		proposalHunkCount?: number;
 		onReviewProposal?: () => void;
+		/** Mode anotasi — dikontrol dari header panel induk. */
+		annotationMode?: boolean;
 	} = $props();
 
 	const MAX_WIDTH = 860;
@@ -68,17 +68,16 @@
 	>([]);
 
 	const stageWidth = $derived(fitWidth > 0 ? Math.max(280, Math.round(fitWidth * zoom)) : 0);
-	const visibleAnnotationIds = $derived(
-		annotations.flatMap((annotation) =>
-			annotation.status === 'open' || annotation.status === 'sent' ? [annotation.id] : []
-		)
-	);
 
 	const agentation = new AnnotationAgentation({
 		svgHost: () => svgHost,
 		stageEl: () => stageEl,
 		outlineTitles: () => outlineTitles,
 		onCreate: (draft, note, elementLabel) => onCreateAnnotation?.(draft, note, elementLabel)
+	});
+
+	$effect(() => {
+		agentation.setEnabled(annotationMode);
 	});
 
 	// SVG null = compile gagal; pertahankan render terakhir agar pembaca tidak terlempar.
@@ -382,47 +381,6 @@
 				<Icon icon={PlusIcon} class="size-4" />
 			</Button>
 		</div>
-
-		<!-- Toggle mode anotasi (gaya agentation): hover blok dokumen → klik → catatan inline. -->
-		{#if agentation.enabled}
-			<div
-				role="toolbar"
-				aria-label="Alat anotasi"
-				class="absolute right-4 bottom-4 z-30 flex items-center gap-1 rounded-full border-2 border-border bg-card p-1"
-				data-annotation-ui
-			>
-				<Button
-					type="button"
-					size="icon"
-					variant="outline"
-					aria-label="Matikan mode anotasi"
-					aria-pressed={agentation.enabled}
-					class="rounded-full border-2 border-mint-strong bg-mint text-mint-foreground hover:bg-mint"
-					onclick={() => agentation.toggle()}
-				>
-					<Icon icon={MessageSquarePlusIcon} class="size-4" />
-				</Button>
-				<AnnotationClearToolbar
-					visibleIds={visibleAnnotationIds}
-					disabled={visibleAnnotationIds.length === 0}
-					onDismiss={(ids) => onDismissAnnotations?.(ids) ?? Promise.resolve()}
-				/>
-			</div>
-		{:else}
-			<div class="absolute right-4 bottom-4 z-30" data-annotation-ui>
-				<Button
-					type="button"
-					size="icon"
-					variant="outline"
-					aria-label="Nyalakan mode anotasi"
-					aria-pressed={agentation.enabled}
-					class="rounded-full border-2 bg-card"
-					onclick={() => agentation.toggle()}
-				>
-					<Icon icon={MessageSquarePlusIcon} class="size-4" />
-				</Button>
-			</div>
-		{/if}
 	{/if}
 </div>
 

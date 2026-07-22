@@ -41,6 +41,7 @@
 		threadId,
 		threadAgentKind = 'lite',
 		compact = false,
+		threadPersisted = true,
 		initialContent,
 		bindUrlOnSend = true,
 		threadUrlFor,
@@ -53,6 +54,11 @@
 		threadId: string;
 		threadAgentKind?: 'lite' | 'pro';
 		compact?: boolean;
+		/**
+		 * False sampai phase `ready` — URL boleh sudah dipromote (accepted), tapi query
+		 * sources/stats/artifacts menunggu jejak thread di API.
+		 */
+		threadPersisted?: boolean;
 		initialContent?: string;
 		/**
 		 * Whether the first send of a NEW thread soft-bumps the URL to the thread's own route (default).
@@ -97,6 +103,7 @@
 	);
 
 	const hasMessages = () => agent.messages.length > 0;
+	const canFetchThreadExtras = () => threadPersisted && hasMessages();
 	const sendStatus = useSendStatus('normal_chat');
 	// FE-11: `/deep` pre-check (non-consuming) — checked on submit so cap-exhaustion surfaces before the run.
 	const deepSendStatus = useSendStatus('deep_research');
@@ -107,7 +114,7 @@
 	const isEmpty = $derived(agent.messages.length === 0 && !busy);
 
 	// Research sources → grouped per turn (runId). Fetch once the thread has messages.
-	const sources = useThreadSources(() => threadId, hasMessages);
+	const sources = useThreadSources(() => threadId, canFetchThreadExtras);
 	const sourcesByTurn = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived lookup map, not reactive state
 		const map = new Map<string, ResearchSource[]>();
@@ -120,7 +127,7 @@
 		return map;
 	});
 
-	const statsBlocks = useThreadStatsBlocks(() => threadId, hasMessages);
+	const statsBlocks = useThreadStatsBlocks(() => threadId, canFetchThreadExtras);
 	const statsGroupsByToolCallId = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived lookup map, not reactive state
 		const map = new Map<string, StatsGroup>();
@@ -128,7 +135,7 @@
 		return map;
 	});
 
-	const threadArtifacts = useThreadArtifacts(() => (hasMessages() ? threadId : null), {
+	const threadArtifacts = useThreadArtifacts(() => (canFetchThreadExtras() ? threadId : null), {
 		pollWhilePending: true
 	});
 	const attachmentsByMessage = $derived(
@@ -171,6 +178,8 @@
 	function bumpUrl(): void {
 		if (!bindUrlOnSend || bound || !threadUrlFor) return;
 		bound = true;
+		// threadUrlFor already returns a resolve()'d href from the shell.
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- pre-resolved by caller
 		replaceState(threadUrlFor(threadId), page.state);
 	}
 

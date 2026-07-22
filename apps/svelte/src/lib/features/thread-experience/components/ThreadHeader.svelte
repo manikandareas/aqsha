@@ -47,6 +47,8 @@
 	}
 
 	function selectThread(id: string): void {
+		// threadUrlFor already returns a resolve()'d href from the shell.
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- pre-resolved by caller
 		if (threadUrlFor) void goto(threadUrlFor(id));
 	}
 

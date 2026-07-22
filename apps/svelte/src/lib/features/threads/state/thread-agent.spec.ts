@@ -80,3 +80,66 @@ describe('ThreadAgent.prependHistory', () => {
 		expect(agent.status).toBe(status);
 	});
 });
+
+describe('ThreadAgent turn lifecycle', () => {
+	it('reports accepted after sendMessage ack resolves, before any later work', async () => {
+		const events: string[] = [];
+		let releaseAck!: () => void;
+		const ack = new Promise<void>((resolve) => {
+			releaseAck = resolve;
+		});
+		const agent = new ThreadAgent({
+			getClient: () =>
+				({
+					getAgent: () => ({
+						sendMessage: async () => {
+							events.push('server');
+							await ack;
+							return { accepted: true as const, runId: 'run-1' };
+						}
+					})
+				}) as never,
+			threadId: 'thread-1',
+			getResourceId: () => 'user-1',
+			queryClient: new QueryClient(),
+			onAccepted: () => events.push('accepted')
+		});
+
+		const sending = agent.send('Pertahankan prompt ini');
+		expect(agent.messages).toHaveLength(2);
+		expect(events).toEqual(['server']);
+		expect(agent.status).not.toBe('ready');
+
+		releaseAck();
+		await sending;
+
+		// onAccepted follows the JSON ack from sendMessage — streaming continues separately.
+		expect(events).toEqual(['server', 'accepted']);
+	});
+
+	it('does not report accepted when sending fails, but still settles locally', async () => {
+		const accepted: string[] = [];
+		const settled: string[] = [];
+		const agent = new ThreadAgent({
+			getClient: () =>
+				({
+					getAgent: () => ({
+						sendMessage: async () => {
+							throw new Error('network down');
+						}
+					})
+				}) as never,
+			threadId: 'thread-1',
+			getResourceId: () => 'user-1',
+			queryClient: new QueryClient(),
+			onAccepted: () => accepted.push('thread-1'),
+			onSettled: () => settled.push('thread-1')
+		});
+
+		await agent.send('Pertahankan prompt ini');
+
+		expect(accepted).toEqual([]);
+		expect(settled).toEqual(['thread-1']);
+		expect(agent.status).toBe('ready');
+	});
+});
