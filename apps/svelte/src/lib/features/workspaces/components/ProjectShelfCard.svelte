@@ -50,7 +50,7 @@
 
 <article
 	class={cn(
-		'group relative flex h-[17.5rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border-0 p-3 shadow-none ring-0 outline-none',
+		'group relative flex h-[16rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border-0 p-3 shadow-none ring-0 outline-none',
 		'transition-transform duration-150 ease-out',
 		'hover:-translate-y-0.5',
 		'focus-within:-translate-y-0.5',
@@ -97,12 +97,6 @@
 					{/if}
 				{/each}
 			</div>
-		{:else}
-			<p
-				class="grid h-full place-items-center px-3 py-2.5 text-center font-hand text-lg leading-snug text-muted-foreground"
-			>
-				Belum ada isi dokumen
-			</p>
 		{/if}
 	</div>
 

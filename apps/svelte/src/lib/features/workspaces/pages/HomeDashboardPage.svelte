@@ -103,7 +103,7 @@
 					<NewProjectCard />
 					{#each skeletonCards as item (item)}
 						<div
-							class="flex h-[17.5rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl bg-card/50 p-3 dark:bg-card"
+							class="flex h-[16rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl bg-card/50 p-3 dark:bg-card"
 							aria-hidden="true"
 						>
 							<div

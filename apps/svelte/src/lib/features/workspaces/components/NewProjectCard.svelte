@@ -10,7 +10,7 @@
 <a
 	{href}
 	class={cn(
-		'group flex h-full min-h-[17.5rem] flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-card/35 px-6 text-center',
+		'group flex h-full min-h-[16rem] flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-card/35 px-6 text-center',
 		'text-muted-foreground transition-[border-color,background-color,color] duration-150 ease-out',
 		'hover:border-primary hover:bg-primary/10 hover:text-primary',
 		'focus-visible:border-primary focus-visible:bg-primary/10 focus-visible:text-primary',
