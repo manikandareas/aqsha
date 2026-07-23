@@ -7,6 +7,7 @@
 	import { Input } from '@aqsha/ui-svelte/components/input';
 	import { Textarea } from '@aqsha/ui-svelte/components/textarea';
 	import { PageTitle } from '$lib/seo';
+	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import { getAuthState } from '$lib/auth/context.svelte';
 	import { Icon, ArrowLeftIcon, FileTextIcon, UploadIcon, XIcon } from '$lib/icons';
 	import { useUploadArtifact } from '$lib/features/artifacts/api';
@@ -109,6 +110,12 @@
 
 <PageTitle title="Proyek baru" />
 
+<AppPageHeader mobileOnly>
+	{#snippet title()}
+		<span class="min-w-0 truncate text-base font-semibold text-foreground">Proyek baru</span>
+	{/snippet}
+</AppPageHeader>
+
 <div class="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 px-4 py-10">
 	{#if !kind}
 		<header class="grid gap-1.5">
@@ -120,7 +127,7 @@
 			>
 				<Icon icon={ArrowLeftIcon} class="size-3.5" /> Kembali
 			</Button>
-			<h1 class="font-heading text-2xl font-bold">Proyek baru</h1>
+			<h1 class="hidden font-heading text-2xl font-bold md:block">Proyek baru</h1>
 			<p class="text-sm text-muted-foreground">Kamu lagi nulis apa? Pilih jenisnya dulu.</p>
 		</header>
 		<div class="grid gap-3 sm:grid-cols-2">
@@ -147,7 +154,9 @@
 			>
 				<Icon icon={ArrowLeftIcon} class="size-3.5" /> Ganti jenis
 			</Button>
-			<h1 class="font-heading text-2xl font-bold">Proyek {WORKSPACE_KIND_LABELS[kind]} baru</h1>
+			<h1 class="hidden font-heading text-2xl font-bold md:block">
+				Proyek {WORKSPACE_KIND_LABELS[kind]} baru
+			</h1>
 			<p class="text-sm text-muted-foreground">
 				Semua isian opsional — bisa dilengkapi kapan pun dari halaman proyek.
 			</p>

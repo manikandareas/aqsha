@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Icon, LayersIcon, PanelLeftIcon } from '$lib/icons';
+	import { Icon, LayersIcon } from '$lib/icons';
+	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import PanelOpenButton from '$lib/components/layout/PanelOpenButton.svelte';
 	import PanelTitleLabel from '$lib/components/layout/PanelTitleLabel.svelte';
-	import { panelHeaderBarClass } from '$lib/components/layout/panel-surface';
 	import ThreadRecentSwitcher from '$lib/features/explore/components/ThreadRecentSwitcher.svelte';
 	import { useDeleteThread } from '$lib/features/threads/api';
 	import type { RecentThreadSummary } from '$lib/features/threads/types';
@@ -17,11 +16,9 @@
 	 */
 	let {
 		threadId,
-		title,
+		title: pageTitle,
 		isExisting = Boolean(threadId),
 		recentThreads = [],
-		showLeftTrigger,
-		onToggleLeftSidebar,
 		contextPanelOpen,
 		onOpenContextPanel,
 		threadUrlFor
@@ -30,8 +27,6 @@
 		title: string;
 		isExisting?: boolean;
 		recentThreads?: RecentThreadSummary[];
-		showLeftTrigger: boolean;
-		onToggleLeftSidebar: () => void;
 		contextPanelOpen: boolean;
 		onOpenContextPanel: () => void;
 		/** Builds a thread's route (lives under its project); switching threads is a no-op without it. */
@@ -57,22 +52,11 @@
 	}
 </script>
 
-<header class={panelHeaderBarClass}>
-	<div class="flex min-w-0 items-center gap-1.5">
-		{#if showLeftTrigger}
-			<Button
-				type="button"
-				variant="ghost"
-				class="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-				onclick={onToggleLeftSidebar}
-				aria-label="Buka sidebar kiri"
-			>
-				<Icon icon={PanelLeftIcon} class="size-3.5" />
-			</Button>
-		{/if}
+<AppPageHeader>
+	{#snippet title()}
 		{#if isExisting}
 			<ThreadRecentSwitcher
-				{title}
+				title={pageTitle}
 				threads={recentThreads}
 				onSelectThread={selectThread}
 				onNewThread={createThread}
@@ -80,10 +64,10 @@
 				emptyLabel="Belum ada thread"
 			/>
 		{:else}
-			<PanelTitleLabel>{title}</PanelTitleLabel>
+			<PanelTitleLabel>{pageTitle}</PanelTitleLabel>
 		{/if}
-	</div>
-	<div class="flex shrink-0 items-center gap-1">
+	{/snippet}
+	{#snippet actions()}
 		{#if threadId}
 			<ThreadActionsMenu
 				description="Thread dan pesannya akan dihapus permanen."
@@ -100,5 +84,5 @@
 				<Icon icon={LayersIcon} class="size-3.5" />
 			{/snippet}
 		</PanelOpenButton>
-	</div>
-</header>
+	{/snippet}
+</AppPageHeader>

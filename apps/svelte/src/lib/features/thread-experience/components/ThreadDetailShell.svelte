@@ -5,7 +5,6 @@
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { buildWorkspaceMentionLabel } from '@aqsha/chat-core';
 	import { PageTitle } from '$lib/seo';
-	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import { clerkTokenGetter } from '$lib/auth/token';
 	import { useThread } from '$lib/features/threads/api';
@@ -56,8 +55,6 @@
 
 	const clerk = useClerkContext();
 	const qc = useQueryClient();
-	// Left-nav sidebar (AppShell provider) — read at init, before DetailSplitLayout opens its own provider.
-	const leftSidebar = Sidebar.useSidebar();
 	const userId = $derived(clerk.auth.userId);
 	const clerkLoaded = $derived(clerk.isLoaded);
 
@@ -229,9 +226,6 @@
 		if (!sideOpen || SidePanel) return;
 		void import('./DetailPanel.svelte').then(({ default: Panel }) => (SidePanel = Panel));
 	});
-	const isLeftSidebarOpen = $derived(
-		leftSidebar.isMobile ? leftSidebar.openMobile : leftSidebar.open
-	);
 </script>
 
 <PageTitle title={pageTitle} />
@@ -256,8 +250,6 @@
 				title={headerTitle}
 				isExisting={isExistingThread}
 				recentThreads={recentThreads.data}
-				showLeftTrigger={!isLeftSidebarOpen}
-				onToggleLeftSidebar={() => leftSidebar.toggle()}
 				contextPanelOpen={sideOpen}
 				onOpenContextPanel={() => panel.openContextPanel()}
 				{threadUrlFor}

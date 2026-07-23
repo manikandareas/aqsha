@@ -8,6 +8,7 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { PageTitle } from '$lib/seo';
 	import { Spinner } from '$lib/components/ui/spinner';
+	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import PanelCardToolbar from '$lib/components/layout/PanelCardToolbar.svelte';
 	import { queryKeys } from '$lib/query';
 	import { readableApiErrorMessage } from '$lib/errors/api-error';
@@ -503,6 +504,11 @@
 {/if}
 
 {#if workspace.isPending}
+	<AppPageHeader mobileOnly>
+		{#snippet title()}
+			<span class="min-w-0 truncate text-base font-semibold text-foreground">Proyek</span>
+		{/snippet}
+	</AppPageHeader>
 	<div
 		class="flex h-svh flex-1 items-center justify-center gap-2 text-muted-foreground md:h-[calc(100svh-1rem)]"
 	>
@@ -510,6 +516,11 @@
 		<span class="text-sm">Memuat proyek…</span>
 	</div>
 {:else if !workspace.data}
+	<AppPageHeader mobileOnly>
+		{#snippet title()}
+			<span class="min-w-0 truncate text-base font-semibold text-foreground">Proyek</span>
+		{/snippet}
+	</AppPageHeader>
 	<div
 		class="flex h-svh flex-1 items-center justify-center text-muted-foreground md:h-[calc(100svh-1rem)]"
 	>
@@ -520,6 +531,13 @@
 		{@attach attachWorkspace}
 		class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background md:h-[calc(100svh-1rem)]"
 	>
+		<AppPageHeader mobileOnly>
+			{#snippet title()}
+				<span class="min-w-0 truncate text-base font-semibold text-foreground">
+					{projectDisplayTitle(workspace.data)}
+				</span>
+			{/snippet}
+		</AppPageHeader>
 		<ProjectChatRuntimeProvider
 			{workspaceId}
 			onTurnSent={annotationBridge.markTurnSent}

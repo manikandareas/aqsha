@@ -8,8 +8,9 @@
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import * as InputGroup from '@aqsha/ui-svelte/components/input-group';
 	import { cn } from '@aqsha/ui-svelte/utils';
+	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
-	import { panelBodyColumnClass, panelHeaderBarClass } from '$lib/components/layout/panel-surface';
+	import { panelBodyColumnClass } from '$lib/components/layout/panel-surface';
 	import { PageTitle } from '$lib/seo';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { readableApiErrorMessage } from '$lib/errors';
@@ -197,8 +198,8 @@
 		}}
 	>
 		{#snippet main()}
-			<header class={cn(panelHeaderBarClass, 'border-b-0')}>
-				<div class="flex min-w-0 items-center gap-1.5">
+			<AppPageHeader class="border-b-0">
+				{#snippet title()}
 					{#if scope.kind === 'project'}
 						<a
 							href={resolve('/app/(product)/library')}
@@ -267,9 +268,8 @@
 							</DropdownMenu.Item>
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
-				</div>
-
-				<div class="flex min-w-0 items-center gap-1">
+				{/snippet}
+				{#snippet actions()}
 					{#if searchExpanded}
 						<InputGroup.Root
 							class="h-7 w-[168px] min-w-0 max-w-[55vw] rounded-full border-border/70 bg-muted/20 shadow-none transition-colors focus-within:border-ring focus-within:bg-background sm:w-[200px] sm:max-w-none"
@@ -424,8 +424,8 @@
 							{/if}
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
-				</div>
-			</header>
+				{/snippet}
+			</AppPageHeader>
 
 			<div class={cn(panelBodyColumnClass, 'min-h-0 flex-1 overflow-y-auto')}>
 				{#if !enabled || list.isPending}

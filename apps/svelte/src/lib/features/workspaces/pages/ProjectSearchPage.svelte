@@ -8,6 +8,7 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Spinner } from '$lib/components/ui/spinner';
 	import { PageTitle } from '$lib/seo';
+	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import { Icon, ArrowLeftIcon } from '$lib/icons';
 	import ExploreAskBar from '$lib/features/explore/components/ExploreAskBar.svelte';
 	import SourceResultCard from '$lib/features/discovery/components/SourceResultCard.svelte';
@@ -90,6 +91,12 @@
 <PageTitle title="Cari sumber" />
 
 <div class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
+	<AppPageHeader mobileOnly>
+		{#snippet title()}
+			<span class="min-w-0 truncate text-base font-semibold text-foreground">Cari sumber</span>
+		{/snippet}
+	</AppPageHeader>
+
 	<header class="flex flex-col gap-3 border-b-2 border-border px-6 py-4">
 		<div class="flex flex-wrap items-center gap-2">
 			<Button
@@ -104,7 +111,7 @@
 				<Badge variant="outline">{projectDisplayTitle(workspace.data)}</Badge>
 			{/if}
 		</div>
-		<h1 class="font-heading text-2xl font-bold">Cari sumber untuk proyek ini</h1>
+		<h1 class="hidden font-heading text-2xl font-bold md:block">Cari sumber untuk proyek ini</h1>
 		<ExploreAskBar value={q} onSubmit={submitQuery} />
 	</header>
 

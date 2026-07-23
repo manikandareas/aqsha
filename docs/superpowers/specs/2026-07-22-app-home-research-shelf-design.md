@@ -35,7 +35,7 @@ Header berisi:
 - Sapaan kontekstual atau kalimat pendamping yang singkat.
 - Primary action `Proyek baru` pada desktop.
 
-Pada mobile, konten header menumpuk secara vertikal dan action tetap mudah dijangkau tanpa bertabrakan dengan mobile sidebar trigger di `AppShell.svelte`.
+Pada mobile, `AppPageHeader` (mobileOnly) hanya menampilkan sidebar trigger. Heading `Ruang risetmu`, sapaan, dan action New tetap berada di konten page (bukan di header).
 
 ### 2. Utility strip
 
@@ -54,7 +54,7 @@ Section utama berisi:
 - Seluruh proyek dalam `ProjectShelfCard`.
 - Action `Muat lebih banyak` ketika pagination masih tersedia.
 
-Grid menggunakan satu kolom pada mobile, dua kolom pada tablet, lalu tiga atau empat kolom pada desktop sesuai lebar content container. Lebar halaman dibatasi agar card tidak melebar berlebihan pada monitor besar.
+Grid memakai container queries: satu kolom → dua → tiga → empat (maksimal) sesuai lebar kolom, full-bleed tanpa `max-w-7xl`, gutter `px-5` / `@2xl:px-6`.
 
 ## Komponen
 
@@ -136,8 +136,8 @@ Query error ditampilkan sebagai inline state di area project shelf. Pesan dinorm
 
 ## Responsiveness dan Accessibility
 
-- Mobile sidebar trigger tetap dimiliki shared `AppShell.svelte`.
-- Layout tidak menambahkan page-level header yang bertabrakan dengan mobile shell header.
+- Mobile sidebar trigger dimiliki page-owned `AppPageHeader` (bukan `AppShell`).
+- Home memakai `AppPageHeader` trigger-only (`mobileOnly`, tanpa title/actions); hero tetap konten page.
 - Interactive target minimal 44px pada mobile.
 - Semua card, shortcut, sorting, retry, dan pagination dapat dioperasikan dengan keyboard.
 - Focus-visible state memiliki contrast yang jelas.

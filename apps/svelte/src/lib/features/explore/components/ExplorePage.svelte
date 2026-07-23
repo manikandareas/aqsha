@@ -3,11 +3,10 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { SvelteURL } from 'svelte/reactivity';
-	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Icon, ChevronRightIcon, PanelLeftIcon } from '$lib/icons';
+	import { Icon, ChevronRightIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
-	import { panelHeaderBarClass } from '$lib/components/layout/panel-surface';
+	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import { DeferredQueryRegion, type DeferredQueryResult } from '$lib/query';
 	import { FEED_TOPIC_LABELS, type FeedTopic } from '$lib/features/discovery/types';
 	import { applyExploreUrl, readExploreUrl } from '../explore-url-model';
@@ -16,15 +15,12 @@
 	import ExploreFeedSkeleton from './ExploreFeedSkeleton.svelte';
 
 	/**
-	 * Explore surface — paper discovery. Sticky glass header (breadcrumb + left-sidebar toggle) over
+	 * Explore surface — paper discovery. Sticky page header (breadcrumb + left-nav toggle) over
 	 * the scrolling feed. Empty `q` → personal/topic feed (Jelajah); non-empty `q` → search results
 	 * (Selidiki). `q` + `topic` live in the URL tanpa server navigation ulang. Browse-only: the research
 	 * chat lives inside a project now, so there is no embedded Astra panel here.
 	 */
 	let { feedResult }: { feedResult: Promise<DeferredQueryResult> } = $props();
-
-	// Left-nav sidebar (AppShell provider).
-	const leftSidebar = Sidebar.useSidebar();
 
 	// URL state (q/topic) — single source of truth.
 	const urlState = $derived(readExploreUrl(page.url.searchParams));
@@ -46,43 +42,31 @@
 			active ? 'pt-16' : 'pt-8'
 		);
 
-	const isLeftSidebarOpen = $derived(
-		leftSidebar.isMobile ? leftSidebar.openMobile : leftSidebar.open
-	);
 	const topicLabel = $derived(topic ? FEED_TOPIC_LABELS[topic] : null);
 </script>
 
 <main class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
 	<div class="@container/explore min-h-0 flex-1 overflow-y-auto">
-		<header class={cn(panelHeaderBarClass, 'border-b-0')}>
-			<nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5">
-				{#if !isLeftSidebarOpen}
-					<Button
+		<AppPageHeader class="border-b-0">
+			{#snippet title()}
+				<nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5">
+					<button
 						type="button"
-						variant="ghost"
-						class="size-7 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-						onclick={() => leftSidebar.toggle()}
-						aria-label="Buka sidebar kiri"
+						onclick={() => setTopic(null)}
+						class={cn(
+							'shrink-0 truncate rounded-md text-base font-semibold transition-colors',
+							topicLabel ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
+						)}
 					>
-						<Icon icon={PanelLeftIcon} class="size-3.5" />
-					</Button>
-				{/if}
-				<button
-					type="button"
-					onclick={() => setTopic(null)}
-					class={cn(
-						'shrink-0 truncate rounded-md text-base font-semibold transition-colors',
-						topicLabel ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
-					)}
-				>
-					Jelajahi
-				</button>
-				{#if topicLabel}
-					<Icon icon={ChevronRightIcon} class="size-3.5 shrink-0 text-muted-foreground/60" />
-					<span class="min-w-0 truncate text-base font-semibold text-foreground">{topicLabel}</span>
-				{/if}
-			</nav>
-		</header>
+						Jelajahi
+					</button>
+					{#if topicLabel}
+						<Icon icon={ChevronRightIcon} class="size-3.5 shrink-0 text-muted-foreground/60" />
+						<span class="min-w-0 truncate text-base font-semibold text-foreground">{topicLabel}</span>
+					{/if}
+				</nav>
+			{/snippet}
+		</AppPageHeader>
 
 		<div class="mx-auto w-full max-w-[1180px] px-6 pb-24 @2xl:px-7">
 			<ExploreHero

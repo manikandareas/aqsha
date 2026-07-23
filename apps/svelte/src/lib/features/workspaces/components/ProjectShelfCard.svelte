@@ -76,23 +76,27 @@
 		aria-hidden="true"
 	>
 		{#if sneakPeek}
-			<div class="flex h-full flex-col gap-1 overflow-hidden px-3 py-2.5">
+			<!--
+				Blocks stay shrink-0 so flex never crushes line boxes (min-h-0 + many blocks
+				was clipping glyph bottoms). Overflow clips at the pane edge instead.
+			-->
+			<div class="flex h-full flex-col gap-1.5 overflow-hidden px-3 py-2.5">
 				{#each sneakPeek.blocks as block, index (index)}
 					{#if block.type === 'title'}
-						<p class="shrink-0 truncate text-[0.85rem] font-bold leading-snug text-foreground">
+						<p class="shrink-0 truncate text-[0.85rem] font-bold leading-normal text-foreground">
 							{block.text}
 						</p>
 					{:else if block.type === 'heading'}
 						<p
 							class={cn(
-								'shrink-0 truncate font-semibold leading-snug text-foreground',
+								'shrink-0 truncate font-semibold leading-normal text-foreground',
 								block.level === 1 ? 'text-[0.75rem]' : 'text-[0.7rem]'
 							)}
 						>
 							{block.text}
 						</p>
 					{:else}
-						<p class="line-clamp-2 min-h-0 text-[0.68rem] leading-relaxed text-muted-foreground">
+						<p class="line-clamp-2 shrink-0 text-[0.68rem] leading-normal text-muted-foreground">
 							{block.text}
 						</p>
 					{/if}

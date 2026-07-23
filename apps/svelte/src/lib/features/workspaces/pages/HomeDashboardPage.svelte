@@ -4,6 +4,7 @@
 	import { useClerkContext } from 'svelte-clerk';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { viewerContext } from '$lib/auth';
+	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import { readableApiErrorMessage } from '$lib/errors';
 	import { landingGreeting } from '$lib/features/thread-experience/utils/landing-greeting';
 	import { Add02Icon, Icon } from '$lib/icons';
@@ -17,6 +18,9 @@
 
 	const skeletonCards = [0, 1, 2, 3, 4] as const;
 	const newProjectHref = resolve('/app/(product)/projects/new');
+	/** Same gutter rhythm as library; shelf caps at 4 columns. */
+	const shelfGridClass =
+		'grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:gap-5 @3xl:grid-cols-3 @5xl:grid-cols-4';
 
 	const clerk = useClerkContext();
 	const viewer = viewerContext.get();
@@ -46,8 +50,11 @@
 	});
 </script>
 
-<div class="flex w-full flex-1 flex-col overflow-y-auto px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-	<div class="mx-auto flex w-full max-w-7xl flex-col gap-8 sm:gap-10">
+<div class="flex w-full flex-1 flex-col overflow-y-auto">
+	<!-- Trigger-only chrome on mobile; hero stays page content below. -->
+	<AppPageHeader mobileOnly class="border-b-0" />
+
+	<div class="@container flex w-full flex-col gap-8 px-5 pt-4 pb-8 @2xl:gap-10 @2xl:px-6">
 		<header class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
 			<div class="min-w-0">
 				<h1
@@ -92,11 +99,7 @@
 
 			{#if list.isPending}
 				<p class="sr-only" role="status">Memuat proyek…</p>
-				<div
-					class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
-					aria-busy="true"
-					aria-label="Memuat proyek"
-				>
+				<div class={shelfGridClass} aria-busy="true" aria-label="Memuat proyek">
 					<NewProjectCard />
 					{#each skeletonCards as item (item)}
 						<div
@@ -142,11 +145,11 @@
 						tetap terhubung di satu tempat.
 					</p>
 				</div>
-				<div class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+				<div class={shelfGridClass}>
 					<NewProjectCard />
 				</div>
 			{:else}
-				<div class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+				<div class={shelfGridClass}>
 					<NewProjectCard />
 					{#each sortedProjects as workspace (workspace.id)}
 						<ProjectShelfCard {workspace} />
