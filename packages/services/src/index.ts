@@ -266,6 +266,7 @@ export {
 export {
   CITATION_EXPORT_FORMATS,
   CITATION_STYLES,
+  type BulkSearchSaveResult,
   type CitationDetail,
   type CitationExportFormat,
   CitationImportService,
@@ -279,6 +280,7 @@ export {
   type ImportPreviewResult,
   MAX_IMPORT_FILE_BYTES,
   type ManualCitationInput,
+  type SearchSourceInput,
 } from "./citations";
 
 // Citation Manager — integrasi provider referensi (Mendeley OAuth / Zotero).

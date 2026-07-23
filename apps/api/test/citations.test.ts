@@ -738,3 +738,72 @@ describe("api citations — render dokumen", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("citations search batch routes", () => {
+  itest("owner bulk-save-search partial success + duplicate repeat", async () => {
+    const first = await req("POST", "/citations/bulk-save-search", tok(OWNER), {
+      sources: [
+        {
+          clientKey: "paper:manual-1",
+          title: "Batch Selected Paper",
+          authors: ["Ada Lovelace"],
+          year: 2024,
+          venue: "Journal",
+        },
+        { clientKey: "paper:bad", title: "" },
+      ],
+    });
+    expect(first.status).toBe(200);
+    const firstBody = await readJson(first);
+    expect(firstBody.saved).toBe(1);
+    expect(firstBody.failed).toBe(1);
+    expect(firstBody.items[0]).toMatchObject({
+      clientKey: "paper:manual-1",
+      status: "saved",
+      created: true,
+    });
+    expect(firstBody.items[1]).toMatchObject({
+      clientKey: "paper:bad",
+      status: "failed",
+      code: "citation_title_required",
+    });
+
+    const repeat = await req("POST", "/citations/bulk-save-search", tok(OWNER), {
+      sources: [
+        {
+          clientKey: "paper:manual-1",
+          title: "Batch Selected Paper",
+          authors: ["Ada Lovelace"],
+          year: 2024,
+          venue: "Journal",
+        },
+      ],
+    });
+    expect(repeat.status).toBe(200);
+    const repeatBody = await readJson(repeat);
+    expect(repeatBody.items[0]).toMatchObject({
+      clientKey: "paper:manual-1",
+      status: "saved",
+      created: false,
+      citationId: firstBody.items[0].citationId,
+    });
+  });
+
+  test("export-search returns RIS attachment without DB write", async () => {
+    const res = await req("POST", "/citations/export-search", tok(OWNER), {
+      format: "ris",
+      sources: [
+        {
+          clientKey: "paper:1",
+          title: "Selected",
+          authors: ["Ada Lovelace"],
+          year: 2024,
+        },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/x-research-info-systems");
+    expect(res.headers.get("content-disposition")).toContain("selected-papers.ris");
+    expect(await res.text()).toContain("TI  - Selected");
+  });
+});

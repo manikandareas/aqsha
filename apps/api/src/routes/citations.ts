@@ -36,6 +36,17 @@ const styleId = t.Union([
   t.Literal("chicago-author-date"),
 ]);
 
+const searchSourceSchema = t.Object({
+  clientKey: t.String(),
+  title: t.String(),
+  doi: t.Optional(t.Union([t.String(), t.Null()])),
+  url: t.Optional(t.Union([t.String(), t.Null()])),
+  authors: t.Optional(t.Array(t.String())),
+  year: t.Optional(t.Union([t.Number(), t.Null()])),
+  venue: t.Optional(t.Union([t.String(), t.Null()])),
+  documentType: t.Optional(t.Union([t.String(), t.Null()])),
+});
+
 /**
  * Route Citation Manager — perpustakaan referensi per AKUN (`/citations/*`,
  * termasuk import batch) + koleksi per proyek via link (`/workspaces/:id/citations*`).
@@ -265,6 +276,40 @@ export const citations = new Elysia()
       body: t.Object({
         styleId: t.Optional(styleId),
         citationIds: t.Optional(t.Array(t.String())),
+      }),
+    },
+  )
+  .post(
+    "/citations/bulk-save-search",
+    ({ ownerUserId, body }) => {
+      const { db } = getDb();
+      return CitationService.saveSearchSources(db, { ownerUserId, sources: body.sources });
+    },
+    {
+      auth: true,
+      rateLimit: "citations:create",
+      body: t.Object({ sources: t.Array(searchSourceSchema, { maxItems: 50 }) }),
+    },
+  )
+  .post(
+    "/citations/export-search",
+    ({ body }) => {
+      const result = CitationService.exportSearchSources({
+        sources: body.sources,
+        format: body.format,
+      });
+      return new Response(result.content, {
+        headers: {
+          "content-type": `${result.mimeType}; charset=utf-8`,
+          "content-disposition": `attachment; filename=${result.filename}`,
+        },
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({
+        format: t.Union([t.Literal("bibtex"), t.Literal("ris"), t.Literal("csl-json")]),
+        sources: t.Array(searchSourceSchema, { maxItems: 100 }),
       }),
     },
   )

@@ -58,4 +58,8 @@ export {
   type CitationListItem,
   CitationService,
   type CitationSettingsView,
+  type BulkSearchSaveItem,
+  type BulkSearchSaveResult,
+  type SearchSourceExportResult,
+  type SearchSourceInput,
 } from "./citation.service";

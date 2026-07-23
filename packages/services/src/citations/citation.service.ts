@@ -1,5 +1,6 @@
 import { citationCrudMethods } from "./citation-crud.methods";
 import { citationRenderMethods } from "./citation-render.methods";
+import { citationSearchBatchMethods } from "./citation-search-batch";
 
 export type {
   CitationDetail,
@@ -8,6 +9,12 @@ export type {
   CitationSettingsView,
   CreateFromArtifactResult,
 } from "./citation-model";
+export type {
+  BulkSearchSaveItem,
+  BulkSearchSaveResult,
+  SearchSourceExportResult,
+  SearchSourceInput,
+} from "./citation-search-batch";
 
 /**
  * Citation operations are composed here so callers retain one stable facade while
@@ -15,5 +22,6 @@ export type {
  */
 export const CitationService = {
   ...citationCrudMethods,
+  ...citationSearchBatchMethods,
   ...citationRenderMethods,
 };
