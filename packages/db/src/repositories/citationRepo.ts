@@ -178,6 +178,29 @@ export const CitationRepo = {
       .orderBy(desc(citations.updatedAt), desc(citations.id));
   },
 
+  async listAllActiveByWorkspace(
+    db: DbOrTx,
+    ownerUserId: string,
+    workspaceId: string,
+  ): Promise<Citation[]> {
+    const rows = await db
+      .select({ citation: citations })
+      .from(citations)
+      .innerJoin(
+        workspaceCitationLinks,
+        eq(workspaceCitationLinks.citationId, citations.id),
+      )
+      .where(
+        and(
+          eq(citations.ownerUserId, ownerUserId),
+          isNull(citations.deletedAt),
+          eq(workspaceCitationLinks.workspaceId, workspaceId),
+        ),
+      )
+      .orderBy(desc(citations.updatedAt), desc(citations.id));
+    return rows.map((r) => r.citation);
+  },
+
   /**
    * Semua bib_key terpakai owner — TERMASUK citation soft-deleted: kunci direservasi
    * selamanya supaya \cite{} lama di sumber tak pernah menunjuk entri berbeda.

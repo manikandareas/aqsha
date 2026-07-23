@@ -12,6 +12,7 @@ import {
   decodeKeysetCursor,
   DocumentCitationUsageRepo,
   throwAppError,
+  WorkspaceCitationLinkRepo,
 } from "@aqsha/db";
 import { classifyPaperText } from "../papers/identifiers";
 import { resolvePaper } from "../papers/resolve";
@@ -541,6 +542,7 @@ export const citationCrudMethods = {
       }
       if (cslChanged) patch.cslJson = mergedCsl;
       await CitationRepo.updateById(tx, target.id, patch);
+      await WorkspaceCitationLinkRepo.moveLinksToCitation(tx, [source.id], target.id);
       await CitationRepo.updateById(tx, source.id, {
         deletedAt: now,
         updatedAt: now,
@@ -662,6 +664,11 @@ export const citationCrudMethods = {
         tags: normalizeTags(tagBuckets.flat()),
         updatedAt: now,
       });
+      await WorkspaceCitationLinkRepo.moveLinksToCitation(
+        tx,
+        sources.map((s) => s.id),
+        target.id,
+      );
       for (const source of sources) {
         await CitationRepo.updateById(tx, source.id, {
           deletedAt: now,

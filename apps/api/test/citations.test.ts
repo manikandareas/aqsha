@@ -275,6 +275,79 @@ describe("api citations — link perpustakaan ↔ proyek", () => {
     const res = await req("GET", `/workspaces/${workspaceId}/citations`, tok(INTRUDER));
     expect(res.status).toBe(404);
   });
+
+  itest("candidates / scoped detail / bulk-unlink / scoped export", async () => {
+    const other = await readJson(
+      await req("POST", "/citations", tok(OWNER), {
+        fields: {
+          title: "Referensi Global Saja",
+          authors: [{ family: "Global", given: "Only" }],
+          publishedYear: 2021,
+        },
+      }),
+    );
+    const otherId = other.id as string;
+
+    await req("POST", `/workspaces/${workspaceId}/citations/${manualId}/link`, tok(OWNER), {});
+
+    const before = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations/candidates?q=Referensi`, tok(OWNER)),
+    );
+    const manualCand = before.items.find((i: { id: string }) => i.id === manualId);
+    const otherCand = before.items.find((i: { id: string }) => i.id === otherId);
+    expect(manualCand?.linked).toBe(true);
+    expect(otherCand?.linked).toBe(false);
+
+    const detail = await req(
+      "GET",
+      `/workspaces/${workspaceId}/citations/${manualId}`,
+      tok(OWNER),
+    );
+    expect(detail.status).toBe(200);
+
+    const forged = await req(
+      "GET",
+      `/workspaces/${workspaceId}/citations/${otherId}`,
+      tok(OWNER),
+    );
+    expect(forged.status).toBe(404);
+
+    const exportOk = await req(
+      "GET",
+      `/workspaces/${workspaceId}/citations/export?format=bibtex`,
+      tok(OWNER),
+    );
+    expect(exportOk.status).toBe(200);
+    const exportText = await exportOk.text();
+    // biblatex braces title words: `Referensi {Manual}`
+    expect(exportText).toContain("Sari2022Referensi");
+    expect(exportText).not.toContain("Global");
+
+    const exportForged = await req(
+      "GET",
+      `/workspaces/${workspaceId}/citations/export?format=bibtex&ids=${manualId},${otherId}`,
+      tok(OWNER),
+    );
+    expect(exportForged.status).toBe(404);
+
+    const unlink = await readJson(
+      await req("POST", `/workspaces/${workspaceId}/citations/bulk-unlink`, tok(OWNER), {
+        ids: [manualId],
+      }),
+    );
+    expect(unlink.affected).toBe(1);
+
+    const after = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations/candidates?q=Referensi+Manual`, tok(OWNER)),
+    );
+    expect(after.items.find((i: { id: string }) => i.id === manualId)?.linked).toBe(false);
+
+    const stillGlobal = await req("GET", `/citations/${manualId}`, tok(OWNER));
+    expect(stillGlobal.status).toBe(200);
+
+    // Kembalikan total library ke 1 agar assert import berikutnya tetap valid.
+    await req("DELETE", `/citations/${otherId}`, tok(OWNER));
+  });
 });
 
 describe("api citations — import preview + commit", () => {

@@ -354,6 +354,106 @@ export const citations = new Elysia()
       }),
     },
   )
+  .get(
+    "/workspaces/:id/citations/tags",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationLinkService.listTagsForWorkspace(db, {
+        ownerUserId,
+        workspaceId: params.id,
+      });
+    },
+    { auth: true },
+  )
+  .get(
+    "/workspaces/:id/citations/candidates",
+    ({ ownerUserId, params, query }) => {
+      const { db } = getDb();
+      return CitationLinkService.listCandidates(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        cursor: query.cursor ?? null,
+        limit: query.limit,
+        q: query.q,
+        status: query.status,
+        source: query.source,
+        tag: query.tag,
+      });
+    },
+    {
+      auth: true,
+      query: t.Object({
+        cursor: t.Optional(t.String()),
+        limit: t.Optional(t.Numeric()),
+        q: t.Optional(t.String()),
+        status: t.Optional(
+          t.Union([t.Literal("verified"), t.Literal("needs_review"), t.Literal("incomplete")]),
+        ),
+        source: t.Optional(
+          t.Union([
+            t.Literal("import"),
+            t.Literal("provider_sync"),
+            t.Literal("artifact"),
+            t.Literal("doi"),
+            t.Literal("manual"),
+          ]),
+        ),
+        tag: t.Optional(t.String()),
+      }),
+    },
+  )
+  .get(
+    "/workspaces/:id/citations/export",
+    async ({ ownerUserId, params, query }) => {
+      const { db } = getDb();
+      const result = await CitationLinkService.exportForWorkspace(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        format: query.format,
+        citationIds: query.ids ? query.ids.split(",").filter(Boolean) : undefined,
+      });
+      return new Response(result.content, {
+        headers: {
+          "content-type": `${result.mimeType}; charset=utf-8`,
+          "content-disposition": `attachment; filename="${result.filename}"`,
+        },
+      });
+    },
+    {
+      auth: true,
+      query: t.Object({
+        format: t.Union([t.Literal("bibtex"), t.Literal("ris"), t.Literal("csl-json")]),
+        ids: t.Optional(t.String()),
+      }),
+    },
+  )
+  .post(
+    "/workspaces/:id/citations/bulk-unlink",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return CitationLinkService.removeManyFromWorkspace(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        citationIds: body.ids,
+      });
+    },
+    {
+      auth: true,
+      body: t.Object({ ids: t.Array(t.String()) }),
+    },
+  )
+  .get(
+    "/workspaces/:id/citations/:citationId",
+    ({ ownerUserId, params }) => {
+      const { db } = getDb();
+      return CitationLinkService.getForWorkspace(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        citationId: params.citationId,
+      });
+    },
+    { auth: true },
+  )
   .post(
     "/workspaces/:id/citations/:citationId/link",
     ({ ownerUserId, params }) => {
