@@ -142,7 +142,11 @@
 	{:else}
 		<div class="divide-y divide-border overflow-hidden rounded-md border-2 border-border bg-card">
 			{#each items as paper (paper.key)}
-				<LiteratureResultRow {paper} selected={selectedKeys.has(paper.key)} onSelectedChange={toggleSelected} />
+				<LiteratureResultRow
+					{paper}
+					selected={selectedKeys.has(paper.key)}
+					onSelectedChange={toggleSelected}
+				/>
 			{/each}
 		</div>
 

@@ -705,9 +705,7 @@ export function useBulkSaveSearchSources() {
 	const qc = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: async (sources: SearchSourceInput[]) =>
-			unwrap(
-				await api.citations['bulk-save-search'].post({ sources })
-			) as BulkSearchSaveResult,
+			unwrap(await api.citations['bulk-save-search'].post({ sources })) as BulkSearchSaveResult,
 		onSuccess: (result: BulkSearchSaveResult) => {
 			if (result.saved > 0) qc.invalidateQueries({ queryKey: queryKeys.citations.all });
 		},

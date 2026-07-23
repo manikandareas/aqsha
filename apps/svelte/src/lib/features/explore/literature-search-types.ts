@@ -11,10 +11,7 @@ export const LITERATURE_SORT_IDS = [
 export type LiteratureSortId = (typeof LITERATURE_SORT_IDS)[number];
 
 export type LiteratureFilterValue =
-	| string
-	| boolean
-	| string[]
-	| { min?: number | string; max?: number | string };
+	string | boolean | string[] | { min?: number | string; max?: number | string };
 
 export type LiteratureFilterId =
 	| 'publication_date'
@@ -73,22 +70,10 @@ export type LiteratureFilterClause = {
 };
 
 export type LiteratureFilterKind =
-	| 'date-range'
-	| 'number-range'
-	| 'toggle'
-	| 'select'
-	| 'multi-select'
-	| 'entity'
-	| 'text';
+	'date-range' | 'number-range' | 'toggle' | 'select' | 'multi-select' | 'entity' | 'text';
 
 export type LiteratureFilterCategoryId =
-	| 'publication'
-	| 'access'
-	| 'impact'
-	| 'authorship'
-	| 'research'
-	| 'funding'
-	| 'integrity';
+	'publication' | 'access' | 'impact' | 'authorship' | 'research' | 'funding' | 'integrity';
 
 export type LiteratureEntityKind =
 	| 'works'
