@@ -131,6 +131,32 @@ export type CreateFromArtifactResult = {
 	linkedExisting: boolean;
 };
 
+/** Satu paper hasil pencarian literatur dikirim ke batch save/export — belum tentu tersimpan. */
+export type SearchSourceInput = {
+	clientKey: string;
+	title: string;
+	doi?: string | null;
+	url?: string | null;
+	authors?: string[];
+	year?: number | null;
+	venue?: string | null;
+	documentType?: string | null;
+};
+
+/** Hasil batch save: sukses dan gagal berdiri sendiri-sendiri (bukan all-or-nothing). */
+export type BulkSearchSaveResult = {
+	saved: number;
+	failed: number;
+	items: Array<{
+		clientKey: string;
+		status: 'saved' | 'failed';
+		citationId?: string;
+		created?: boolean;
+		code?: string;
+		message?: string;
+	}>;
+};
+
 export const CITATION_STYLE_OPTIONS: Array<{ id: CitationStyleId; label: string }> = [
 	{ id: 'apa-7', label: 'APA 7' },
 	{ id: 'ieee', label: 'IEEE' },

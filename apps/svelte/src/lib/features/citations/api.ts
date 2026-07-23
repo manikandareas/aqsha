@@ -13,11 +13,13 @@ import { queryKeys, unwrap } from '$lib/query';
 import {
 	type CitationExportFormat,
 	exportBlobType,
+	exportFileExtension,
 	exportFileName,
 	resolveExportContent
 } from './export-model';
 import type {
 	BibliographySort,
+	BulkSearchSaveResult,
 	CitationCandidate,
 	CitationDetail,
 	CitationDuplicateGroup,
@@ -32,7 +34,8 @@ import type {
 	ImportDuplicatePolicy,
 	ImportPreviewResult,
 	ManualCitationFields,
-	ProviderFolder
+	ProviderFolder,
+	SearchSourceInput
 } from './types';
 
 /**
@@ -687,5 +690,51 @@ export function useSaveSource() {
 			e instanceof SourceLinkError
 				? toast.warning('Sumber tersimpan ke perpustakaan, tapi gagal ditautkan ke proyek.')
 				: toast.error(readableApiErrorMessage(e, 'Gagal menyimpan sumber.'))
+	}));
+}
+
+// ── Batch save/export dari hasil pencarian literatur (Explore) ─────────────
+
+/**
+ * Simpan banyak paper terpilih sekaligus ke perpustakaan akun. Sukses per-source berdiri
+ * sendiri — sibling gagal tidak membatalkan yang lain — jadi cache hanya di-invalidate bila
+ * minimal satu source benar-benar tersimpan.
+ */
+export function useBulkSaveSearchSources() {
+	const api = getApiClient();
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (sources: SearchSourceInput[]) =>
+			unwrap(
+				await api.citations['bulk-save-search'].post({ sources })
+			) as BulkSearchSaveResult,
+		onSuccess: (result: BulkSearchSaveResult) => {
+			if (result.saved > 0) qc.invalidateQueries({ queryKey: queryKeys.citations.all });
+		},
+		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menyimpan sumber terpilih.'))
+	}));
+}
+
+/** Unduh export paper terpilih dari hasil pencarian — tanpa menyimpannya ke perpustakaan. */
+export function useExportSearchSources() {
+	const api = getApiClient();
+	return createMutation(() => ({
+		mutationFn: async (input: { format: CitationExportFormat; sources: SearchSourceInput[] }) => {
+			const data = unwrap(
+				await api.citations['export-search'].post({
+					format: input.format,
+					sources: input.sources
+				})
+			) as unknown;
+			const content = await resolveExportContent(data);
+			const blob = new Blob([content], { type: exportBlobType(input.format) });
+			const url = URL.createObjectURL(blob);
+			const anchor = document.createElement('a');
+			anchor.href = url;
+			anchor.download = `selected-papers.${exportFileExtension(input.format)}`;
+			anchor.click();
+			URL.revokeObjectURL(url);
+		},
+		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal mengekspor sumber terpilih.'))
 	}));
 }
