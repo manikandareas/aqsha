@@ -24,15 +24,24 @@ describe('parseTopicParam', () => {
 
 describe('readExploreUrl', () => {
 	it('defaults q to "" and topic to null on an empty URL', () => {
-		expect(readExploreUrl(new URLSearchParams())).toEqual({ q: '', topic: null });
+		expect(readExploreUrl(new URLSearchParams())).toEqual({
+			q: '',
+			sort: 'relevance',
+			filters: [],
+			topic: null
+		});
 	});
 	it('reads present values, dropping an invalid topic', () => {
 		expect(readExploreUrl(new URLSearchParams('q=agents&topic=kesehatan'))).toEqual({
 			q: 'agents',
+			sort: 'relevance',
+			filters: [],
 			topic: 'kesehatan'
 		});
 		expect(readExploreUrl(new URLSearchParams('q=agents&topic=bogus'))).toEqual({
 			q: 'agents',
+			sort: 'relevance',
+			filters: [],
 			topic: null
 		});
 	});
@@ -73,7 +82,25 @@ describe('applyExploreUrl / serializeExploreUrl', () => {
 		const s = serializeExploreUrl({ q: 'deep learning', topic: 'sosial_ekonomi' });
 		expect(readExploreUrl(new URLSearchParams(s))).toEqual({
 			q: 'deep learning',
+			sort: 'relevance',
+			filters: [],
 			topic: 'sosial_ekonomi'
+		});
+	});
+
+	it('round-trip q, sort, filter state versioned, dan topic legacy', () => {
+		const next = applyExploreUrl(new URLSearchParams('topic=kesehatan'), {
+			q: ' climate adaptation ',
+			sort: 'citations_desc',
+			filters: [{ id: 'citation_count', value: { min: 50 } }]
+		});
+		expect(next.get('q')).toBe('climate adaptation');
+		expect(next.get('sort')).toBe('citations_desc');
+		expect(next.get('f')).toMatch(/^eyJ2IjoxLCJjbGF1c2VzIjpb/);
+		expect(readExploreUrl(next)).toMatchObject({
+			q: 'climate adaptation',
+			topic: 'kesehatan',
+			sort: 'citations_desc'
 		});
 	});
 });

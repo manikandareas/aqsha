@@ -1,10 +1,15 @@
 import { createInfiniteQuery, createMutation, createQuery } from '@tanstack/svelte-query';
 import { getApiClient } from '$lib/api';
 import { queryKeys, unwrap } from '$lib/query';
+import type { AppliedLiteratureSearchState } from '$lib/features/explore/literature-search-state.svelte';
 import type { DiscoveryItemRef, ExplorePaper, FeedMode, FeedTopic } from './types';
-import { feedInfiniteQueryOptions, paperSearchInfiniteQueryOptions } from './query-options';
+import {
+	feedInfiniteQueryOptions,
+	literatureSearchInfiniteQueryOptions,
+	paperSearchInfiniteQueryOptions
+} from './query-options';
 
-export type { PaperSearchPage, SearchPaper } from './query-options';
+export type { LiteratureSearchPage, PaperSearchPage, SearchPaper } from './query-options';
 
 /**
  * Discovery query/mutation hooks. Called during component init (query + api-client context). Reactive
@@ -48,6 +53,17 @@ export function usePaperSearch(
 	);
 }
 
+/** Direct OpenAlex literature search (cursor pagination). Does not alter project paper search. */
+export function useLiteratureSearch(
+	state: () => AppliedLiteratureSearchState,
+	enabled: () => boolean
+) {
+	const api = getApiClient();
+	return createInfiniteQuery(() =>
+		literatureSearchInfiniteQueryOptions(api, { state: state(), enabled: enabled() })
+	);
+}
+
 /** Hide a discovery item (+ interest −1). Optimistic removal is handled by the caller. */
 export function useHideDiscovery() {
 	const api = getApiClient();
@@ -61,7 +77,7 @@ export function useHideDiscovery() {
 export function useRecordInteraction() {
 	const api = getApiClient();
 	return createMutation(() => ({
-		mutationFn: async (input: { itemRef: DiscoveryItemRef; kind: 'save' | 'hide' | 'research' }) =>
+		mutationFn: async (input: { itemRef: DiscoveryItemRef; kind: 'save' | 'research' | 'hide' }) =>
 			unwrap(await api.feed.discovery.interaction.post(input))
 	}));
 }

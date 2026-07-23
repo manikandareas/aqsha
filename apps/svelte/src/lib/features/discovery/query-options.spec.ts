@@ -2,12 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	FEED_PAGE_SIZE,
 	feedInfiniteQueryOptions,
+	literatureSearchInfiniteQueryOptions,
 	paperSearchInfiniteQueryOptions
 } from './query-options';
 
 const api = {
 	feed: { get: vi.fn() },
-	papers: { search: { get: vi.fn() } }
+	papers: {
+		search: { get: vi.fn() },
+		'literature-search': { post: vi.fn() }
+	}
 } as never;
 
 describe('discovery query options', () => {
@@ -43,5 +47,18 @@ describe('discovery query options', () => {
 			{ query: 'causal inference', fromYear: 2020 }
 		]);
 		expect(options.initialPageParam).toBe(1);
+	});
+
+	it('mengirim applied state dan meneruskan cursor', () => {
+		const options = literatureSearchInfiniteQueryOptions(api, {
+			state: { q: 'climate', sort: 'relevance', filters: [], topic: null },
+			enabled: true
+		});
+		expect(options.initialPageParam).toBeNull();
+		expect(options.queryKey).toEqual([
+			'papers',
+			'literature-search',
+			{ q: 'climate', sort: 'relevance', filters: [] }
+		]);
 	});
 });

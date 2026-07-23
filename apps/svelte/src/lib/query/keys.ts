@@ -43,7 +43,12 @@ export const queryKeys = {
 	papers: {
 		detail: (key: string) => ['papers', 'detail', key] as const,
 		search: (params: { query: string; fromYear: number | null }) =>
-			['papers', 'search', params] as const
+			['papers', 'search', params] as const,
+		literatureCatalog: () => ['papers', 'literature-catalog'] as const,
+		literatureAutocomplete: (kind: string, q: string) =>
+			['papers', 'literature-autocomplete', kind, q] as const,
+		literatureSearch: (state: { q: string; sort: string; filters: unknown }) =>
+			['papers', 'literature-search', state] as const
 	},
 	billing: {
 		all: ['billing'] as const,
