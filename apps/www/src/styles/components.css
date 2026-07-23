@@ -1,66 +1,92 @@
-/* Aqsha UI component-layer classes — the tactile depth language shared by the
-   design-system components. Depth is always a hard "lip" (offset solid shadow),
-   never a gradient. Composed through Tailwind's --tw-shadow chain so ring/focus
-   utilities still layer on top. */
+/* Aqsha UI component-layer classes — restrained, token-derived control depth.
+   Button shadows compose through Tailwind's --tw-shadow chain so ring/focus
+   utilities still layer correctly. */
 
 @layer components {
-	/* Keycap button face. --btn-face drives everything; set it per variant
-	   (e.g. [--btn-face:var(--secondary)]). Rest = 4px lip; pressed and open
-	   (dropdown trigger) bottom out: cap sinks 4px onto the surface. */
-	.btn-keycap {
-		--btn-face: var(--primary);
-		--btn-lip: color-mix(in oklch, var(--btn-face) 62%, black 38%);
-		background-color: var(--btn-face);
-		--tw-shadow: 0 4px 0 0 var(--btn-lip);
+	/* Shared interaction language for filled, outline, and tonal buttons.
+	   Rest is flat; hover gets only a small neutral lift; press settles back. */
+	.btn-smooth {
+		--tw-shadow: 0 0 #0000;
 		box-shadow:
 			var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
 			var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 		transition:
-			box-shadow 0.1s ease,
-			transform 0.1s ease,
+			box-shadow 0.15s ease,
+			transform 0.15s ease,
 			background-color 0.15s ease,
 			filter 0.15s ease;
 	}
 
-	.btn-keycap:hover {
-		filter: brightness(1.08);
+	.btn-smooth:hover {
+		transform: translateY(-1px);
+		filter: brightness(1.035);
+		--tw-shadow: 0 2px 4px -1px color-mix(in oklch, black 18%, transparent);
 	}
 
-	.btn-keycap:active,
-	.btn-keycap[aria-expanded='true'] {
-		transform: translateY(4px);
-		--tw-shadow: 0 0 0 0 var(--btn-lip);
-		filter: none;
+	.btn-smooth:active,
+	.btn-smooth[aria-expanded='true'] {
+		transform: translateY(1px);
+		filter: brightness(0.98);
+		--tw-shadow: 0 0 #0000;
 	}
 
-	.btn-keycap:disabled {
+	.btn-smooth:disabled {
 		transform: none;
 		filter: none;
 		--tw-shadow: 0 0 #0000;
 	}
 
-	/* Flat-face lip for outline/soft controls: 3px lip in the border color
-	   (or --lip-color override), pressed sinks 3px. */
-	.btn-lip {
-		--lip-color: var(--border);
-		--tw-shadow: 0 3px 0 0 var(--lip-color);
-		box-shadow:
-			var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
-			var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
-		transition:
-			box-shadow 0.1s ease,
-			transform 0.1s ease,
-			background-color 0.15s ease;
+	/* Solid variants share the same quiet face gradient. --btn-face selects
+	   primary or secondary without introducing another palette. */
+	.btn-filled-gradient {
+		--btn-gradient-top: color-mix(in oklch, var(--btn-face) 88%, white 12%);
+		--btn-gradient-bottom: color-mix(in oklch, var(--btn-face) 91%, black 9%);
+		background-color: var(--btn-face);
+		background-image: linear-gradient(
+			180deg,
+			var(--btn-gradient-top) 0%,
+			var(--btn-face) 52%,
+			var(--btn-gradient-bottom) 100%
+		);
 	}
 
-	.btn-lip:active {
-		transform: translateY(3px);
-		--tw-shadow: 0 0 0 0 var(--lip-color);
+	/* Outline keeps its semantic border while the interior gets a barely tinted
+	   vertical shift, matching the filled face without pretending to be solid. */
+	.btn-outline-gradient {
+		--btn-outline-bottom: color-mix(in oklch, var(--muted) 20%, var(--background));
+		background-image: linear-gradient(
+			180deg,
+			var(--background) 0%,
+			var(--btn-outline-bottom) 100%
+		);
 	}
 
-	.btn-lip:disabled {
-		transform: none;
-		--tw-shadow: 0 0 #0000;
+	.btn-outline-gradient:hover,
+	.btn-outline-gradient[aria-expanded='true'] {
+		--btn-outline-bottom: color-mix(in oklch, var(--muted) 38%, var(--background));
+	}
+
+	/* Destructive stays tonal rather than becoming a competing solid CTA. */
+	.btn-tonal-gradient {
+		--btn-tint: var(--destructive);
+		--btn-tint-top: color-mix(in oklch, var(--btn-tint) 8%, transparent);
+		--btn-tint-bottom: color-mix(in oklch, var(--btn-tint) 16%, transparent);
+		background-image: linear-gradient(
+			180deg,
+			var(--btn-tint-top) 0%,
+			var(--btn-tint-bottom) 100%
+		);
+	}
+
+	.btn-tonal-gradient:hover {
+		--btn-tint-top: color-mix(in oklch, var(--btn-tint) 13%, transparent);
+		--btn-tint-bottom: color-mix(in oklch, var(--btn-tint) 22%, transparent);
+	}
+
+	.btn-filled-gradient:disabled,
+	.btn-outline-gradient:disabled,
+	.btn-tonal-gradient:disabled {
+		background-image: none;
 	}
 
 	/* Floating surfaces (menu, popover, hover card, tooltip): hard 3px lip on the
