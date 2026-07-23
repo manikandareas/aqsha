@@ -66,8 +66,9 @@
 	/**
 	 * Perpustakaan referensi — akun (lintas proyek) atau koleksi satu proyek, dipilih lewat
 	 * `scope`. Chrome mengikuti board library: toolbar kompak + empty state terpusat; filter +
-	 * detail hidup di URL. Scope proyek menambah header breadcrumb dan mengganti aksi
-	 * keanggotaan/hapus massal dengan varian "lepas dari proyek".
+	 * detail hidup di URL. Isi utama adalah grid kartu index berwarna. Scope proyek menambah
+	 * header breadcrumb dan mengganti aksi keanggotaan/hapus massal dengan varian
+	 * "lepas dari proyek".
 	 */
 	let { scope }: { scope: LibraryScope } = $props();
 
@@ -450,7 +451,9 @@
 						Tidak ada referensi yang cocok dengan filter.
 					</p>
 				{:else}
-					<ul class="grid gap-2 px-5 pt-3 pb-8 @2xl:px-6">
+					<ul
+						class="grid grid-cols-1 gap-4 px-5 pt-4 pb-8 @md:grid-cols-2 @2xl:gap-5 @2xl:px-6 @3xl:grid-cols-3 @5xl:grid-cols-4 @[84rem]:grid-cols-5"
+					>
 						{#each items as item (item.id)}
 							<LibraryRow
 								{item}
