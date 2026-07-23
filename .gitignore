@@ -8,6 +8,7 @@ coverage
 .claude/
 .cursor/
 .codex/
+.firecrawl/
 .impeccable/
 .superpowers/
 .github/hooks/
