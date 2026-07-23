@@ -143,6 +143,7 @@ export {
 	ThumbsUpIcon as ThumbsUpIcon,
 	Delete02Icon as Trash2Icon,
 	ChartUpIcon as TrendingUpIcon,
+	Unlink01Icon as UnlinkIcon,
 	CloudUploadIcon as UploadCloudIcon,
 	Upload01Icon as UploadIcon,
 	UserIcon as UserRoundIcon,

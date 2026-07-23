@@ -1,10 +1,13 @@
+import { resolve } from '$app/paths';
+
 export type LibraryScope =
-	| { kind: 'global' }
-	| { kind: 'project'; workspaceId: string; workspaceName: string };
+	{ kind: 'global' } | { kind: 'project'; workspaceId: string; workspaceName: string };
 
 export function libraryBasePath(scope: LibraryScope): string {
-	if (scope.kind === 'global') return '/app/library';
-	return `/app/projects/${encodeURIComponent(scope.workspaceId)}/references`;
+	if (scope.kind === 'global') return resolve('/app/(product)/library');
+	return resolve('/app/(product)/projects/[projectId]/references', {
+		projectId: scope.workspaceId
+	});
 }
 
 export function libraryWorkspaceId(scope: LibraryScope): string | null {

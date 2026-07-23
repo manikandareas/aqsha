@@ -13,15 +13,18 @@
 	import { panelBodyColumnClass, panelHeaderBarClass } from '$lib/components/layout/panel-surface';
 	import { PageTitle } from '$lib/seo';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import { readableApiErrorMessage } from '$lib/errors';
 	import {
 		Icon,
 		FilterIcon,
+		FolderIcon,
 		LinkIcon,
 		MoreHorizontalIcon,
 		PenLineIcon,
 		PlusIcon,
 		Quote,
 		SearchIcon,
+		UnlinkIcon,
 		UploadIcon,
 		XIcon
 	} from '$lib/icons';
@@ -33,12 +36,14 @@
 	import CitationFormDialog from '../components/CitationFormDialog.svelte';
 	import CitationImportWizard from '../components/CitationImportWizard.svelte';
 	import ProviderSyncWizard from '../components/ProviderSyncWizard.svelte';
+	import AddFromLibraryDialog from '../components/library/AddFromLibraryDialog.svelte';
 	import AddToProjectDialog from '../components/library/AddToProjectDialog.svelte';
 	import LibraryBulkBar from '../components/library/LibraryBulkBar.svelte';
 	import LibraryRow from '../components/library/LibraryRow.svelte';
 	import {
 		useBulkDeleteCitations,
 		useBulkTagCitations,
+		useBulkUnlinkCitations,
 		useCitationDetail,
 		useCitationsList,
 		useCitationTags,
@@ -46,17 +51,32 @@
 		useCreateCitation,
 		useDeleteCitation,
 		useMergeManyCitations,
+		useUnlinkCitation,
 		useUpdateCitation
 	} from '../api';
 	import { CITATION_SOURCE_LABELS, CITATION_STATUS_LABELS, type CitationListItem } from '../types';
 	import { applyLibraryUrl, readLibraryUrl, type LibraryUrlState } from '../library-url-model';
+	import {
+		libraryBasePath,
+		libraryTitle,
+		libraryWorkspaceId,
+		type LibraryScope
+	} from '../library-scope';
 
 	/**
-	 * Perpustakaan referensi akun (lintas proyek). Chrome mengikuti board library:
-	 * toolbar kompak + empty state terpusat; filter + detail hidup di URL.
+	 * Perpustakaan referensi — akun (lintas proyek) atau koleksi satu proyek, dipilih lewat
+	 * `scope`. Chrome mengikuti board library: toolbar kompak + empty state terpusat; filter +
+	 * detail hidup di URL. Scope proyek menambah header breadcrumb dan mengganti aksi
+	 * keanggotaan/hapus massal dengan varian "lepas dari proyek".
 	 */
+	let { scope }: { scope: LibraryScope } = $props();
+
 	const clerk = useClerkContext();
 	const enabled = $derived(clerk.isLoaded && Boolean(clerk.auth.userId));
+
+	const workspaceId = $derived(libraryWorkspaceId(scope));
+	const basePath = $derived(libraryBasePath(scope));
+	const projectScope = $derived(scope.kind === 'project');
 
 	const urlState = $derived(readLibraryUrl(page.url.searchParams));
 	const filters = $derived({
@@ -69,17 +89,22 @@
 	function navigate(patch: Partial<LibraryUrlState>): void {
 		const url = new SvelteURL(page.url);
 		url.search = applyLibraryUrl(url.searchParams, patch).toString();
-		replaceState(resolve('/app/(product)/library') + url.search + url.hash, page.state);
+		replaceState(basePath + url.search + url.hash, page.state);
 	}
 
 	const list = useCitationsList(
 		() => filters,
-		() => enabled
+		() => enabled,
+		() => workspaceId
 	);
-	const tags = useCitationTags(() => enabled);
-	const copy = useCopyCitation(() => null);
+	const tags = useCitationTags(
+		() => enabled,
+		() => workspaceId
+	);
+	const copy = useCopyCitation(() => workspaceId);
 
-	type DialogKind = 'doi' | 'manual' | 'import' | 'provider' | 'duplicates' | null;
+	type DialogKind =
+		'doi' | 'manual' | 'import' | 'provider' | 'duplicates' | 'addFromLibrary' | null;
 	let dialog = $state<DialogKind>(null);
 	let addToProjectId = $state<string | null>(null);
 	let editTargetId = $state<string | null>(null);
@@ -94,15 +119,18 @@
 		selectedIds.clear();
 	}
 
-	const createCitation = useCreateCitation();
+	const createCitation = useCreateCitation(() => workspaceId);
 	const updateCitation = useUpdateCitation();
 	const deleteCitation = useDeleteCitation();
 	const bulkTag = useBulkTagCitations();
 	const bulkDelete = useBulkDeleteCitations();
+	const bulkUnlink = useBulkUnlinkCitations();
+	const unlinkCitation = useUnlinkCitation();
 	const mergeMany = useMergeManyCitations();
 	const editTarget = useCitationDetail(
 		() => editTargetId,
-		() => enabled
+		() => enabled,
+		() => workspaceId
 	);
 
 	const items = $derived<CitationListItem[]>(list.data?.pages.flatMap((p) => p.items) ?? []);
@@ -131,9 +159,34 @@
 		navigate({ q: '' });
 		collapseSearch();
 	}
+
+	/** Aksi keanggotaan baris: tambahkan (global) vs lepas dari proyek aktif (project). */
+	function membershipActionFor(item: CitationListItem) {
+		if (workspaceId) {
+			const ws = workspaceId;
+			return {
+				label: 'Lepas dari proyek',
+				icon: UnlinkIcon,
+				run: () =>
+					unlinkCitation.mutate(
+						{ workspaceId: ws, citationId: item.id },
+						{
+							onSuccess: () => {
+								if (urlState.cite === item.id) navigate({ cite: null });
+							}
+						}
+					)
+			};
+		}
+		return {
+			label: 'Tambahkan ke proyek',
+			icon: FolderIcon,
+			run: () => (addToProjectId = item.id)
+		};
+	}
 </script>
 
-<PageTitle title="Perpustakaan" />
+<PageTitle title={libraryTitle(scope)} />
 
 <div class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
 	<DetailSplitLayout
@@ -145,9 +198,26 @@
 		{#snippet main()}
 			<header class={cn(panelHeaderBarClass, 'border-b-0')}>
 				<div class="flex min-w-0 items-center gap-1.5">
-					<h1 class="min-w-0 shrink-0 truncate rounded-md text-base font-semibold text-foreground">
-						Perpustakaan
-					</h1>
+					{#if scope.kind === 'project'}
+						<a
+							href={resolve('/app/(product)/library')}
+							class="shrink-0 rounded-md text-base font-semibold text-muted-foreground transition-colors hover:text-foreground hover:underline"
+						>
+							Perpustakaan
+						</a>
+						<span aria-hidden="true" class="shrink-0 text-base font-semibold text-muted-foreground">
+							/
+						</span>
+						<h1 class="min-w-0 truncate rounded-md text-base font-semibold text-foreground">
+							{scope.workspaceName}
+						</h1>
+					{:else}
+						<h1
+							class="min-w-0 shrink-0 truncate rounded-md text-base font-semibold text-foreground"
+						>
+							Perpustakaan
+						</h1>
+					{/if}
 					{#if enabled && !list.isPending}
 						<span
 							class="hidden rounded-md border border-border/70 bg-muted/30 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground sm:inline"
@@ -171,6 +241,13 @@
 							{/snippet}
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content align="start" class="w-52">
+							{#if projectScope}
+								<DropdownMenu.Item onSelect={() => (dialog = 'addFromLibrary')}>
+									<Icon icon={FolderIcon} class="size-4" />
+									Dari Perpustakaan
+								</DropdownMenu.Item>
+								<DropdownMenu.Separator />
+							{/if}
 							<DropdownMenu.Item onSelect={() => (dialog = 'import')}>
 								<Icon icon={UploadIcon} class="size-4" />
 								Import file (.bib/.ris)
@@ -318,7 +395,7 @@
 
 					<span aria-hidden="true" class="mx-0.5 h-4 w-px shrink-0 bg-border/70"></span>
 
-					<CitationExportMenu disabled={items.length === 0} />
+					<CitationExportMenu disabled={items.length === 0} {workspaceId} />
 
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger>
@@ -339,9 +416,11 @@
 							<DropdownMenu.Item onSelect={() => (selectionMode = true)}>
 								Pilih beberapa
 							</DropdownMenu.Item>
-							<DropdownMenu.Item onSelect={() => (dialog = 'duplicates')}>
-								Kelola duplikat
-							</DropdownMenu.Item>
+							{#if !projectScope}
+								<DropdownMenu.Item onSelect={() => (dialog = 'duplicates')}>
+									Kelola duplikat
+								</DropdownMenu.Item>
+							{/if}
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
 				</div>
@@ -361,8 +440,18 @@
 							</li>
 						{/each}
 					</ul>
+				{:else if list.isError}
+					<div class="grid place-items-center gap-3 py-16 text-center">
+						<p class="max-w-sm text-[13px] font-medium text-destructive">
+							{readableApiErrorMessage(list.error, 'Perpustakaan tidak dapat dimuat')}
+						</p>
+						<Button type="button" variant="outline" onclick={() => list.refetch()}>Coba lagi</Button
+						>
+					</div>
 				{:else if items.length === 0 && !hasFilter}
 					<CitationEmptyState
+						{scope}
+						onAddFromLibrary={() => (dialog = 'addFromLibrary')}
 						onImportFile={() => (dialog = 'import')}
 						onAddByDoi={() => (dialog = 'doi')}
 						onAddManual={() => (dialog = 'manual')}
@@ -382,7 +471,7 @@
 									selectedIds.has(item.id) ? selectedIds.delete(item.id) : selectedIds.add(item.id)}
 								onOpen={() => navigate({ cite: item.id })}
 								onCopy={() => copy.mutate(item.id)}
-								onAddToProject={() => (addToProjectId = item.id)}
+								membershipAction={membershipActionFor(item)}
 								onEdit={() => (editTargetId = item.id)}
 								onDelete={() => (deleteTarget = item)}
 							/>
@@ -391,6 +480,8 @@
 					{#if selectionMode && selectedIds.size > 0}
 						<LibraryBulkBar
 							ids={[...selectedIds]}
+							destructiveLabel={projectScope ? 'Lepas dari proyek' : 'Hapus dari Perpustakaan'}
+							{workspaceId}
 							onTag={(newTags) =>
 								bulkTag.mutate(
 									{ ids: [...selectedIds], tags: newTags },
@@ -420,7 +511,7 @@
 			{#if urlState.cite}
 				{#key urlState.cite}
 					<CitationDetailView
-						workspaceId={null}
+						{workspaceId}
 						citationId={urlState.cite}
 						onBack={() => navigate({ cite: null })}
 					/>
@@ -461,31 +552,44 @@
 	open={dialog === 'import'}
 	onOpenChange={(open) => (dialog = open ? 'import' : null)}
 	onDone={() => (dialog = null)}
+	{workspaceId}
 />
 <ProviderSyncWizard
 	open={dialog === 'provider'}
 	onOpenChange={(open) => (dialog = open ? 'provider' : null)}
 	onDone={() => (dialog = null)}
+	{workspaceId}
 />
 <CitationDuplicatesDialog
 	open={dialog === 'duplicates'}
 	onOpenChange={(open) => (dialog = open ? 'duplicates' : null)}
 />
-<AddToProjectDialog
-	open={addToProjectId !== null}
-	onOpenChange={(open) => {
-		if (!open) addToProjectId = null;
-	}}
-	citationId={addToProjectId}
-/>
+{#if !projectScope}
+	<AddToProjectDialog
+		open={addToProjectId !== null}
+		onOpenChange={(open) => {
+			if (!open) addToProjectId = null;
+		}}
+		citationId={addToProjectId}
+	/>
+{/if}
+{#if workspaceId}
+	<AddFromLibraryDialog
+		open={dialog === 'addFromLibrary'}
+		onOpenChange={(open) => (dialog = open ? 'addFromLibrary' : null)}
+		{workspaceId}
+	/>
+{/if}
 <ConfirmDialog
 	open={deleteTarget !== null}
 	onOpenChange={(open) => {
 		if (!open) deleteTarget = null;
 	}}
-	title="Hapus referensi?"
-	description={`"${deleteTarget?.title ?? ''}" dihapus dari perpustakaan (bisa dilihat lagi lewat filter di masa depan — soft delete).`}
-	confirmLabel="Hapus"
+	title="Hapus dari Perpustakaan?"
+	description={projectScope
+		? `"${deleteTarget?.title ?? ''}" akan hilang dari perpustakaan dan dari setiap proyek yang menautkannya.`
+		: `"${deleteTarget?.title ?? ''}" dihapus dari perpustakaan (bisa dilihat lagi lewat filter di masa depan — soft delete).`}
+	confirmLabel="Hapus dari Perpustakaan"
 	onConfirm={async () => {
 		if (!deleteTarget) return;
 		await deleteCitation.mutateAsync(deleteTarget.id);
@@ -496,11 +600,20 @@
 <ConfirmDialog
 	open={confirmBulkDelete}
 	onOpenChange={(open) => (confirmBulkDelete = open)}
-	title={`Hapus ${selectedIds.size} referensi?`}
-	description="Referensi terpilih dihapus dari perpustakaan."
-	confirmLabel="Hapus"
+	title={projectScope
+		? `Lepas ${selectedIds.size} referensi dari proyek?`
+		: `Hapus ${selectedIds.size} referensi?`}
+	description={projectScope
+		? 'Referensi tetap ada di perpustakaan akun; hanya tautan ke proyek ini yang dihapus.'
+		: 'Referensi terpilih dihapus dari perpustakaan.'}
+	confirmLabel={projectScope ? 'Lepas dari proyek' : 'Hapus dari Perpustakaan'}
 	onConfirm={async () => {
-		await bulkDelete.mutateAsync([...selectedIds]);
+		if (projectScope && workspaceId) {
+			await bulkUnlink.mutateAsync({ workspaceId, ids: [...selectedIds] });
+		} else {
+			await bulkDelete.mutateAsync([...selectedIds]);
+		}
+		if (urlState.cite && selectedIds.has(urlState.cite)) navigate({ cite: null });
 		confirmBulkDelete = false;
 		clearSelection();
 	}}

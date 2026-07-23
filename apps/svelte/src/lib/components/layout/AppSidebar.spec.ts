@@ -11,4 +11,11 @@ describe('AppSidebar route hrefs', () => {
 		expect(source).toContain('<a {...props} href={resolve(route)}>');
 		expect(source).toContain('<a {...props} href={referencesHref}>');
 	});
+
+	it('resolves the project references submenu against a real route ID', () => {
+		expect(source).toContain(
+			"referencesHref = resolve('/app/(product)/projects/[projectId]/references'"
+		);
+		expect(source).not.toContain('no-navigation-without-resolve');
+	});
 });

@@ -100,6 +100,7 @@ import {
   TerminalIcon,
   ThumbsDownIcon as HugeThumbsDownIcon,
   ThumbsUpIcon as HugeThumbsUpIcon,
+  Unlink01Icon,
   Upload01Icon,
   CloudUploadIcon,
   UserIcon,
@@ -255,6 +256,7 @@ export const ThumbsDownIcon = createIcon(HugeThumbsDownIcon);
 export const ThumbsUpIcon = createIcon(HugeThumbsUpIcon);
 export const Trash2Icon = createIcon(Delete02Icon);
 export const TrendingUpIcon = createIcon(ChartUpIcon);
+export const UnlinkIcon = createIcon(Unlink01Icon);
 export const UploadCloudIcon = createIcon(CloudUploadIcon);
 export const UploadIcon = createIcon(Upload01Icon);
 export const UserRoundIcon = createIcon(UserIcon);

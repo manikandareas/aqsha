@@ -3,17 +3,23 @@ import { readFileSync } from 'node:fs';
 
 const routeSource = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
+const cases = [
+	{ path: '../lib/features/explore/components/ExplorePage.svelte', usesScopeBasePath: false },
+	{ path: '../lib/features/citations/pages/LibraryPage.svelte', usesScopeBasePath: true }
+];
+
 describe('same-page URL state', () => {
-	it.each([
-		'../lib/features/explore/components/ExplorePage.svelte',
-		'../lib/features/citations/pages/LibraryPage.svelte'
-	])('%s uses shallow state replacement', (path) => {
+	it.each(cases)('$path uses shallow state replacement', ({ path, usesScopeBasePath }) => {
 		const source = routeSource(path);
 
 		expect(source).toContain("import { replaceState } from '$app/navigation'");
 		expect(source).toContain('replaceState(');
 		expect(source).toContain('page.state');
-		expect(source).toContain("resolve('/app/(product)/");
+		if (usesScopeBasePath) {
+			expect(source).toContain('libraryBasePath(scope)');
+		} else {
+			expect(source).toContain("resolve('/app/(product)/");
+		}
 		expect(source).not.toContain('goto(url');
 	});
 });

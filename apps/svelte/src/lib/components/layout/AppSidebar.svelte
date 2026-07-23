@@ -208,7 +208,9 @@
 							{@const detailHref = resolve('/app/(product)/projects/[projectId]', {
 								projectId: project.id
 							})}
-							{@const referencesHref = `${detailHref}/references`}
+							{@const referencesHref = resolve('/app/(product)/projects/[projectId]/references', {
+								projectId: project.id
+							})}
 							{@const open = expandedProjects.has(project.id)}
 							<Collapsible.Root {open} onOpenChange={(v) => setProjectExpanded(project.id, v)}>
 								<Sidebar.MenuItem class="min-w-0 overflow-hidden pl-[3px]">
@@ -330,7 +332,6 @@
 													class={sidebarSubItemBaseClass}
 												>
 													{#snippet child({ props })}
-														<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- this legacy child path has no route ID yet. -->
 														<a {...props} href={referencesHref}>
 															<Icon icon={Quote} class="shrink-0" />
 															<span>Referensi</span>

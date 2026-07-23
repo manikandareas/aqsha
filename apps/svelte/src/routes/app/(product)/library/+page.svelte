@@ -2,4 +2,4 @@
 	import LibraryPage from '$lib/features/citations/pages/LibraryPage.svelte';
 </script>
 
-<LibraryPage />
+<LibraryPage scope={{ kind: 'global' }} />
