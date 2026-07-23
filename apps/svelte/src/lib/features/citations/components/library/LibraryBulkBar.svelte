@@ -5,15 +5,23 @@
 	import { Icon, LayersIcon, Trash2Icon, XIcon } from '$lib/icons';
 	import CitationExportMenu from '../CitationExportMenu.svelte';
 
-	/** Bar aksi massal saat mode pilih aktif. Merge butuh ≥2; target dipilih server (terlengkap). */
+	/**
+	 * Bar aksi massal saat mode pilih aktif. Merge butuh ≥2; target dipilih server (terlengkap).
+	 * `destructiveLabel` menjelaskan aksi hapus/lepas secara eksplisit — bar ini tidak
+	 * menyimpulkan scope sendiri, pemanggil yang menentukan salinan dan target export.
+	 */
 	let {
 		ids,
+		destructiveLabel,
+		workspaceId,
 		onTag,
 		onMerge,
 		onDelete,
 		onClear
 	}: {
 		ids: string[];
+		destructiveLabel: string;
+		workspaceId?: string | null;
 		onTag: (tags: string[]) => void;
 		onMerge: () => void;
 		onDelete: () => void;
@@ -56,7 +64,7 @@
 			</form>
 		</Popover.Content>
 	</Popover.Root>
-	<CitationExportMenu {ids} />
+	<CitationExportMenu {ids} {workspaceId} />
 	<Button
 		type="button"
 		variant="outline"
@@ -74,7 +82,8 @@
 		class="gap-1.5 text-destructive"
 		onclick={onDelete}
 	>
-		<Icon icon={Trash2Icon} class="size-3.5" /> Hapus
+		<Icon icon={Trash2Icon} class="size-3.5" />
+		{destructiveLabel}
 	</Button>
 	<Button
 		type="button"

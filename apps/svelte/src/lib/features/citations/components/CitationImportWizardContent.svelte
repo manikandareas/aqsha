@@ -18,10 +18,12 @@
 
 	let {
 		onOpenChange,
-		onDone
+		onDone,
+		workspaceId = null
 	}: {
 		onOpenChange: (open: boolean) => void;
 		onDone: () => void;
+		workspaceId?: string | null;
 	} = $props();
 
 	let wizard = $state<WizardStep>({ step: 'upload' });
@@ -30,7 +32,7 @@
 	let policy = $state<ImportDuplicatePolicy>('skip');
 	let dragOver = $state(false);
 	const preview = useImportPreview();
-	const commit = useImportCommit();
+	const commit = useImportCommit(() => workspaceId);
 
 	async function handleFile(file: File | null | undefined) {
 		if (!file) return;

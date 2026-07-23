@@ -91,7 +91,9 @@ export function useCitationsList(
 			const ws = workspaceId();
 			const query = listQuery(f, pageParam);
 			if (ws) {
-				return unwrap(await api.workspaces({ id: ws }).citations.get({ query })) as CitationListResponse;
+				return unwrap(
+					await api.workspaces({ id: ws }).citations.get({ query })
+				) as CitationListResponse;
 			}
 			return unwrap(await api.citations.get({ query })) as CitationListResponse;
 		},
@@ -159,7 +161,8 @@ export function useCitationCandidates(
 				})
 			) as { items: CitationCandidate[]; nextCursor: string | null; total: number };
 		},
-		getNextPageParam: (last: { nextCursor: string | null }) => last.nextCursor
+		getNextPageParam: (last: { items: CitationCandidate[]; nextCursor: string | null }) =>
+			last.nextCursor
 	}));
 }
 
@@ -177,9 +180,9 @@ export function useCreateCitation(workspaceId: () => string | null = () => null)
 		}) => {
 			const ws = workspaceId();
 			if (ws) {
-				return unwrap(
-					await api.workspaces({ id: ws }).citations.post(input)
-				) as CitationDetail & { created: boolean };
+				return unwrap(await api.workspaces({ id: ws }).citations.post(input)) as CitationDetail & {
+					created: boolean;
+				};
 			}
 			return unwrap(await api.citations.post(input)) as CitationDetail & { created: boolean };
 		},

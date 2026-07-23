@@ -5,18 +5,21 @@
 	import { useExportCitations } from '../api';
 
 	/**
-	 * Export perpustakaan akun ke BibTeX / RIS / CSL-JSON (unduh file). Tanpa `ids` = seluruh
-	 * perpustakaan (toolbar); dengan `ids` = hanya yang terpilih (bulk bar seleksi).
+	 * Export perpustakaan akun atau koleksi proyek ke BibTeX / RIS / CSL-JSON (unduh file).
+	 * Tanpa `ids` = seluruh scope saat ini (toolbar); dengan `ids` = hanya yang terpilih
+	 * (bulk bar seleksi). `workspaceId` null/undefined mengarah ke perpustakaan akun.
 	 */
 	let {
 		disabled,
-		ids
+		ids,
+		workspaceId
 	}: {
 		disabled?: boolean;
 		ids?: string[];
+		workspaceId?: string | null;
 	} = $props();
 
-	const exportCitations = useExportCitations();
+	const exportCitations = useExportCitations(() => workspaceId ?? null);
 	const scoped = $derived(ids?.length ? { ids } : {});
 </script>
 

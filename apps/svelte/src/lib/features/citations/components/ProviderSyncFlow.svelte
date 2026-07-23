@@ -23,13 +23,15 @@
 		providers,
 		onProviderChange,
 		onOpenChange,
-		onDone
+		onDone,
+		workspaceId = null
 	}: {
 		provider: IntegrationProviderKey;
 		providers: IntegrationProviderKey[];
 		onProviderChange: (provider: IntegrationProviderKey) => void;
 		onOpenChange: (open: boolean) => void;
 		onDone: () => void;
+		workspaceId?: string | null;
 	} = $props();
 
 	let wizard = $state<WizardStep>({ step: 'folder' });
@@ -43,7 +45,10 @@
 		() => wizard.step === 'folder'
 	);
 	const preview = useProviderSyncPreview(() => provider);
-	const commit = useProviderSyncCommit(() => provider);
+	const commit = useProviderSyncCommit(
+		() => provider,
+		() => workspaceId
+	);
 
 	async function handlePreview() {
 		error = null;

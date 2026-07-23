@@ -1,22 +1,37 @@
 <script lang="ts">
-	import { FileTextIcon, Icon, LinkIcon, PenLineIcon, Quote, UploadIcon } from '$lib/icons';
+	import {
+		FileTextIcon,
+		FolderIcon,
+		Icon,
+		LinkIcon,
+		PenLineIcon,
+		Quote,
+		UploadIcon
+	} from '$lib/icons';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { resolve } from '$app/paths';
+	import type { LibraryScope } from '../library-scope';
 
 	/**
 	 * Empty state Perpustakaan — anatomi board library (badge pill → title + deskripsi →
 	 * hairline → stacked pill actions). CTAs pendek agar mirip toolbar create di workspace.
+	 * Scope proyek memprioritaskan menautkan referensi yang sudah ada sebelum membuat baru.
 	 */
 	let {
+		scope,
+		onAddFromLibrary,
 		onImportFile,
 		onAddByDoi,
 		onAddManual
 	}: {
+		scope: LibraryScope;
+		onAddFromLibrary?: () => void;
 		onImportFile: () => void;
 		onAddByDoi: () => void;
 		onAddManual: () => void;
 	} = $props();
 
+	const isProject = $derived(scope.kind === 'project');
 	const integrationsHref = resolve('/app/(console)/settings/integrations');
 </script>
 
@@ -33,9 +48,13 @@
 	</div>
 
 	<div class="mt-5 grid max-w-[17rem] gap-1.5">
-		<p class="text-[15px] font-semibold text-balance text-foreground">Kumpulkan paper-mu di sini</p>
+		<p class="text-[15px] font-semibold text-balance text-foreground">
+			{isProject ? 'Belum ada referensi di proyek ini' : 'Kumpulkan paper-mu di sini'}
+		</p>
 		<p class="text-[13px] leading-relaxed font-medium text-pretty text-muted-foreground">
-			Simpan DOI, file bibliografi, atau entri manual untuk mulai membangun perpustakaan risetmu.
+			{isProject
+				? 'Tautkan referensi dari perpustakaan atau tambahkan yang baru untuk proyek ini.'
+				: 'Simpan DOI, file bibliografi, atau entri manual untuk mulai membangun perpustakaan risetmu.'}
 		</p>
 	</div>
 
@@ -45,18 +64,37 @@
 	></div>
 
 	<div class="flex flex-col items-center gap-2">
-		<Button type="button" class="rounded-full px-4" onclick={onImportFile}>
-			<Icon icon={UploadIcon} class="size-4" />
-			Import
-		</Button>
-		<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onAddByDoi}>
-			<Icon icon={LinkIcon} class="size-4" />
-			DOI
-		</Button>
-		<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onAddManual}>
-			<Icon icon={PenLineIcon} class="size-4" />
-			Manual
-		</Button>
+		{#if isProject}
+			<Button type="button" class="rounded-full px-4" onclick={onAddFromLibrary}>
+				<Icon icon={FolderIcon} class="size-4" />
+				Tambah dari Perpustakaan
+			</Button>
+			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onImportFile}>
+				<Icon icon={UploadIcon} class="size-4" />
+				Import
+			</Button>
+			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onAddByDoi}>
+				<Icon icon={LinkIcon} class="size-4" />
+				DOI
+			</Button>
+			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onAddManual}>
+				<Icon icon={PenLineIcon} class="size-4" />
+				Manual
+			</Button>
+		{:else}
+			<Button type="button" class="rounded-full px-4" onclick={onImportFile}>
+				<Icon icon={UploadIcon} class="size-4" />
+				Import
+			</Button>
+			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onAddByDoi}>
+				<Icon icon={LinkIcon} class="size-4" />
+				DOI
+			</Button>
+			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onAddManual}>
+				<Icon icon={PenLineIcon} class="size-4" />
+				Manual
+			</Button>
+		{/if}
 	</div>
 
 	<p class="mt-8 max-w-[19rem] text-[12px] font-medium text-muted-foreground/80">

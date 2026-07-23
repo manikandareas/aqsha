@@ -10,16 +10,18 @@
 	let {
 		open,
 		onOpenChange,
-		onDone
+		onDone,
+		workspaceId = null
 	}: {
 		open: boolean;
 		onOpenChange: (open: boolean) => void;
 		onDone: () => void;
+		workspaceId?: string | null;
 	} = $props();
 </script>
 
 <Dialog.Root {open} {onOpenChange}>
 	{#if open}
-		<CitationImportWizardContent {onOpenChange} {onDone} />
+		<CitationImportWizardContent {onOpenChange} {onDone} {workspaceId} />
 	{/if}
 </Dialog.Root>

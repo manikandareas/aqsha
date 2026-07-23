@@ -1,0 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const read = (name: string) => readFileSync(new URL(name, import.meta.url), 'utf8');
+
+describe('scoped library component contracts', () => {
+	it('uses explicit semantic actions', () => {
+		expect(read('./LibraryRow.svelte')).toContain('membershipAction');
+		expect(read('./LibraryRow.svelte')).not.toContain('page.url');
+		expect(read('./LibraryBulkBar.svelte')).toContain('destructiveLabel');
+		expect(read('../CitationEmptyState.svelte')).toContain('onAddFromLibrary');
+	});
+});

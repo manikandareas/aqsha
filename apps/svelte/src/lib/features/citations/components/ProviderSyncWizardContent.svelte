@@ -8,10 +8,12 @@
 
 	let {
 		onOpenChange,
-		onDone
+		onDone,
+		workspaceId = null
 	}: {
 		onOpenChange: (open: boolean) => void;
 		onDone: () => void;
+		workspaceId?: string | null;
 	} = $props();
 
 	const auth = getAuthState();
@@ -50,5 +52,6 @@
 		onProviderChange={(p) => (provider = p)}
 		{onOpenChange}
 		{onDone}
+		{workspaceId}
 	/>
 {/if}

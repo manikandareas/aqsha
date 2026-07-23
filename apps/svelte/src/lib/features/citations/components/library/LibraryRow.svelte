@@ -4,7 +4,13 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Checkbox } from '@aqsha/ui-svelte/components/checkbox';
 	import { cn } from '@aqsha/ui-svelte/utils';
-	import { Icon, CopyIcon, ExternalLinkIcon, FolderIcon, MoreHorizontalIcon } from '$lib/icons';
+	import {
+		Icon,
+		CopyIcon,
+		ExternalLinkIcon,
+		MoreHorizontalIcon,
+		type IconSvgElement
+	} from '$lib/icons';
 	import {
 		CITATION_SOURCE_LABELS,
 		CITATION_STATUS_LABELS,
@@ -12,7 +18,12 @@
 		type CitationListItem
 	} from '../../types';
 
-	/** Baris perpustakaan lebar penuh: status → judul → meta → source → tag → aksi hover. */
+	/**
+	 * Baris perpustakaan lebar penuh: status → judul → meta → source → tag → aksi hover.
+	 * `membershipAction` adalah aksi keanggotaan proyek eksplisit (tambahkan ke proyek di
+	 * scope global, lepas dari proyek di scope proyek) — baris ini tidak menyimpulkan scope
+	 * dari URL, pemanggil yang menentukan label/ikon/aksi.
+	 */
 	let {
 		item,
 		selectionMode,
@@ -20,7 +31,7 @@
 		onToggleSelect,
 		onOpen,
 		onCopy,
-		onAddToProject,
+		membershipAction,
 		onEdit,
 		onDelete
 	}: {
@@ -30,7 +41,7 @@
 		onToggleSelect: () => void;
 		onOpen: () => void;
 		onCopy: () => void;
-		onAddToProject: () => void;
+		membershipAction: { label: string; icon: IconSvgElement; run: () => void };
 		onEdit: () => void;
 		onDelete: () => void;
 	} = $props();
@@ -93,10 +104,10 @@
 			variant="ghost"
 			size="icon"
 			class="size-7"
-			aria-label="Tambahkan ke proyek"
-			onclick={onAddToProject}
+			aria-label={membershipAction.label}
+			onclick={membershipAction.run}
 		>
-			<Icon icon={FolderIcon} class="size-3.5" />
+			<Icon icon={membershipAction.icon} class="size-3.5" />
 		</Button>
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger>

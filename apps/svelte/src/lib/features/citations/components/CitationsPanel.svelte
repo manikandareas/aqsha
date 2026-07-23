@@ -259,6 +259,7 @@
 		{#if showEmptyState}
 			<div class={cn('min-h-0 flex-1 overflow-y-auto', panelBodyPaddingClass)}>
 				<CitationEmptyState
+					scope={{ kind: 'project', workspaceId, workspaceName: '' }}
 					onImportFile={() => (dialog = 'import')}
 					onAddByDoi={() => (dialog = 'doi')}
 					onAddManual={() => (dialog = 'manual')}
