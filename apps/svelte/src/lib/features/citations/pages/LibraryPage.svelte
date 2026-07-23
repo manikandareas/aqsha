@@ -5,7 +5,6 @@
 	import { page } from '$app/state';
 	import { useClerkContext } from 'svelte-clerk';
 	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import * as DropdownMenu from '@aqsha/ui-svelte/components/dropdown-menu';
 	import * as InputGroup from '@aqsha/ui-svelte/components/input-group';
 	import { cn } from '@aqsha/ui-svelte/utils';
@@ -39,6 +38,7 @@
 	import AddFromLibraryDialog from '../components/library/AddFromLibraryDialog.svelte';
 	import AddToProjectDialog from '../components/library/AddToProjectDialog.svelte';
 	import LibraryBulkBar from '../components/library/LibraryBulkBar.svelte';
+	import LibraryListSkeleton from '../components/library/LibraryListSkeleton.svelte';
 	import LibraryRow from '../components/library/LibraryRow.svelte';
 	import {
 		useBulkDeleteCitations,
@@ -428,18 +428,7 @@
 
 			<div class={cn(panelBodyColumnClass, 'min-h-0 flex-1 overflow-y-auto')}>
 				{#if !enabled || list.isPending}
-					<ul class="grid gap-2 px-5 pt-3 pb-8 @2xl:px-6" aria-label="Memuat perpustakaan">
-						{#each ['a', 'b', 'c', 'd', 'e', 'f'] as key (key)}
-							<li class="flex items-center gap-3 rounded-md border-2 border-border px-4 py-3">
-								<Skeleton class="size-2 shrink-0 rounded-full" />
-								<div class="min-w-0 flex-1 space-y-2">
-									<Skeleton class="h-3.5 w-2/3" />
-									<Skeleton class="h-3 w-2/5" />
-								</div>
-								<Skeleton class="hidden h-5 w-20 sm:block" />
-							</li>
-						{/each}
-					</ul>
+					<LibraryListSkeleton />
 				{:else if list.isError}
 					<div class="grid place-items-center gap-3 py-16 text-center">
 						<p class="max-w-sm text-[13px] font-medium text-destructive">
