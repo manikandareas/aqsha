@@ -1,7 +1,8 @@
 /* Aqsha UI design tokens — shadcn-svelte naming over the Aqsha UI Design System.
    System rules: 2px borders on every surface & control (1px only for internal
    hairlines); radii from --radius-sm/md/lg; focus color = --ring (mint);
-   mint = on/off state · primary (emerald) = exclusive choice; no gradients.
+   mint = on/off state · primary (emerald) = exclusive choice. Control gradients
+   stay restrained and must be derived from each variant's semantic token.
 
    Consumers import this before their own layers; Tailwind v4 reads the
    @theme inline block. Font families referenced here must be provided by the

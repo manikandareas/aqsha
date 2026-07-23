@@ -1,6 +1,6 @@
 /* Tailwind entry — framework preamble + design-system imports live here so
    ./styles/globals.css stays app-specific (fonts, prose, panel, composer, viz,
-   scrollbar). Design tokens + component depth classes come from @aqsha/ui-svelte. */
+   scrollbar). Design tokens + component control classes come from @aqsha/ui-svelte. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import '@aqsha/ui-svelte/styles/tokens.css';

@@ -2,50 +2,54 @@ import { describe, expect, it } from 'vitest';
 import { buttonVariants } from './index.js';
 
 /**
- * Button variant contract. Locks the Aqsha press choreography: solid variants
- * (default/secondary/destructive-solid) carry `.btn-keycap` + `--btn-face`; outline and
- * soft-destructive carry the flatter `.btn-lip`; ghost gets a bare active nudge, no depth class.
+ * Button variant contract. Filled, outline, and tonal buttons share the same
+ * restrained interaction class while each face stays tied to its semantic token.
  */
 describe('buttonVariants', () => {
-	it('default is a keycap driven by --primary', () => {
+	it('default uses the smooth primary gradient face', () => {
 		const cls = buttonVariants({ variant: 'default' });
-		expect(cls).toContain('btn-keycap');
+		expect(cls).toContain('btn-smooth');
+		expect(cls).toContain('btn-filled-gradient');
 		expect(cls).toContain('[--btn-face:var(--primary)]');
-		expect(cls).not.toContain('btn-lip');
 	});
 
-	it('secondary is a keycap driven by --secondary', () => {
+	it('secondary uses the smooth secondary gradient face', () => {
 		const cls = buttonVariants({ variant: 'secondary' });
-		expect(cls).toContain('btn-keycap');
+		expect(cls).toContain('btn-smooth');
+		expect(cls).toContain('btn-filled-gradient');
 		expect(cls).toContain('[--btn-face:var(--secondary)]');
 	});
 
-	it('destructive-solid is a keycap driven by --destructive-strong', () => {
+	it('destructive-solid uses the shared filled face', () => {
 		const cls = buttonVariants({ variant: 'destructive-solid' });
-		expect(cls).toContain('btn-keycap');
+		expect(cls).toContain('btn-smooth');
+		expect(cls).toContain('btn-filled-gradient');
 		expect(cls).toContain('[--btn-face:var(--destructive-strong)]');
 	});
 
-	it('outline and soft-destructive use the flat 3px lip, not the keycap', () => {
-		for (const variant of ['outline', 'destructive'] as const) {
-			const cls = buttonVariants({ variant });
-			expect(cls, variant).not.toContain('btn-keycap');
-			expect(cls, variant).toContain('btn-lip');
-		}
+	it('outline uses the shared interaction and outline face', () => {
+		const cls = buttonVariants({ variant: 'outline' });
+		expect(cls).toContain('btn-smooth');
+		expect(cls).toContain('btn-outline-gradient');
+	});
+
+	it('destructive uses a tonal face instead of a solid competing CTA', () => {
+		const cls = buttonVariants({ variant: 'destructive' });
+		expect(cls).toContain('btn-smooth');
+		expect(cls).toContain('btn-tonal-gradient');
+		expect(cls).toContain('[--btn-tint:var(--destructive)]');
 	});
 
 	it('ghost uses the bare active nudge without depth classes', () => {
 		const cls = buttonVariants({ variant: 'ghost' });
-		expect(cls).not.toContain('btn-keycap');
-		expect(cls).not.toContain('btn-lip');
-		expect(cls).toContain('active:not-aria-[haspopup]:translate-y-[2px]');
+		expect(cls).not.toContain('btn-smooth');
+		expect(cls).toContain('active:not-aria-[haspopup]:translate-y-px');
 	});
 
-	it('link is a plain text link (no keycap, no lip)', () => {
+	it('link is a plain text link without control depth', () => {
 		const cls = buttonVariants({ variant: 'link' });
 		expect(cls).toContain('underline');
-		expect(cls).not.toContain('btn-keycap');
-		expect(cls).not.toContain('btn-lip');
+		expect(cls).not.toContain('btn-smooth');
 	});
 
 	it('sizes map to the Aqsha heights (sm 32 / default 36 / lg 40)', () => {

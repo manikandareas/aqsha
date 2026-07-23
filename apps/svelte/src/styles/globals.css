@@ -2,7 +2,7 @@
    composer, streamdown, reduced-motion. Do not casually refactor tokens/classes;
    they are the shared design surface across routes and components.
 
-   Design tokens (:root/.dark/@theme) and the depth classes (.btn-keycap, .lip-*)
+   Design tokens (:root/.dark/@theme) and control classes (.btn-smooth, .lip-*)
    live in @aqsha/ui-svelte (imported by app.css BEFORE this file). This file only
    keeps what is app-specific: self-hosted fonts backing the --font-* tokens, the
    CVD-validated evidence-viz palette, scrollbar tokens, and feature CSS. */

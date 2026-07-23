@@ -23,9 +23,9 @@
 			title: 'text-control! font-semibold!',
 			description: 'text-label! text-muted-foreground!',
 			actionButton:
-				'btn-lip! border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold! hover:bg-muted!',
+				'btn-smooth btn-outline-gradient border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold!',
 			cancelButton:
-				'btn-lip! border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold! hover:bg-muted!',
+				'btn-smooth btn-outline-gradient border-2! border-border! bg-background! text-foreground! rounded-sm! h-7! px-2.5! text-label! font-bold!',
 			closeButton: 'border-2! border-border! bg-card! text-foreground! hover:bg-muted!'
 		}
 	}}
