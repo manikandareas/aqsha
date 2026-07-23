@@ -10,6 +10,7 @@ import {
   lt,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import { encodeKeysetCursor, type KeysetCursor } from "../cursor";
 import {
@@ -20,6 +21,7 @@ import {
   citations,
   type NewCitation,
 } from "../schema/citations";
+import { workspaceCitationLinks } from "../schema/workspaceCitationLinks";
 import type { DbOrTx } from "../types";
 
 export type CitationListFilters = {
@@ -28,6 +30,26 @@ export type CitationListFilters = {
   source?: CitationSource;
   tag?: string;
 };
+
+function citationPredicates(ownerUserId: string, filters?: CitationListFilters): SQL[] {
+  const base: SQL[] = [eq(citations.ownerUserId, ownerUserId), isNull(citations.deletedAt)];
+  const f = filters;
+  if (f?.status) base.push(eq(citations.metadataStatus, f.status));
+  if (f?.source) base.push(eq(citations.source, f.source));
+  if (f?.tag) base.push(arrayContains(citations.tags, [f.tag]));
+  if (f?.q) {
+    const escaped = f.q.replace(/[\\%_]/g, (m) => `\\${m}`);
+    const pattern = `%${escaped}%`;
+    const match = or(
+      ilike(citations.title, pattern),
+      ilike(citations.venue, pattern),
+      ilike(citations.doi, pattern),
+      sql`${citations.authorsJson}::text ilike ${pattern}`,
+    );
+    if (match) base.push(match);
+  }
+  return base;
+}
 
 /** Repo citations (perpustakaan akun) — query Drizzle saja; aturan bisnis di @aqsha/services. */
 export const CitationRepo = {
@@ -40,22 +62,7 @@ export const CitationRepo = {
       filters?: CitationListFilters;
     },
   ): Promise<{ items: Citation[]; nextCursor: string | null }> {
-    const base = [eq(citations.ownerUserId, args.ownerUserId), isNull(citations.deletedAt)];
-    const f = args.filters;
-    if (f?.status) base.push(eq(citations.metadataStatus, f.status));
-    if (f?.source) base.push(eq(citations.source, f.source));
-    if (f?.tag) base.push(arrayContains(citations.tags, [f.tag]));
-    if (f?.q) {
-      const escaped = f.q.replace(/[\\%_]/g, (m) => `\\${m}`);
-      const pattern = `%${escaped}%`;
-      const match = or(
-        ilike(citations.title, pattern),
-        ilike(citations.venue, pattern),
-        ilike(citations.doi, pattern),
-        sql`${citations.authorsJson}::text ilike ${pattern}`,
-      );
-      if (match) base.push(match);
-    }
+    const base = citationPredicates(args.ownerUserId, args.filters);
     const keyset = args.cursor
       ? or(
           lt(citations.updatedAt, args.cursor.u),
@@ -76,11 +83,72 @@ export const CitationRepo = {
     return { items, nextCursor };
   },
 
+  async listByWorkspace(
+    db: DbOrTx,
+    args: {
+      ownerUserId: string;
+      workspaceId: string;
+      limit: number;
+      cursor: KeysetCursor | null;
+      filters?: CitationListFilters;
+    },
+  ): Promise<{ items: Citation[]; nextCursor: string | null }> {
+    const base = [
+      ...citationPredicates(args.ownerUserId, args.filters),
+      eq(workspaceCitationLinks.workspaceId, args.workspaceId),
+    ];
+    const keyset = args.cursor
+      ? or(
+          lt(citations.updatedAt, args.cursor.u),
+          and(eq(citations.updatedAt, args.cursor.u), lt(citations.id, args.cursor.i)),
+        )
+      : undefined;
+    const rows = await db
+      .select({ citation: citations })
+      .from(citations)
+      .innerJoin(
+        workspaceCitationLinks,
+        eq(workspaceCitationLinks.citationId, citations.id),
+      )
+      .where(keyset ? and(...base, keyset) : and(...base))
+      .orderBy(desc(citations.updatedAt), desc(citations.id))
+      .limit(args.limit + 1);
+    const hasMore = rows.length > args.limit;
+    const page = hasMore ? rows.slice(0, args.limit) : rows;
+    const items = page.map((r) => r.citation);
+    const last = items[items.length - 1];
+    const nextCursor =
+      hasMore && last ? encodeKeysetCursor({ u: last.updatedAt, i: last.id }) : null;
+    return { items, nextCursor };
+  },
+
   async countActive(db: DbOrTx, ownerUserId: string): Promise<number> {
     const rows = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(citations)
       .where(and(eq(citations.ownerUserId, ownerUserId), isNull(citations.deletedAt)));
+    return rows[0]?.count ?? 0;
+  },
+
+  async countActiveByWorkspace(
+    db: DbOrTx,
+    ownerUserId: string,
+    workspaceId: string,
+  ): Promise<number> {
+    const rows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(citations)
+      .innerJoin(
+        workspaceCitationLinks,
+        eq(workspaceCitationLinks.citationId, citations.id),
+      )
+      .where(
+        and(
+          eq(citations.ownerUserId, ownerUserId),
+          isNull(citations.deletedAt),
+          eq(workspaceCitationLinks.workspaceId, workspaceId),
+        ),
+      );
     return rows[0]?.count ?? 0;
   },
 
@@ -230,6 +298,28 @@ export const CitationRepo = {
       .select({ tag: sql<string>`distinct unnest(${citations.tags})` })
       .from(citations)
       .where(and(eq(citations.ownerUserId, ownerUserId), isNull(citations.deletedAt)));
+    return rows.map((r) => r.tag).sort();
+  },
+
+  async listActiveTagsByWorkspace(
+    db: DbOrTx,
+    ownerUserId: string,
+    workspaceId: string,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({ tag: sql<string>`distinct unnest(${citations.tags})` })
+      .from(citations)
+      .innerJoin(
+        workspaceCitationLinks,
+        eq(workspaceCitationLinks.citationId, citations.id),
+      )
+      .where(
+        and(
+          eq(citations.ownerUserId, ownerUserId),
+          isNull(citations.deletedAt),
+          eq(workspaceCitationLinks.workspaceId, workspaceId),
+        ),
+      );
     return rows.map((r) => r.tag).sort();
   },
 };

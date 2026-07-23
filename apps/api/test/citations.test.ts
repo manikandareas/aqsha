@@ -217,7 +217,7 @@ describe("api citations — CRUD perpustakaan owner", () => {
 });
 
 describe("api citations — link perpustakaan ↔ proyek", () => {
-  itest("link → tampil di koleksi proyek dengan linkId; unlink → hilang", async () => {
+  itest("link → tampil di koleksi proyek dinormalisasi; filter/pagination; unlink → hilang", async () => {
     const link = await req(
       "POST",
       `/workspaces/${workspaceId}/citations/${manualId}/link`,
@@ -231,7 +231,26 @@ describe("api citations — link perpustakaan ↔ proyek", () => {
     );
     const linked = inProject.items.find((i: { id: string }) => i.id === manualId);
     expect(linked).toBeDefined();
-    expect(linked.linkId).toBeString();
+    expect(linked.authors).toEqual([{ family: "Sari", given: "Dewi" }]);
+    expect(linked.authorsJson).toBeUndefined();
+    expect(linked.linkId).toBeUndefined();
+    expect(inProject.total).toBeGreaterThanOrEqual(1);
+
+    const filtered = await req(
+      "GET",
+      `/workspaces/${workspaceId}/citations?limit=1&q=Referensi&status=verified&source=manual&tag=metode`,
+      tok(OWNER),
+    );
+    expect(filtered.status).toBe(200);
+    const body = await readJson(filtered);
+    expect(body.total).toBeGreaterThanOrEqual(1);
+    expect(body.items[0]).toEqual(
+      expect.objectContaining({
+        id: manualId,
+        authors: [{ family: "Sari", given: "Dewi" }],
+      }),
+    );
+    expect(body.items[0].authorsJson).toBeUndefined();
 
     // Idempotent: link ulang tidak menggandakan.
     await req("POST", `/workspaces/${workspaceId}/citations/${manualId}/link`, tok(OWNER), {});

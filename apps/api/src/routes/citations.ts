@@ -319,11 +319,40 @@ export const citations = new Elysia()
   // ── Koleksi per proyek (link perpustakaan↔proyek) ────────────────────────
   .get(
     "/workspaces/:id/citations",
-    ({ ownerUserId, params }) => {
+    ({ ownerUserId, params, query }) => {
       const { db } = getDb();
-      return CitationLinkService.listForWorkspace(db, ownerUserId, params.id);
+      return CitationLinkService.listForWorkspace(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        cursor: query.cursor ?? null,
+        limit: query.limit,
+        q: query.q,
+        status: query.status,
+        source: query.source,
+        tag: query.tag,
+      });
     },
-    { auth: true },
+    {
+      auth: true,
+      query: t.Object({
+        cursor: t.Optional(t.String()),
+        limit: t.Optional(t.Numeric()),
+        q: t.Optional(t.String()),
+        status: t.Optional(
+          t.Union([t.Literal("verified"), t.Literal("needs_review"), t.Literal("incomplete")]),
+        ),
+        source: t.Optional(
+          t.Union([
+            t.Literal("import"),
+            t.Literal("provider_sync"),
+            t.Literal("artifact"),
+            t.Literal("doi"),
+            t.Literal("manual"),
+          ]),
+        ),
+        tag: t.Optional(t.String()),
+      }),
+    },
   )
   .post(
     "/workspaces/:id/citations/:citationId/link",

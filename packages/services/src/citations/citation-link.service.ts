@@ -1,11 +1,25 @@
 import {
-  type Citation,
+  type CitationMetadataStatus,
+  type CitationSource,
   CitationRepo,
+  decodeKeysetCursor,
   throwAppError,
   WorkspaceCitationLinkRepo,
 } from "@aqsha/db";
 import type { Db, DbOrTx } from "@aqsha/db";
 import { WorkspaceService } from "../workspace.service";
+import {
+  type CitationListItem,
+  DEFAULT_LIST_LIMIT,
+  MAX_LIST_LIMIT,
+  toListItem,
+} from "./citation-model";
+
+export type CitationListResponse = {
+  items: CitationListItem[];
+  nextCursor: string | null;
+  total: number;
+};
 
 /** Koleksi sumber per proyek — link perpustakaan↔proyek, bukan salinan. Semua link level proyek. */
 export const CitationLinkService = {
@@ -47,25 +61,41 @@ export const CitationLinkService = {
     return { ok: true };
   },
 
-  /** Item perpustakaan yang ter-link ke proyek, digabung id link. */
+  /** Item perpustakaan tertaut proyek — bentuk sama dengan list global (tanpa linkId). */
   async listForWorkspace(
     db: DbOrTx,
-    ownerUserId: string,
-    workspaceId: string,
-  ): Promise<{ items: Array<Citation & { linkId: string }> }> {
-    await WorkspaceService.assertWorkspaceOwner(db, ownerUserId, workspaceId);
-    const links = await WorkspaceCitationLinkRepo.listByWorkspace(db, workspaceId);
-    if (links.length === 0) return { items: [] };
-    const rows = await CitationRepo.findByIds(
-      db,
-      ownerUserId,
-      links.map((l) => l.citationId),
-    );
-    const byId = new Map(rows.map((c) => [c.id, c]));
-    const items = links.flatMap((l) => {
-      const c = byId.get(l.citationId);
-      return c && !c.deletedAt ? [{ ...c, linkId: l.id }] : [];
-    });
-    return { items };
+    input: {
+      ownerUserId: string;
+      workspaceId: string;
+      limit?: number;
+      cursor?: string | null;
+      q?: string;
+      status?: CitationMetadataStatus;
+      source?: CitationSource;
+      tag?: string;
+    },
+  ): Promise<CitationListResponse> {
+    await WorkspaceService.assertWorkspaceOwner(db, input.ownerUserId, input.workspaceId);
+    const limit = Math.min(Math.max(input.limit ?? DEFAULT_LIST_LIMIT, 1), MAX_LIST_LIMIT);
+    const [page, total] = await Promise.all([
+      CitationRepo.listByWorkspace(db, {
+        ownerUserId: input.ownerUserId,
+        workspaceId: input.workspaceId,
+        limit,
+        cursor: decodeKeysetCursor(input.cursor),
+        filters: {
+          q: input.q?.trim() || undefined,
+          status: input.status,
+          source: input.source,
+          tag: input.tag,
+        },
+      }),
+      CitationRepo.countActiveByWorkspace(db, input.ownerUserId, input.workspaceId),
+    ]);
+    return {
+      items: page.items.map(toListItem),
+      nextCursor: page.nextCursor,
+      total,
+    };
   },
 };
