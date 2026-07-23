@@ -18,6 +18,7 @@ import {
 } from './export-model';
 import type {
 	BibliographySort,
+	CitationCandidate,
 	CitationDetail,
 	CitationDuplicateGroup,
 	CitationListResponse,
@@ -31,16 +32,14 @@ import type {
 	ImportDuplicatePolicy,
 	ImportPreviewResult,
 	ManualCitationFields,
-	ProviderFolder,
-	WorkspaceCitationItem
+	ProviderFolder
 } from './types';
 
 /**
- * Citation query/mutation hooks. Perpustakaan referensi (`useCitations*`) hidup di level akun —
- * hooks-nya tanpa parameter `workspaceId`. Koleksi per proyek (link perpustakaan↔proyek↔bab) dan
- * fitur yang inheren berkonteks proyek (import, provider sync, render, settings) tetap workspace-scoped.
- * Reactive scalar inputs (`citationId`, `filters`, `params`, `enabled`) are getters. Query keys,
- * invalidation, and toast copy match the product contract.
+ * Citation query/mutation hooks. List/detail/tags/create/import/export menerima
+ * `workspaceId` getter (`null` = perpustakaan akun; string = koleksi proyek).
+ * Reactive scalar inputs are getters. Query keys, invalidation, and toast copy
+ * match the product contract.
  */
 
 const LIST_PAGE_SIZE = 50;
@@ -64,54 +63,108 @@ function useInvalidateCitations() {
 	return () => qc.invalidateQueries({ queryKey: queryKeys.citations.all });
 }
 
-/** List referensi perpustakaan akun (infinite/keyset) + `total` untuk count toolbar. */
-export function useCitationsList(filters: () => CitationListFilters, enabled: () => boolean) {
+function listQuery(f: CitationListFilters, pageParam: string | null) {
+	return {
+		limit: LIST_PAGE_SIZE,
+		...(pageParam ? { cursor: pageParam } : {}),
+		...(f.q ? { q: f.q } : {}),
+		...(f.status ? { status: f.status } : {}),
+		...(f.source ? { source: f.source } : {}),
+		...(f.tag ? { tag: f.tag } : {})
+	};
+}
+
+/** List referensi (infinite/keyset) — akun atau proyek via `workspaceId`. */
+export function useCitationsList(
+	filters: () => CitationListFilters,
+	enabled: () => boolean,
+	workspaceId: () => string | null = () => null
+) {
 	const api = getApiClient();
 	return createInfiniteQuery(() => ({
-		queryKey: queryKeys.citations.list(filters()),
+		queryKey: queryKeys.citations.list(workspaceId(), filters()),
 		enabled: enabled(),
 		placeholderData: keepPreviousData,
 		initialPageParam: null as string | null,
 		queryFn: async ({ pageParam }: { pageParam: string | null }) => {
 			const f = filters();
-			return unwrap(
-				await api.citations.get({
-					query: {
-						limit: LIST_PAGE_SIZE,
-						...(pageParam ? { cursor: pageParam } : {}),
-						...(f.q ? { q: f.q } : {}),
-						...(f.status ? { status: f.status } : {}),
-						...(f.source ? { source: f.source } : {}),
-						...(f.tag ? { tag: f.tag } : {})
-					}
-				})
-			) as CitationListResponse;
+			const ws = workspaceId();
+			const query = listQuery(f, pageParam);
+			if (ws) {
+				return unwrap(await api.workspaces({ id: ws }).citations.get({ query })) as CitationListResponse;
+			}
+			return unwrap(await api.citations.get({ query })) as CitationListResponse;
 		},
 		getNextPageParam: (last: CitationListResponse) => last.nextCursor
 	}));
 }
 
-export function useCitationTags(enabled: () => boolean) {
+export function useCitationTags(
+	enabled: () => boolean,
+	workspaceId: () => string | null = () => null
+) {
 	const api = getApiClient();
 	return createQuery(() => ({
-		queryKey: queryKeys.citations.tags(),
+		queryKey: queryKeys.citations.tags(workspaceId()),
 		enabled: enabled(),
-		queryFn: async () => unwrap(await api.citations.tags.get()) as string[]
+		queryFn: async () => {
+			const ws = workspaceId();
+			if (ws) {
+				return unwrap(await api.workspaces({ id: ws }).citations.tags.get()) as string[];
+			}
+			return unwrap(await api.citations.tags.get()) as string[];
+		}
 	}));
 }
 
-export function useCitationDetail(citationId: () => string | null, enabled: () => boolean) {
+export function useCitationDetail(
+	citationId: () => string | null,
+	enabled: () => boolean,
+	workspaceId: () => string | null = () => null
+) {
 	const api = getApiClient();
 	return createQuery(() => ({
-		queryKey: queryKeys.citations.detail(citationId() ?? ''),
+		queryKey: queryKeys.citations.detail(workspaceId(), citationId() ?? ''),
 		enabled: enabled() && Boolean(citationId()),
-		queryFn: async () =>
-			unwrap(await api.citations({ citationId: citationId() ?? '' }).get()) as CitationDetail
+		queryFn: async () => {
+			const id = citationId() ?? '';
+			const ws = workspaceId();
+			if (ws) {
+				return unwrap(
+					await api.workspaces({ id: ws }).citations({ citationId: id }).get()
+				) as CitationDetail;
+			}
+			return unwrap(await api.citations({ citationId: id }).get()) as CitationDetail;
+		}
 	}));
 }
 
-/** Create manual (fields) ATAU by-DOI (doi) — satu endpoint POST. */
-export function useCreateCitation() {
+/** Kandidat perpustakaan untuk picker "Tambah dari Perpustakaan". */
+export function useCitationCandidates(
+	workspaceId: () => string,
+	filters: () => CitationListFilters,
+	enabled: () => boolean
+) {
+	const api = getApiClient();
+	return createInfiniteQuery(() => ({
+		queryKey: queryKeys.citations.candidates(workspaceId(), filters()),
+		enabled: enabled() && Boolean(workspaceId()),
+		placeholderData: keepPreviousData,
+		initialPageParam: null as string | null,
+		queryFn: async ({ pageParam }: { pageParam: string | null }) => {
+			const f = filters();
+			return unwrap(
+				await api.workspaces({ id: workspaceId() }).citations.candidates.get({
+					query: listQuery(f, pageParam)
+				})
+			) as { items: CitationCandidate[]; nextCursor: string | null; total: number };
+		},
+		getNextPageParam: (last: { nextCursor: string | null }) => last.nextCursor
+	}));
+}
+
+/** Create manual (fields) ATAU by-DOI (doi) — akun atau scoped proyek. */
+export function useCreateCitation(workspaceId: () => string | null = () => null) {
 	const api = getApiClient();
 	const invalidate = useInvalidateCitations();
 	return createMutation(() => ({
@@ -121,7 +174,15 @@ export function useCreateCitation() {
 			tags?: string[];
 			allowDuplicate?: boolean;
 			onDuplicate?: 'return-existing';
-		}) => unwrap(await api.citations.post(input)) as CitationDetail & { created: boolean },
+		}) => {
+			const ws = workspaceId();
+			if (ws) {
+				return unwrap(
+					await api.workspaces({ id: ws }).citations.post(input)
+				) as CitationDetail & { created: boolean };
+			}
+			return unwrap(await api.citations.post(input)) as CitationDetail & { created: boolean };
+		},
 		onSuccess: () => invalidate()
 	}));
 }
@@ -270,7 +331,7 @@ export function useImportPreview() {
 	}));
 }
 
-export function useImportCommit() {
+export function useImportCommit(workspaceId: () => string | null = () => null) {
 	const api = getApiClient();
 	const invalidate = useInvalidateCitations();
 	return createMutation(() => ({
@@ -278,13 +339,16 @@ export function useImportCommit() {
 			batchId: string;
 			selectedIndexes: number[];
 			duplicatePolicy: ImportDuplicatePolicy;
-		}) =>
-			unwrap(
+		}) => {
+			const ws = workspaceId();
+			return unwrap(
 				await api.citations.imports({ batchId: input.batchId }).commit.post({
 					selectedIndexes: input.selectedIndexes,
-					duplicatePolicy: input.duplicatePolicy
+					duplicatePolicy: input.duplicatePolicy,
+					...(ws ? { workspaceId: ws } : {})
 				})
-			) as ImportCommitResult,
+			) as ImportCommitResult;
+		},
 		onSuccess: () => invalidate()
 	}));
 }
@@ -316,7 +380,10 @@ export function useProviderSyncPreview(provider: () => IntegrationProviderKey) {
 }
 
 /** Commit hasil sync provider — reuse pipeline commit import. */
-export function useProviderSyncCommit(provider: () => IntegrationProviderKey) {
+export function useProviderSyncCommit(
+	provider: () => IntegrationProviderKey,
+	workspaceId: () => string | null = () => null
+) {
 	const api = getApiClient();
 	const invalidate = useInvalidateCitations();
 	return createMutation(() => ({
@@ -324,16 +391,19 @@ export function useProviderSyncCommit(provider: () => IntegrationProviderKey) {
 			batchId: string;
 			selectedIndexes: number[];
 			duplicatePolicy: ImportDuplicatePolicy;
-		}) =>
-			unwrap(
+		}) => {
+			const ws = workspaceId();
+			return unwrap(
 				await api
 					.integrations({ provider: provider() })
 					.sync({ batchId: input.batchId })
 					.commit.post({
 						selectedIndexes: input.selectedIndexes,
-						duplicatePolicy: input.duplicatePolicy
+						duplicatePolicy: input.duplicatePolicy,
+						...(ws ? { workspaceId: ws } : {})
 					})
-			) as ImportCommitResult,
+			) as ImportCommitResult;
+		},
 		onSuccess: () => invalidate()
 	}));
 }
@@ -450,21 +520,23 @@ export function useUpdateCitationSettings(workspaceId: () => string) {
 	}));
 }
 
-/** Unduh export (bibtex/ris/csl-json) sebagai file — semua atau id terpilih. Perpustakaan akun. */
-export function useExportCitations() {
+/** Unduh export (bibtex/ris/csl-json) — semua di scope atau id terpilih. */
+export function useExportCitations(workspaceId: () => string | null = () => null) {
 	const api = getApiClient();
 	return createMutation(() => ({
 		mutationFn: async (input: { format: CitationExportFormat; ids?: string[] }) => {
 			// Route mengembalikan Response text (content-disposition). Eden mem-parse body
 			// sesuai content-type: bibtex/ris → string mentah, csl-json → array/objek. Semua
 			// bentuk itu dinormalkan ke teks oleh resolveExportContent.
+			const ws = workspaceId();
+			const query = {
+				format: input.format,
+				...(input.ids?.length ? { ids: input.ids.join(',') } : {})
+			};
 			const data = unwrap(
-				await api.citations.export.get({
-					query: {
-						format: input.format,
-						...(input.ids?.length ? { ids: input.ids.join(',') } : {})
-					}
-				})
+				ws
+					? await api.workspaces({ id: ws }).citations.export.get({ query })
+					: await api.citations.export.get({ query })
 			) as unknown;
 			const content = await resolveExportContent(data);
 			const blob = new Blob([content], { type: exportBlobType(input.format) });
@@ -481,16 +553,11 @@ export function useExportCitations() {
 
 // ── Koleksi sumber per proyek (workspace_citation_links) ────────────────────
 
-export function useWorkspaceCitations(workspaceId: () => string, enabled: () => boolean) {
-	const api = getApiClient();
-	return createQuery(() => ({
-		queryKey: queryKeys.citations.links(workspaceId()),
-		enabled: enabled() && Boolean(workspaceId()),
-		queryFn: async () =>
-			unwrap(await api.workspaces({ id: workspaceId() }).citations.get()) as {
-				items: WorkspaceCitationItem[];
-			}
-	}));
+function invalidateProjectMembership(qc: ReturnType<typeof useQueryClient>, workspaceId: string) {
+	qc.invalidateQueries({ queryKey: queryKeys.citations.all });
+	qc.invalidateQueries({ queryKey: queryKeys.citations.lists(workspaceId) });
+	qc.invalidateQueries({ queryKey: queryKeys.citations.candidateLists(workspaceId) });
+	qc.invalidateQueries({ queryKey: queryKeys.citations.links(workspaceId) });
 }
 
 export function useLinkCitation() {
@@ -511,7 +578,7 @@ export function useLinkCitation() {
 		onSuccess: (
 			_d: unknown,
 			input: { workspaceId: string; citationId: string; sectionId?: string | null }
-		) => qc.invalidateQueries({ queryKey: queryKeys.citations.links(input.workspaceId) }),
+		) => invalidateProjectMembership(qc, input.workspaceId),
 		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal menambahkan sumber ke proyek.'))
 	}));
 }
@@ -527,9 +594,29 @@ export function useUnlinkCitation() {
 					.citations({ citationId: input.citationId })
 					.link.delete()
 			),
-		onSuccess: (_d: unknown, input: { workspaceId: string; citationId: string }) =>
-			qc.invalidateQueries({ queryKey: queryKeys.citations.links(input.workspaceId) }),
+		onSuccess: (_d: unknown, input: { workspaceId: string; citationId: string }) => {
+			invalidateProjectMembership(qc, input.workspaceId);
+			toast.success('Referensi dilepas dari proyek');
+		},
 		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal melepas sumber dari proyek.'))
+	}));
+}
+
+export function useBulkUnlinkCitations() {
+	const api = getApiClient();
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (input: { workspaceId: string; ids: string[] }) =>
+			unwrap(
+				await api.workspaces({ id: input.workspaceId }).citations['bulk-unlink'].post({
+					ids: input.ids
+				})
+			) as { affected: number },
+		onSuccess: (result: { affected: number }, input: { workspaceId: string; ids: string[] }) => {
+			invalidateProjectMembership(qc, input.workspaceId);
+			toast.success(`${result.affected} referensi dilepas dari proyek`);
+		},
+		onError: (e) => toast.error(readableApiErrorMessage(e, 'Gagal melepas referensi dari proyek.'))
 	}));
 }
 

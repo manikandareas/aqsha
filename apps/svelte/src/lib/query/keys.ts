@@ -66,14 +66,29 @@ export const queryKeys = {
 	},
 	citations: {
 		all: ['citations'] as const,
-		list: (params: {
-			q: string;
-			status: string | null;
-			source: string | null;
-			tag: string | null;
-		}) => ['citations', 'list', params] as const,
-		detail: (citationId: string) => ['citations', 'detail', citationId] as const,
-		tags: () => ['citations', 'tags'] as const,
+		lists: (workspaceId: string | null) => ['citations', 'list', workspaceId] as const,
+		list: (
+			workspaceId: string | null,
+			params: {
+				q: string;
+				status: string | null;
+				source: string | null;
+				tag: string | null;
+			}
+		) => ['citations', 'list', workspaceId, params] as const,
+		detail: (workspaceId: string | null, citationId: string) =>
+			['citations', 'detail', workspaceId, citationId] as const,
+		tags: (workspaceId: string | null) => ['citations', 'tags', workspaceId] as const,
+		candidateLists: (workspaceId: string) => ['citations', 'candidates', workspaceId] as const,
+		candidates: (
+			workspaceId: string,
+			params: {
+				q: string;
+				status: string | null;
+				source: string | null;
+				tag: string | null;
+			}
+		) => ['citations', 'candidates', workspaceId, params] as const,
 		duplicates: () => ['citations', 'duplicates'] as const,
 		links: (workspaceId: string) => ['citations', 'links', workspaceId] as const,
 		render: (workspaceId: string | null, params: { styleId: string | null; ids: string[] }) =>

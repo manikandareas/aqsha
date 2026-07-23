@@ -26,11 +26,20 @@ describe('queryKeys registry', () => {
 		]);
 	});
 
-	it('citations (perpustakaan akun + params)', () => {
-		expect(queryKeys.citations.list({ q: 'x', status: null, source: null, tag: null })).toEqual([
+	it('citations (global/project list + candidates)', () => {
+		const filters = { q: 'x', status: null, source: null, tag: null };
+		expect(queryKeys.citations.list(null, filters)).toEqual(['citations', 'list', null, filters]);
+		expect(queryKeys.citations.list('ws_1', filters)).toEqual([
 			'citations',
 			'list',
-			{ q: 'x', status: null, source: null, tag: null }
+			'ws_1',
+			filters
+		]);
+		expect(queryKeys.citations.candidates('ws_1', filters)).toEqual([
+			'citations',
+			'candidates',
+			'ws_1',
+			filters
 		]);
 		expect(queryKeys.citations.links('w1')).toEqual(['citations', 'links', 'w1']);
 		expect(queryKeys.citations.render('w1', { styleId: 'apa', ids: ['a', 'b'] })).toEqual([

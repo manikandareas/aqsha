@@ -76,7 +76,14 @@ export type ImportPreviewResult = {
 	errors: Array<{ index: number; message: string; raw: string }>;
 };
 
-export type ImportCommitResult = { created: number; merged: number; skipped: number };
+export type ImportCommitResult = {
+	created: number;
+	merged: number;
+	skipped: number;
+	linked: number;
+};
+
+export type CitationCandidate = CitationListItem & { linked: boolean };
 
 /** Folder/collection provider untuk picker penarikan. */
 export type ProviderFolder = { id: string; name: string; parentId?: string | null };
@@ -122,37 +129,6 @@ export type CreateFromArtifactResult = {
 	citation: CitationDetail;
 	created: boolean;
 	linkedExisting: boolean;
-};
-
-/**
- * Satu entri koleksi sumber proyek — `GET /workspaces/:id/citations` mengembalikan baris `citations`
- * MENTAH (bukan view `CitationDetail` perpustakaan): field `authorsJson` (bukan `authors`), plus
- * `provider`/`externalId` dari alur import provider. Ditambah posisi link ke proyek/bab.
- */
-export type WorkspaceCitationItem = {
-	id: string;
-	ownerUserId: string;
-	artifactId: string | null;
-	source: CitationSource;
-	provider: 'mendeley' | 'zotero' | null;
-	externalId: string | null;
-	documentType: string;
-	title: string;
-	authorsJson: CitationAuthor[];
-	publishedYear: number | null;
-	venue: string | null;
-	publisher: string | null;
-	doi: string | null;
-	url: string | null;
-	tags: string[];
-	cslJson: unknown;
-	canonicalKey: string;
-	metadataStatus: CitationMetadataStatus;
-	reviewedAt: number | null;
-	createdAt: number;
-	updatedAt: number;
-	deletedAt: number | null;
-	linkId: string;
 };
 
 export const CITATION_STYLE_OPTIONS: Array<{ id: CitationStyleId; label: string }> = [
