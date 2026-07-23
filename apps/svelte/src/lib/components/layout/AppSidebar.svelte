@@ -37,7 +37,6 @@
 		PlusIcon,
 		Quote,
 		SearchIcon,
-		SettingsIcon,
 		Trash2Icon,
 		TrendingUpIcon,
 		type IconSvgElement
@@ -45,8 +44,8 @@
 	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
-	 * Rail navigasi kiri IA project-first: Beranda, Perpustakaan, Jelajahi, Pengaturan +
-	 * daftar proyek (urut aktivitas). Thread tidak lagi global — hidup di dalam proyek.
+	 * Rail navigasi kiri IA project-first: Beranda, Perpustakaan, Jelajahi, lalu daftar proyek
+	 * (urut aktivitas). Thread tidak lagi global — hidup di dalam proyek.
 	 */
 	// Sub-rows (kind.typ, Referensi) mirror the parent project row's type: 12px label + muted ink,
 	// mint when active. `[&>svg]` overrides beat MenuSubButton's built-in direct-child icon color.
@@ -86,7 +85,6 @@
 	const isHomeActive = $derived(pathname === '/app');
 	const isLibraryActive = $derived(pathname.startsWith('/app/library'));
 	const isExploreActive = $derived(pathname.startsWith('/app/explore'));
-	const isSettingsActive = $derived(pathname.startsWith('/app/settings'));
 
 	// Desktop rail collapsed to icons. Mobile renders as a full-width sheet (never "icon" mode), so
 	// guard on isMobile to keep the sheet showing the full rows, not the collapsed icon variant.
@@ -127,11 +125,7 @@
 		}
 	}
 
-	type StaticNavRoute =
-		| '/app/(product)'
-		| '/app/(product)/library'
-		| '/app/(product)/explore'
-		| '/app/settings/overview';
+	type StaticNavRoute = '/app/(product)' | '/app/(product)/library' | '/app/(product)/explore';
 </script>
 
 <svelte:window onkeydown={handleShortcut} />
@@ -184,7 +178,6 @@
 			{@render navItem('/app/(product)', 'Beranda', HomeIcon, isHomeActive)}
 			{@render navItem('/app/(product)/library', 'Perpustakaan', BookOpenIcon, isLibraryActive)}
 			{@render navItem('/app/(product)/explore', 'Jelajahi', TrendingUpIcon, isExploreActive)}
-			{@render navItem('/app/settings/overview', 'Pengaturan', SettingsIcon, isSettingsActive)}
 		</Sidebar.Menu>
 	</Sidebar.Header>
 
@@ -440,16 +433,6 @@
 			>
 				<Icon icon={TrendingUpIcon} class="size-4" />
 				Jelajahi
-			</Command.Item>
-			<Command.Item
-				value="buka-pengaturan"
-				onSelect={() => {
-					commandOpen = false;
-					goto(resolve('/app/settings/overview'));
-				}}
-			>
-				<Icon icon={SettingsIcon} class="size-4" />
-				Pengaturan
 			</Command.Item>
 		</Command.Group>
 		{#if projects.length > 0}

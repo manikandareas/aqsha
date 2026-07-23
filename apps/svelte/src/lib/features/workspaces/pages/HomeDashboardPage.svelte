@@ -1,13 +1,11 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { onMount } from 'svelte';
 	import { useClerkContext } from 'svelte-clerk';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { viewerContext } from '$lib/auth';
 	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import { readableApiErrorMessage } from '$lib/errors';
-	import { landingGreeting } from '$lib/features/thread-experience/utils/landing-greeting';
-	import { Add02Icon, Icon } from '$lib/icons';
+	import { Icon, PlusIcon } from '$lib/icons';
 	import { useWorkspacesList } from '../api';
 	import HomeFeatureShortcuts from '../components/HomeFeatureShortcuts.svelte';
 	import NewProjectCard from '../components/NewProjectCard.svelte';
@@ -30,46 +28,34 @@
 	);
 
 	let sort = $state<ProjectSortId>('updated-desc');
-	let localHour = $state<number | null>(null);
 
-	const projects = $derived<WorkspaceListItem[]>(list.data?.pages.flatMap((page) => page.items) ?? []);
+	const projects = $derived<WorkspaceListItem[]>(
+		list.data?.pages.flatMap((page) => page.items) ?? []
+	);
 	const sortedProjects = $derived(sortWorkspaces(projects, sort));
 	const projectCount = $derived(projects.length);
 	const name = $derived(viewer.display({ name: '', email: '' }).name);
 	const firstName = $derived(name.trim().split(/\s+/)[0] ?? '');
-	const greeting = $derived(
-		localHour === null
-			? firstName
-				? `Halo, ${firstName}`
-				: 'Halo'
-			: landingGreeting(firstName, localHour)
-	);
-
-	onMount(() => {
-		localHour = new Date().getHours();
-	});
+	const greeting = $derived(firstName ? `Hai, ${firstName}` : 'Hai');
 </script>
 
 <div class="flex w-full flex-1 flex-col overflow-y-auto">
-	<!-- Trigger-only chrome on mobile; hero stays page content below. -->
-	<AppPageHeader mobileOnly class="border-b-0" />
+	<AppPageHeader class="border-b-0">
+		{#snippet title()}
+			<span class="text-base font-semibold text-foreground">Home</span>
+		{/snippet}
+	</AppPageHeader>
 
-	<div class="@container flex w-full flex-col gap-8 px-5 pt-4 pb-8 @2xl:gap-10 @2xl:px-6">
-		<header class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-			<div class="min-w-0">
-				<h1
-					class="font-heading text-balance text-3xl leading-tight font-bold text-foreground sm:text-4xl"
-				>
-					Ruang risetmu
-				</h1>
-				<p class="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-					{greeting}. Pilih proyek dan lanjutkan dari tempat terakhir.
-				</p>
-			</div>
-			<Button href={newProjectHref} size="default" class="self-start sm:self-auto">
-				<Icon icon={Add02Icon} class="size-4" />
-				New
-			</Button>
+	<div
+		class="@container mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 pt-4 pb-8 @2xl:gap-10 @2xl:px-6"
+	>
+		<header class="min-w-0">
+			<h1
+				class="font-heading text-balance text-3xl leading-tight font-bold text-foreground sm:text-4xl"
+			>
+				<span>{greeting}</span>
+				<span class="home-greeting-wave ml-2 inline-block" aria-hidden="true">👋</span>
+			</h1>
 		</header>
 
 		<HomeFeatureShortcuts />
@@ -79,7 +65,7 @@
 				<div class="flex items-center gap-2.5">
 					<h2
 						id="projects-heading"
-						class="font-heading text-xl font-bold text-foreground sm:text-2xl"
+						class="font-heading text-lg font-bold text-foreground sm:text-xl"
 					>
 						Rak proyek
 					</h2>
@@ -92,9 +78,15 @@
 						</span>
 					{/if}
 				</div>
-				{#if !list.isPending && !list.isError && projectCount > 0}
-					<ProjectSortMenu bind:value={sort} />
-				{/if}
+				<div class="flex items-center gap-2">
+					{#if !list.isPending && !list.isError && projectCount > 0}
+						<ProjectSortMenu bind:value={sort} />
+					{/if}
+					<Button href={newProjectHref} size="sm" class="font-normal">
+						<Icon icon={PlusIcon} class="size-4" />
+						New
+					</Button>
+				</div>
 			</div>
 
 			{#if list.isPending}
@@ -171,3 +163,33 @@
 		</section>
 	</div>
 </div>
+
+<style>
+	.home-greeting-wave {
+		transform-origin: 70% 85%;
+		animation: home-greeting-wave 5s ease-in-out infinite;
+	}
+
+	@keyframes home-greeting-wave {
+		0%,
+		54%,
+		100% {
+			transform: rotate(0deg);
+		}
+
+		8%,
+		24% {
+			transform: rotate(14deg);
+		}
+
+		16% {
+			transform: rotate(-8deg);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.home-greeting-wave {
+			animation: none;
+		}
+	}
+</style>
