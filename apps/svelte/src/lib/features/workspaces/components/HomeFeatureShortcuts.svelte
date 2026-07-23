@@ -9,37 +9,29 @@
 	} from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 
-	type ShortcutAccent = 'mint' | 'lavender';
-
 	type Shortcut = {
 		route: '/app/(product)/explore' | '/app/(product)/library';
 		label: string;
 		description: string;
 		icon: IconSvgElement;
-		accent: ShortcutAccent;
 	};
 
-	// Accent wells distinguish destinations while the surrounding links stay quiet.
-	const ACCENT_WELL: Record<ShortcutAccent, string> = {
-		mint: 'border-mint-soft-border bg-mint-soft text-mint-foreground',
-		lavender: 'border-lavender-soft-border bg-lavender-soft text-lavender-foreground'
-	};
+	/** Soft primary well — ikon + bg satu nuansa emerald, bukan mint/lavender terpisah. */
+	const ICON_WELL = 'border-primary/30 bg-primary/12 text-primary';
 
-	/** Pintu masuk ringkas — well ikon memakai token aksen mint/lavender. */
+	/** Pintu masuk ringkas ke Jelajahi dan Perpustakaan. */
 	const shortcuts: Shortcut[] = [
 		{
 			route: '/app/(product)/explore',
 			label: 'Jelajahi',
 			description: 'Temukan paper & topik yang relevan.',
-			icon: TrendingUpIcon,
-			accent: 'mint'
+			icon: TrendingUpIcon
 		},
 		{
 			route: '/app/(product)/library',
 			label: 'Perpustakaan',
 			description: 'Sumbermu, siap disitasi ke proyek.',
-			icon: BookOpenIcon,
-			accent: 'lavender'
+			icon: BookOpenIcon
 		}
 	];
 </script>
@@ -62,8 +54,8 @@
 			<span
 				class={cn(
 					'mt-0.5 grid size-10 shrink-0 place-items-center rounded-lg border-2',
-					'transition-colors duration-150 ease-out group-hover:border-foreground/20',
-					ACCENT_WELL[shortcut.accent]
+					'transition-colors duration-150 ease-out group-hover:border-primary/45 group-hover:bg-primary/18',
+					ICON_WELL
 				)}
 				aria-hidden="true"
 			>
