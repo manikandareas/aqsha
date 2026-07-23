@@ -2,7 +2,7 @@ import { dehydrate } from '@tanstack/svelte-query';
 import { createServerApiClient } from '$lib/server/api';
 import {
 	feedInfiniteQueryOptions,
-	paperSearchInfiniteQueryOptions
+	literatureSearchInfiniteQueryOptions
 } from '$lib/features/discovery/query-options';
 import { readExploreUrl } from '$lib/features/explore/explore-url-model';
 import { createQueryClient, deferredQueryResult, queryBootstrapId } from '$lib/query';
@@ -20,11 +20,7 @@ export const load: PageServerLoad = ({ depends, locals, url }) => {
 	const feed = deferredQueryResult(async () => {
 		if (state.q.trim().length > 0) {
 			await queryClient.prefetchInfiniteQuery(
-				paperSearchInfiniteQueryOptions(api, {
-					query: state.q,
-					fromYear: undefined,
-					enabled: true
-				})
+				literatureSearchInfiniteQueryOptions(api, { state, enabled: true })
 			);
 		} else {
 			await queryClient.prefetchInfiniteQuery(
@@ -42,6 +38,8 @@ export const load: PageServerLoad = ({ depends, locals, url }) => {
 		exploreBootstrap: {
 			id: queryBootstrapId('/app/(product)/explore', {
 				q: state.q,
+				sort: state.sort,
+				f: url.searchParams.get('f') ?? '',
 				topic: state.topic ?? ''
 			}),
 			critical: dehydrate(createQueryClient({ server: true })),

@@ -20,17 +20,34 @@ test.describe('authenticated rendering', () => {
 	test.skip(!storageState, 'PLAYWRIGHT_AUTH_STATE is required for authenticated production E2E.');
 	test.use({ storageState: storageState ?? undefined });
 
-	test('Explore filter updates shallowly without requesting new page data', async ({ page }) => {
+	test('Explore membuka popover awal tanpa menjalankan search', async ({ page }) => {
 		await page.goto('/app/explore');
-		await expect(page.getByRole('button', { name: 'Sains & Teknologi' })).toBeVisible();
+		await page.getByRole('button', { name: 'Filter' }).click();
+		await expect(page.getByRole('dialog', { name: 'Advanced search' })).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(page.getByRole('dialog', { name: 'Advanced search' })).not.toBeVisible();
+	});
 
-		const pageDataRequests: string[] = [];
+	test('Explore menerapkan sidebar draft sekali di desktop', async ({ page }) => {
+		await page.goto('/app/explore?q=climate');
+		await expect(page.getByRole('complementary', { name: 'Advanced search' })).toBeVisible();
+		await page.getByRole('button', { name: 'Dampak' }).click();
+		await page.getByLabel('Minimal jumlah sitasi').fill('50');
+
+		const requests: string[] = [];
 		page.on('request', (request) => {
-			if (request.url().includes('__data.json')) pageDataRequests.push(request.url());
+			if (request.url().includes('/papers/literature-search')) requests.push(request.url());
 		});
+		await page.getByRole('button', { name: 'Terapkan filter' }).click();
 
-		await page.getByRole('button', { name: 'Sains & Teknologi' }).click();
-		await expect(page).toHaveURL(/topic=sains_teknologi/);
-		expect(pageDataRequests).toEqual([]);
+		await expect(page).toHaveURL(/(?:\?|&)f=/);
+		expect(requests).toHaveLength(1);
+	});
+
+	test('Explore memakai drawer filter di mobile', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto('/app/explore?q=climate');
+		await page.getByRole('button', { name: 'Filter' }).click();
+		await expect(page.getByRole('dialog', { name: 'Advanced search' })).toBeVisible();
 	});
 });
