@@ -3,11 +3,15 @@ import {
   ExploreService,
   followRedirectsSafely,
   isBlockedHost,
+  LiteratureSearchService,
+  type LiteratureSearchInput,
 } from "@aqsha/services";
 import { Elysia, status, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
 import { rateLimitMacro } from "../plugins/rate-limit";
+
+const literatureClauseSchema = t.Object({ id: t.String(), value: t.Unknown() });
 
 // Cache provenance URL ter-validasi (anti seq-scan berulang: pdf.js menembak
 // beberapa range request per dokumen). TTL pendek → entri di-revalidasi berkala
@@ -109,6 +113,53 @@ export const papers = new Elysia({ prefix: "/papers" })
         fromYear: t.Optional(t.Numeric()),
         page: t.Optional(t.Numeric()),
         interestSeed: t.Optional(t.Boolean()),
+      }),
+    },
+  )
+  .get("/literature-search/catalog", () => LiteratureSearchService.catalog(), { auth: true })
+  .get(
+    "/literature-search/autocomplete",
+    ({ query }) => LiteratureSearchService.autocomplete(query.kind, query.q),
+    {
+      auth: true,
+      rateLimit: "explore:search",
+      query: t.Object({
+        kind: t.Union([
+          t.Literal("works"),
+          t.Literal("authors"),
+          t.Literal("sources"),
+          t.Literal("institutions"),
+          t.Literal("concepts"),
+          t.Literal("publishers"),
+          t.Literal("funders"),
+          t.Literal("topics"),
+          t.Literal("keywords"),
+        ]),
+        q: t.String(),
+      }),
+    },
+  )
+  .post(
+    "/literature-search",
+    ({ body }) => {
+      const { db } = getDb();
+      return LiteratureSearchService.search(db, {
+        query: body.query,
+        sort: body.sort as LiteratureSearchInput["sort"],
+        filters: body.filters as LiteratureSearchInput["filters"],
+        cursor: body.cursor ?? null,
+        limit: body.limit,
+      });
+    },
+    {
+      auth: true,
+      rateLimit: "explore:search",
+      body: t.Object({
+        query: t.String(),
+        sort: t.Optional(t.String()),
+        filters: t.Optional(t.Array(literatureClauseSchema)),
+        cursor: t.Optional(t.Union([t.String(), t.Null()])),
+        limit: t.Optional(t.Numeric()),
       }),
     },
   )
