@@ -201,6 +201,30 @@ export { PaperCacheService, type PapersByKeysItem } from "./paper-cache.service"
 export { ExploreService } from "./explore.service";
 export { suggestQueries } from "./explore/suggest";
 export {
+  isLiteratureFilterId,
+  isLiteratureSortId,
+  literatureFilterIds,
+  normalizeLiteratureSearch,
+  publicLiteratureCatalog,
+  toOpenAlexFilter,
+} from "./literature-search/catalog";
+export {
+  LITERATURE_SORT_IDS,
+  type LiteratureAutocompleteItem,
+  type LiteratureFilterCategoryId,
+  type LiteratureFilterClause,
+  type LiteratureFilterDefinition,
+  type LiteratureFilterId,
+  type LiteratureFilterKind,
+  type LiteratureFilterValue,
+  type LiteraturePaper,
+  type LiteratureSearchInput,
+  type LiteratureSearchPage,
+  type LiteratureSortId,
+  type NormalizedLiteratureSearch,
+  type PublicLiteratureCatalog,
+} from "./literature-search/types";
+export {
   type DiscoveryItemRef,
   type DiscoveryResolvedRef,
   FeedInteractionService,
