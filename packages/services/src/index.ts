@@ -208,9 +208,11 @@ export {
   publicLiteratureCatalog,
   toOpenAlexFilter,
 } from "./literature-search/catalog";
+export { LiteratureSearchService } from "./literature-search/service";
 export {
   LITERATURE_SORT_IDS,
   type LiteratureAutocompleteItem,
+  type LiteratureEntityKind,
   type LiteratureFilterCategoryId,
   type LiteratureFilterClause,
   type LiteratureFilterDefinition,
