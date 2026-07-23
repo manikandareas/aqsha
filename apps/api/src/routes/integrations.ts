@@ -147,6 +147,7 @@ export const integrations = new Elysia()
         batchId: params.batchId,
         selectedIndexes: body.selectedIndexes,
         duplicatePolicy: body.duplicatePolicy,
+        workspaceId: body.workspaceId,
       });
     },
     {
@@ -156,6 +157,7 @@ export const integrations = new Elysia()
       body: t.Object({
         selectedIndexes: t.Array(t.Number()),
         duplicatePolicy,
+        workspaceId: t.Optional(t.String()),
       }),
     },
   );

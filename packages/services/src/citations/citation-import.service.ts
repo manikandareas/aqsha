@@ -9,7 +9,13 @@ import type {
   Citation,
   NewCitation,
 } from "@aqsha/db";
-import { CitationImportBatchRepo, CitationRepo, throwAppError } from "@aqsha/db";
+import {
+  CitationImportBatchRepo,
+  CitationRepo,
+  throwAppError,
+  WorkspaceCitationLinkRepo,
+} from "@aqsha/db";
+import { WorkspaceService } from "../workspace.service";
 import {
   canonicalKeyForCsl,
   type CitationColumns,
@@ -77,6 +83,7 @@ export type ImportCommitResult = {
   created: number;
   merged: number;
   skipped: number;
+  linked: number;
 };
 
 function toPreviewRecord(record: StagedImportRecord): ImportPreviewRecord {
@@ -318,6 +325,7 @@ export const CitationImportService = {
       batchId: string;
       selectedIndexes: number[];
       duplicatePolicy: ImportDuplicatePolicy;
+      workspaceId?: string;
     },
   ): Promise<ImportCommitResult> {
     const batch = await CitationImportBatchRepo.findById(db, input.ownerUserId, input.batchId);
@@ -342,10 +350,15 @@ export const CitationImportService = {
     const isProviderSync = batch.sourceKind === "provider_sync";
     const batchProvider = (batch.provider ?? null) as CitationProvider | null;
 
-    const result: ImportCommitResult = { created: 0, merged: 0, skipped: 0 };
+    const result: ImportCommitResult = { created: 0, merged: 0, skipped: 0, linked: 0 };
     const now = Date.now();
 
     await db.transaction(async (tx) => {
+      if (input.workspaceId) {
+        await WorkspaceService.assertWorkspaceOwner(tx, input.ownerUserId, input.workspaceId, {
+          requireActive: true,
+        });
+      }
       // Re-check duplikat saat commit — library bisa berubah sejak preview.
       const current = await CitationRepo.findActiveByCanonicalKeys(
         tx,
@@ -371,6 +384,8 @@ export const CitationImportService = {
       }
       const rowsToInsert: NewCitation[] = [];
       const insertedKeys = new Set<string>();
+      const resolvedByCanonicalKey = new Map<string, string>();
+      const resolvedCitationIds = new Set<string>();
 
       for (const record of chosen) {
         const existing =
@@ -380,6 +395,13 @@ export const CitationImportService = {
         if (existing || batchDuplicate) {
           if (input.duplicatePolicy === "skip") {
             result.skipped++;
+            if (existing) {
+              resolvedByCanonicalKey.set(record.canonicalKey, existing.id);
+              resolvedCitationIds.add(existing.id);
+            } else {
+              const firstId = resolvedByCanonicalKey.get(record.canonicalKey);
+              if (firstId) resolvedCitationIds.add(firstId);
+            }
             continue;
           }
           if (input.duplicatePolicy === "merge") {
@@ -392,9 +414,13 @@ export const CitationImportService = {
                 });
               }
               result.merged++;
+              resolvedByCanonicalKey.set(record.canonicalKey, existing.id);
+              resolvedCitationIds.add(existing.id);
             } else {
               // Duplikat antar-record batch tanpa row existing → yang pertama sudah masuk.
               result.skipped++;
+              const firstId = resolvedByCanonicalKey.get(record.canonicalKey);
+              if (firstId) resolvedCitationIds.add(firstId);
             }
             continue;
           }
@@ -424,10 +450,24 @@ export const CitationImportService = {
           updatedAt: now,
         });
         insertedKeys.add(record.canonicalKey);
+        if (!resolvedByCanonicalKey.has(record.canonicalKey)) {
+          resolvedByCanonicalKey.set(record.canonicalKey, newId);
+        }
+        // Policy import menautkan setiap baris baru; skip/merge hanya first-of-key di atas.
+        resolvedCitationIds.add(newId);
         result.created++;
       }
 
       await CitationRepo.insertMany(tx, rowsToInsert);
+      if (input.workspaceId) {
+        const linkRows = [...resolvedCitationIds].map((citationId) => ({
+          id: crypto.randomUUID(),
+          workspaceId: input.workspaceId!,
+          citationId,
+          createdAt: now,
+        }));
+        result.linked = await WorkspaceCitationLinkRepo.insertMany(tx, linkRows);
+      }
       await CitationImportBatchRepo.updateById(tx, batch.id, {
         status: "committed",
         committedAt: now,

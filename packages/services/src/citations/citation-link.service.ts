@@ -9,6 +9,7 @@ import {
 import type { Db, DbOrTx } from "@aqsha/db";
 import { WorkspaceService } from "../workspace.service";
 import type { CitationExportFormat } from "./citation-format";
+import type { ManualCitationInput } from "./citation-normalize";
 import {
   type CitationDetail,
   type CitationListItem,
@@ -17,6 +18,24 @@ import {
   toListItem,
 } from "./citation-model";
 import { CitationService } from "./citation.service";
+
+export type CreateInWorkspaceInput =
+  | {
+      ownerUserId: string;
+      workspaceId: string;
+      kind: "doi";
+      doi: string;
+      tags?: string[];
+      allowDuplicate?: boolean;
+    }
+  | {
+      ownerUserId: string;
+      workspaceId: string;
+      kind: "manual";
+      fields: ManualCitationInput;
+      tags?: string[];
+      allowDuplicate?: boolean;
+    };
 
 export type CitationListResponse = {
   items: CitationListItem[];
@@ -64,6 +83,40 @@ export const CitationLinkService = {
       input.citationId,
     );
     return { ok: true };
+  },
+
+  async createInWorkspace(
+    db: Db,
+    input: CreateInWorkspaceInput,
+  ): Promise<CitationDetail & { created: boolean }> {
+    return db.transaction(async (tx) => {
+      await WorkspaceService.assertWorkspaceOwner(tx, input.ownerUserId, input.workspaceId, {
+        requireActive: true,
+      });
+      const created =
+        input.kind === "doi"
+          ? await CitationService.createByDoi(tx, {
+              ownerUserId: input.ownerUserId,
+              doi: input.doi,
+              tags: input.tags,
+              allowDuplicate: input.allowDuplicate,
+              onDuplicate: "return-existing",
+            })
+          : await CitationService.createManual(tx, {
+              ownerUserId: input.ownerUserId,
+              fields: input.fields,
+              tags: input.tags,
+              allowDuplicate: input.allowDuplicate,
+              onDuplicate: "return-existing",
+            });
+      await WorkspaceCitationLinkRepo.insert(tx, {
+        id: crypto.randomUUID(),
+        workspaceId: input.workspaceId,
+        citationId: created.id,
+        createdAt: Date.now(),
+      });
+      return created;
+    });
   },
 
   async removeManyFromWorkspace(

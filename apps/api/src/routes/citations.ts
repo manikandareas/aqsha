@@ -203,6 +203,7 @@ export const citations = new Elysia()
         batchId: params.batchId,
         selectedIndexes: body.selectedIndexes,
         duplicatePolicy: body.duplicatePolicy,
+        workspaceId: body.workspaceId,
       });
     },
     {
@@ -211,6 +212,7 @@ export const citations = new Elysia()
       body: t.Object({
         selectedIndexes: t.Array(t.Number()),
         duplicatePolicy: t.Union([t.Literal("skip"), t.Literal("merge"), t.Literal("import")]),
+        workspaceId: t.Optional(t.String()),
       }),
     },
   )
@@ -351,6 +353,41 @@ export const citations = new Elysia()
           ]),
         ),
         tag: t.Optional(t.String()),
+      }),
+    },
+  )
+  .post(
+    "/workspaces/:id/citations",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      if (body.doi) {
+        return CitationLinkService.createInWorkspace(db, {
+          ownerUserId,
+          workspaceId: params.id,
+          kind: "doi",
+          doi: body.doi,
+          tags: body.tags,
+          allowDuplicate: body.allowDuplicate,
+        });
+      }
+      return CitationLinkService.createInWorkspace(db, {
+        ownerUserId,
+        workspaceId: params.id,
+        kind: "manual",
+        fields: body.fields ?? { title: "" },
+        tags: body.tags,
+        allowDuplicate: body.allowDuplicate,
+      });
+    },
+    {
+      auth: true,
+      rateLimit: "citations:create",
+      body: t.Object({
+        doi: t.Optional(t.String()),
+        fields: t.Optional(manualFields),
+        tags: t.Optional(t.Array(t.String())),
+        allowDuplicate: t.Optional(t.Boolean()),
+        onDuplicate: t.Optional(t.Literal("return-existing")),
       }),
     },
   )

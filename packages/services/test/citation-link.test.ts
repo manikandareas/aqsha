@@ -160,6 +160,46 @@ describe("CitationLinkService.removeManyFromWorkspace", () => {
   });
 });
 
+describe("CitationLinkService.createInWorkspace", () => {
+  test("creates or returns existing and links inside one transaction", async () => {
+    const tx = {} as never;
+    const transaction = mock(async (fn: (t: unknown) => Promise<unknown>) => fn(tx));
+    const dbWithTx = { transaction } as never;
+    spyOn(WorkspaceService, "assertWorkspaceOwner").mockResolvedValue({ id: "ws_1" } as never);
+    const create = spyOn(CitationService, "createManual").mockResolvedValue({
+      ...listItem,
+      publisher: null,
+      cslJson: {},
+      canonicalKey: "title:alpha",
+      reviewedAt: null,
+      createdAt: 1,
+      deletedAt: null,
+      created: false,
+    } as never);
+    const insert = spyOn(WorkspaceCitationLinkRepo, "insert").mockResolvedValue();
+
+    const result = await CitationLinkService.createInWorkspace(dbWithTx, {
+      ownerUserId: "user_1",
+      workspaceId: "ws_1",
+      kind: "manual",
+      fields: { title: "Alpha" },
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        onDuplicate: "return-existing",
+        fields: { title: "Alpha" },
+      }),
+    );
+    expect(insert).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ workspaceId: "ws_1", citationId: "cit_1" }),
+    );
+    expect(result).toEqual(expect.objectContaining({ id: "cit_1", created: false }));
+  });
+});
+
 describe("CitationLinkService.exportForWorkspace", () => {
   test("rejects ids outside membership", async () => {
     spyOn(WorkspaceService, "assertWorkspaceOwner").mockResolvedValue({ id: "ws_1" } as never);

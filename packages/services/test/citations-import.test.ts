@@ -4,6 +4,7 @@ import {
   CitationImportBatchRepo,
   CitationRepo,
   DocumentCitationUsageRepo,
+  WorkspaceCitationLinkRepo,
 } from "@aqsha/db";
 import { CitationImportService } from "../src/citations/citation-import.service";
 import { CitationService } from "../src/citations/citation.service";
@@ -145,13 +146,40 @@ describe("CitationImportService.commit", () => {
       selectedIndexes: [0, 1, 2],
       duplicatePolicy: "skip",
     });
-    expect(result).toEqual({ created: 1, merged: 0, skipped: 2 });
+    expect(result).toEqual({ created: 1, merged: 0, skipped: 2, linked: 0 });
     const rows = insertMany.mock.calls[0]?.[1] as Array<{ title: string; source: string }>;
     expect(rows.map((r) => r.title)).toEqual(["Entry Dua"]);
     expect(rows[0]?.source).toBe("import");
     const patch = updateBatch.mock.calls[0]?.[2] as Record<string, unknown>;
     expect(patch.status).toBe("committed");
     expect(patch.recordsJson).toBeNull();
+  });
+
+  test("workspaceId: link existing duplicate + newly created in same transaction", async () => {
+    const { preview, batchRow } = await stagedBatch();
+    spyOn(CitationImportBatchRepo, "findById").mockResolvedValue(batchRow as never);
+    spyOn(CitationRepo, "findActiveByCanonicalKeys").mockResolvedValue([existingRow()]);
+    spyOn(CitationRepo, "insertMany").mockResolvedValue();
+    spyOn(CitationImportBatchRepo, "updateById").mockResolvedValue();
+    spyOn(WorkspaceService, "assertWorkspaceOwner").mockResolvedValue({ id: "ws_1" } as never);
+    let linkRows: Array<{ citationId: string }> = [];
+    spyOn(WorkspaceCitationLinkRepo, "insertMany").mockImplementation(async (_db, rows) => {
+      linkRows = rows as Array<{ citationId: string }>;
+      return rows.length;
+    });
+
+    const result = await CitationImportService.commit(fakeDb, {
+      ownerUserId: OWNER,
+      batchId: preview.batchId,
+      selectedIndexes: [0, 1],
+      duplicatePolicy: "skip",
+      workspaceId: "ws_1",
+    });
+
+    expect(result.linked).toBe(2);
+    const linkedIds = linkRows.map((row) => row.citationId);
+    expect(linkedIds).toContain("cit_existing");
+    expect(linkedIds.some((id) => id !== "cit_existing")).toBe(true);
   });
 
   test("policy merge: patch field kosong existing, duplikat batch tanpa row → skip", async () => {
@@ -189,7 +217,7 @@ describe("CitationImportService.commit", () => {
       selectedIndexes: [0, 1, 2],
       duplicatePolicy: "import",
     });
-    expect(result).toEqual({ created: 3, merged: 0, skipped: 0 });
+    expect(result).toEqual({ created: 3, merged: 0, skipped: 0, linked: 0 });
     expect((insertMany.mock.calls[0]?.[1] as unknown[]).length).toBe(3);
   });
 

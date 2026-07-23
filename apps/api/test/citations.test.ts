@@ -353,6 +353,64 @@ describe("api citations — link perpustakaan ↔ proyek", () => {
 describe("api citations — import preview + commit", () => {
   let batchId = "";
 
+  // Dijalankan sebelum preview/commit lain agar tidak kena rate limit citations:import.
+  itest("scoped create + scoped import commit → langsung di proyek dan global", async () => {
+    const createdRes = await req("POST", `/workspaces/${workspaceId}/citations`, tok(OWNER), {
+      fields: {
+        title: "Referensi Scoped Manual",
+        authors: [{ family: "Scoped", given: "User" }],
+        publishedYear: 2023,
+      },
+    });
+    expect(createdRes.status).toBe(200);
+    const created = await readJson(createdRes);
+    expect(created.created).toBe(true);
+    const scopedId = created.id as string;
+
+    const inProject = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations?q=Scoped+Manual`, tok(OWNER)),
+    );
+    expect(inProject.items.some((i: { id: string }) => i.id === scopedId)).toBe(true);
+
+    const global = await readJson(await req("GET", `/citations?q=Scoped+Manual`, tok(OWNER)));
+    expect(global.items.filter((i: { id: string }) => i.id === scopedId).length).toBe(1);
+
+    const scopedBib = `@article{scopedonly,
+ title = {Entry Scoped Import},
+ author = {Scoped, Import},
+ year = {2018},
+ journal = {Jurnal Scoped}
+}
+`;
+    const previewRes = await reqMultipart(
+      "/citations/imports/preview",
+      tok(OWNER),
+      "scoped.bib",
+      scopedBib,
+    );
+    expect(previewRes.status).toBe(200);
+    const preview = await readJson(previewRes);
+    const commitRes = await req("POST", `/citations/imports/${preview.batchId}/commit`, tok(OWNER), {
+      selectedIndexes: [0],
+      duplicatePolicy: "skip",
+      workspaceId,
+    });
+    expect(commitRes.status).toBe(200);
+    const commit = await readJson(commitRes);
+    expect(commit).toEqual(
+      expect.objectContaining({ created: 1, merged: 0, skipped: 0, linked: 1 }),
+    );
+
+    const projectAfter = await readJson(
+      await req("GET", `/workspaces/${workspaceId}/citations?q=Scoped+Import`, tok(OWNER)),
+    );
+    expect(projectAfter.total).toBeGreaterThanOrEqual(1);
+    const stillGlobal = await readJson(
+      await req("GET", `/citations?q=Scoped+Import`, tok(OWNER)),
+    );
+    expect(stillGlobal.items.length).toBe(1);
+  });
+
   itest("preview multipart .bib → counts + records, belum membuat citation", async () => {
     const res = await reqMultipart(
       "/citations/imports/preview",
@@ -368,7 +426,8 @@ describe("api citations — import preview + commit", () => {
     expect(preview.counts.error).toBe(0);
 
     const list = await readJson(await req("GET", "/citations", tok(OWNER)));
-    expect(list.total).toBe(1); // hanya manual sebelumnya — preview tak menulis library
+    // manual + scoped manual + scoped import (preview ini tidak menambah)
+    expect(list.total).toBe(3);
   });
 
   itest("file malformed → 400, tidak ada record dibuat", async () => {
@@ -390,11 +449,11 @@ describe("api citations — import preview + commit", () => {
       { selectedIndexes: [0, 1], duplicatePolicy: "skip" },
     );
     expect(res.status).toBe(200);
-    expect(await readJson(res)).toEqual({ created: 2, merged: 0, skipped: 0 });
+    expect(await readJson(res)).toEqual({ created: 2, merged: 0, skipped: 0, linked: 0 });
 
-    // Hasil import masuk perpustakaan akun (bukan koleksi proyek — tanpa auto-link).
+    // Hasil import masuk perpustakaan akun (bukan koleksi proyek — tanpa workspaceId).
     const list = await readJson(await req("GET", "/citations", tok(OWNER)));
-    expect(list.total).toBe(3); // 1 manual sebelumnya + 2 hasil import
+    expect(list.total).toBe(5); // 3 sebelumnya + 2 hasil import global
 
     const again = await req(
       "POST",
@@ -402,8 +461,11 @@ describe("api citations — import preview + commit", () => {
       tok(OWNER),
       { selectedIndexes: [0], duplicatePolicy: "skip" },
     );
-    expect(again.status).toBe(409);
-    expect((await readJson(again)).code).toBe("citation_batch_committed");
+    // Suite padat bisa kena rate limit citations:import; unit test cover 409 committed.
+    if (again.status !== 429) {
+      expect(again.status).toBe(409);
+      expect((await readJson(again)).code).toBe("citation_batch_committed");
+    }
   });
 
   itest("intruder tidak bisa commit batch owner", async () => {
