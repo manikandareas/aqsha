@@ -16,23 +16,19 @@
 
 	const ACCENT_STYLES: Record<ProjectAccent, AccentStyle> = {
 		mint: {
-			cover:
-				'border-mint-soft-border bg-mint-soft text-mint-foreground dark:border-border dark:bg-card dark:text-card-foreground',
+			cover: 'bg-mint-soft text-mint-foreground dark:bg-card dark:text-card-foreground',
 			badge: 'border-mint-soft-border text-mint-foreground'
 		},
 		lavender: {
-			cover:
-				'border-lavender-soft-border bg-lavender-soft text-lavender-foreground dark:border-border dark:bg-card dark:text-card-foreground',
+			cover: 'bg-lavender-soft text-lavender-foreground dark:bg-card dark:text-card-foreground',
 			badge: 'border-lavender-soft-border text-lavender-foreground'
 		},
 		coral: {
-			cover:
-				'border-coral-soft-border bg-coral-soft text-coral-foreground dark:border-border dark:bg-card dark:text-card-foreground',
+			cover: 'bg-coral-soft text-coral-foreground dark:bg-card dark:text-card-foreground',
 			badge: 'border-coral-soft-border text-coral-foreground'
 		},
 		lemon: {
-			cover:
-				'border-lemon-soft-border bg-lemon-soft text-lemon-foreground dark:border-border dark:bg-card dark:text-card-foreground',
+			cover: 'bg-lemon-soft text-lemon-foreground dark:bg-card dark:text-card-foreground',
 			badge: 'border-lemon-soft-border text-lemon-foreground'
 		}
 	};
@@ -54,11 +50,10 @@
 
 <article
 	class={cn(
-		'group relative flex h-[17.5rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border-2 p-3',
-		'transition-[border-color,transform] duration-150 ease-out',
-		'hover:-translate-y-0.5 hover:border-foreground/30',
-		'focus-within:-translate-y-0.5 focus-within:border-ring',
-		'focus-within:outline-none focus-within:ring-[3px] focus-within:ring-ring/50',
+		'group relative flex h-[17.5rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border-0 p-3 shadow-none ring-0 outline-none',
+		'transition-transform duration-150 ease-out',
+		'hover:-translate-y-0.5',
+		'focus-within:-translate-y-0.5',
 		'motion-reduce:transform-none',
 		accentStyle.cover
 	)}
@@ -66,13 +61,13 @@
 	<!-- Full-card hit target; chrome (menu) sits above via z-index so it can stop navigation. -->
 	<a
 		href={resolve('/app/(product)/projects/[projectId]', { projectId: workspace.id })}
-		class="absolute inset-0 z-10 rounded-2xl"
+		class="absolute inset-0 z-10 rounded-2xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
 		aria-label={`Buka ${title}`}
 	></a>
 
 	<!-- Fixed preview pane: flex-1 + overflow clip keeps card height stable across projects. -->
 	<div
-		class="relative z-0 min-h-0 flex-1 overflow-hidden rounded-xl border-2 border-border/80 bg-card text-card-foreground shadow-none"
+		class="relative z-0 min-h-0 flex-1 overflow-hidden rounded-xl border-0 bg-card text-card-foreground shadow-none ring-0 dark:bg-[color-mix(in_oklch,var(--muted)_58%,var(--card))] dark:text-foreground"
 		aria-hidden="true"
 	>
 		{#if sneakPeek}
@@ -80,23 +75,23 @@
 				Blocks stay shrink-0 so flex never crushes line boxes (min-h-0 + many blocks
 				was clipping glyph bottoms). Overflow clips at the pane edge instead.
 			-->
-			<div class="flex h-full flex-col gap-1.5 overflow-hidden px-3 py-2.5">
+			<div class="flex h-full flex-col gap-1 overflow-hidden px-3 py-2.5">
 				{#each sneakPeek.blocks as block, index (index)}
 					{#if block.type === 'title'}
-						<p class="shrink-0 truncate text-[0.85rem] font-bold leading-normal text-foreground">
+						<p class="shrink-0 truncate text-[0.85rem] font-bold leading-snug text-foreground">
 							{block.text}
 						</p>
 					{:else if block.type === 'heading'}
 						<p
 							class={cn(
-								'shrink-0 truncate font-semibold leading-normal text-foreground',
+								'shrink-0 truncate font-semibold leading-snug text-foreground',
 								block.level === 1 ? 'text-[0.75rem]' : 'text-[0.7rem]'
 							)}
 						>
 							{block.text}
 						</p>
 					{:else}
-						<p class="line-clamp-2 shrink-0 text-[0.68rem] leading-normal text-muted-foreground">
+						<p class="line-clamp-2 shrink-0 text-[0.68rem] leading-snug text-muted-foreground">
 							{block.text}
 						</p>
 					{/if}
