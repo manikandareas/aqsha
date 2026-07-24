@@ -20,17 +20,17 @@ test.describe('authenticated rendering', () => {
 	test.skip(!storageState, 'PLAYWRIGHT_AUTH_STATE is required for authenticated production E2E.');
 	test.use({ storageState: storageState ?? undefined });
 
-	test('Explore membuka popover awal tanpa menjalankan search', async ({ page }) => {
+	test('Explore menampilkan rail filter sejak landing desktop', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 960 });
 		await page.goto('/app/explore');
-		await page.getByRole('button', { name: 'Filter' }).click();
-		await expect(page.getByRole('dialog', { name: 'Advanced search' })).toBeVisible();
-		await page.keyboard.press('Escape');
-		await expect(page.getByRole('dialog', { name: 'Advanced search' })).not.toBeVisible();
+		await expect(page.getByRole('complementary', { name: 'Filter penelitian' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Filter' })).toBeHidden();
+		await expect(page.getByRole('dialog', { name: 'Advanced search' })).toHaveCount(0);
 	});
 
 	test('Explore menerapkan sidebar draft sekali di desktop', async ({ page }) => {
 		await page.goto('/app/explore?q=climate');
-		await expect(page.getByRole('complementary', { name: 'Advanced search' })).toBeVisible();
+		await expect(page.getByRole('complementary', { name: 'Filter penelitian' })).toBeVisible();
 		await page.getByRole('button', { name: 'Dampak' }).click();
 		await page.getByLabel('Minimal jumlah sitasi').fill('50');
 
@@ -44,10 +44,11 @@ test.describe('authenticated rendering', () => {
 		expect(requests).toHaveLength(1);
 	});
 
-	test('Explore memakai drawer filter di mobile', async ({ page }) => {
+	test('Explore membuka drawer filter dari landing mobile', async ({ page }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
-		await page.goto('/app/explore?q=climate');
+		await page.goto('/app/explore');
 		await page.getByRole('button', { name: 'Filter' }).click();
-		await expect(page.getByRole('dialog', { name: 'Advanced search' })).toBeVisible();
+		await expect(page.getByRole('dialog', { name: 'Filter penelitian' })).toBeVisible();
+		await expect(page.getByRole('complementary', { name: 'Filter penelitian' })).toBeHidden();
 	});
 });

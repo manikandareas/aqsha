@@ -80,7 +80,6 @@
 		() => authReady() && literatureMode
 	);
 
-	let filterPopoverOpen = $state(false);
 	let filterDrawerOpen = $state(false);
 	const isMobile = new IsMobile(1024);
 
@@ -118,7 +117,6 @@
 
 	function handleFilterApply(): void {
 		commitApplied(draft.snapshot());
-		filterPopoverOpen = false;
 		filterDrawerOpen = false;
 	}
 
@@ -144,8 +142,7 @@
 		commitApplied(draft.snapshot());
 	}
 
-	// Only used by the compact result-state bar — the landing hero wires its own Filter button
-	// straight into `LiteratureFilterPopover`'s bits-ui trigger instead (see `LiteratureSearchHero`).
+	// The Filter control is mobile-only; desktop keeps this focus handoff for keyboard callers.
 	function handleOpenFiltersInResults(): void {
 		if (isMobile.current) {
 			filterDrawerOpen = true;
@@ -188,68 +185,34 @@
 			{/snippet}
 		</AppPageHeader>
 
-		<div class="mx-auto w-full max-w-[1180px] px-6 pb-24 @2xl/explore:px-7">
-			{#if !literatureMode}
-				<LiteratureSearchHero
-					value={draft.q}
-					onValueChange={handleQueryChange}
-					onSubmit={handleSubmitQuery}
+		<div class="mx-auto w-full max-w-[1240px] px-5 pb-24 @2xl/explore:px-7">
+			<div class="grid min-w-0 gap-6 pt-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
+				<LiteratureFilterSidebar
 					{catalog}
 					{draft}
-					onFilterChange={handleFilterChange}
+					onChange={handleFilterChange}
 					onApply={handleFilterApply}
 					onReset={handleFilterReset}
-					onDiscard={handleFilterDiscard}
-					bind:open={filterPopoverOpen}
 				/>
-				<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
-					{#snippet pending()}
-						<section class="pt-8">
-							<div class="@container/feed"><ExploreFeedSkeleton /></div>
-						</section>
-					{/snippet}
-					{#snippet failed(_error, retry)}
-						<section class="pt-8">
-							<div class="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3">
-								<p class="text-[13px] font-medium text-destructive">Temuan belum dapat dimuat.</p>
-								<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
-									Coba lagi
-								</Button>
+				<div class="min-w-0">
+					{#if literatureMode}
+						<section class="pt-0">
+							<div class="mb-5 max-w-[720px]">
+								<LiteratureSearchBar
+									compact
+									value={draft.q}
+									onValueChange={handleQueryChange}
+									onSubmit={handleSubmitQuery}
+									onOpenFilters={handleOpenFiltersInResults}
+								/>
 							</div>
-						</section>
-					{/snippet}
-					<ExploreFindings {topic} query="" />
-				</DeferredQueryRegion>
-			{:else}
-				<section class="pt-6">
-					<div class="mb-5 max-w-[640px]">
-						<LiteratureSearchBar
-							compact
-							value={draft.q}
-							onValueChange={handleQueryChange}
-							onSubmit={handleSubmitQuery}
-							onOpenFilters={handleOpenFiltersInResults}
-						/>
-					</div>
-
-					<div class="flex min-w-0 items-start gap-6">
-						<LiteratureFilterSidebar
-							{catalog}
-							{draft}
-							onChange={handleFilterChange}
-							onApply={handleFilterApply}
-							onReset={handleFilterReset}
-						/>
-						<div class="min-w-0 flex-1">
 							<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
 								{#snippet pending()}
 									{@render literatureResultsSkeleton()}
 								{/snippet}
 								{#snippet failed(_error, retry)}
-									<div class="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3">
-										<p class="text-[13px] font-medium text-destructive">
-											Hasil belum dapat dimuat.
-										</p>
+									<div class="rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3">
+										<p class="text-[13px] font-medium text-destructive">Hasil belum dapat dimuat.</p>
 										<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
 											Coba lagi
 										</Button>
@@ -263,21 +226,44 @@
 									onLoadMore={handleLoadMore}
 								/>
 							</DeferredQueryRegion>
-						</div>
-					</div>
-				</section>
-
-				<LiteratureFilterDrawer
-					{catalog}
-					{draft}
-					onChange={handleFilterChange}
-					onApply={handleFilterApply}
-					onReset={handleFilterReset}
-					onDiscard={handleFilterDiscard}
-					bind:open={filterDrawerOpen}
-				/>
-			{/if}
+						</section>
+					{:else}
+						<LiteratureSearchHero
+							value={draft.q}
+							onValueChange={handleQueryChange}
+							onSubmit={handleSubmitQuery}
+							onOpenFilters={handleOpenFiltersInResults}
+						/>
+						<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
+							{#snippet pending()}
+								<section class="pt-8"><ExploreFeedSkeleton /></section>
+							{/snippet}
+							{#snippet failed(_error, retry)}
+								<section class="pt-8">
+									<div class="rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3">
+										<p class="text-[13px] font-medium text-destructive">Temuan belum dapat dimuat.</p>
+										<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
+											Coba lagi
+										</Button>
+									</div>
+								</section>
+							{/snippet}
+							<ExploreFindings {topic} query="" />
+						</DeferredQueryRegion>
+					{/if}
+				</div>
+			</div>
 		</div>
+
+		<LiteratureFilterDrawer
+			{catalog}
+			{draft}
+			onChange={handleFilterChange}
+			onApply={handleFilterApply}
+			onReset={handleFilterReset}
+			onDiscard={handleFilterDiscard}
+			bind:open={filterDrawerOpen}
+		/>
 	</div>
 </main>
 

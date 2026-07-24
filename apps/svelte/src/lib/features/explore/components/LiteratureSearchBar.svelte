@@ -3,29 +3,19 @@
 	import { Icon, SearchIcon, FilterIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 
-	/**
-	 * Query input + Filter trigger for direct literature search. `compact` switches between the
-	 * wide landing bar and the trimmed bar shown above results; both variants keep the same Filter
-	 * button so desktop/mobile result state can wire it to the sidebar-focus/drawer behavior. Typing
-	 * only reports the draft value upward — the parent owns state and decides when a query actually
-	 * commits to the URL. `filterTriggerProps` is an escape hatch so the landing composition can make
-	 * this exact button the real anchor for `LiteratureFilterPopover` (bits-ui positions the popover
-	 * relative to whichever element receives its trigger props).
-	 */
+	/** Query input delegates draft updates and mobile drawer navigation to its page owner. */
 	let {
 		compact = false,
 		value,
 		onValueChange,
 		onSubmit,
-		onOpenFilters,
-		filterTriggerProps
+		onOpenFilters
 	}: {
 		compact?: boolean;
 		value: string;
 		onValueChange: (query: string) => void;
 		onSubmit: () => void;
 		onOpenFilters: () => void;
-		filterTriggerProps?: Record<string, unknown>;
 	} = $props();
 
 	function handleSubmit(event: SubmitEvent): void {
@@ -61,8 +51,7 @@
 		variant="outline"
 		size={compact ? 'sm' : 'default'}
 		onclick={onOpenFilters}
-		{...filterTriggerProps}
-		class="shrink-0 gap-1.5"
+		class="shrink-0 gap-1.5 lg:hidden"
 	>
 		<Icon icon={FilterIcon} class="size-4" />
 		Filter

@@ -1,44 +1,17 @@
 <script lang="ts">
 	import LiteratureSearchBar from './LiteratureSearchBar.svelte';
-	import LiteratureFilterPopover from './LiteratureFilterPopover.svelte';
-	import type {
-		LiteratureFilterCategoryId,
-		LiteratureFilterClause,
-		LiteratureFilterDefinition,
-		LiteratureSortId
-	} from '$lib/features/explore/literature-search-types';
 
-	/**
-	 * Centered landing hero for the paper-first Explore search — heading, description, static
-	 * keyword examples, the wide search bar, and the initial advanced-search popover. Examples only
-	 * fill the query text (never submit or run a semantic search); the popover itself is reachable
-	 * before any query is typed, but its Apply stays disabled until a query exists.
-	 */
+	/** Landing search prompt delegates filter navigation to the page that owns the draft lifecycle. */
 	let {
 		value,
 		onValueChange,
 		onSubmit,
-		catalog,
-		draft,
-		onFilterChange,
-		onApply,
-		onReset,
-		onDiscard,
-		open = $bindable(false)
+		onOpenFilters
 	}: {
 		value: string;
 		onValueChange: (query: string) => void;
 		onSubmit: () => void;
-		catalog: {
-			categories: Array<{ id: LiteratureFilterCategoryId; label: string }>;
-			filters: LiteratureFilterDefinition[];
-		};
-		draft: { q: string; sort: LiteratureSortId; filters: LiteratureFilterClause[] };
-		onFilterChange: (patch: { filters: LiteratureFilterClause[] }) => void;
-		onApply: () => void;
-		onReset: () => void;
-		onDiscard: () => void;
-		open?: boolean;
+		onOpenFilters: () => void;
 	} = $props();
 
 	const EXAMPLES = [
@@ -61,26 +34,13 @@
 	</div>
 
 	<div class="w-full max-w-[640px]">
-		<LiteratureFilterPopover
-			{catalog}
-			{draft}
-			onChange={onFilterChange}
-			{onApply}
-			{onReset}
-			{onDiscard}
-			bind:open
-		>
-			{#snippet trigger({ props })}
-				<LiteratureSearchBar
-					compact={false}
-					{value}
-					{onValueChange}
-					{onSubmit}
-					onOpenFilters={() => {}}
-					filterTriggerProps={props}
-				/>
-			{/snippet}
-		</LiteratureFilterPopover>
+		<LiteratureSearchBar
+			compact={false}
+			{value}
+			{onValueChange}
+			{onSubmit}
+			{onOpenFilters}
+		/>
 	</div>
 
 	<div class="flex flex-wrap items-center justify-center gap-2">
