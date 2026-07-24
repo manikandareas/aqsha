@@ -14,11 +14,12 @@
 		feedItemToDiscoveryItem,
 		type DiscoveryItem
 	} from '$lib/features/discovery/model';
+	import type { SearchSourceInput } from '$lib/features/citations/types';
 	import type { FeedItem, FeedMode, FeedTopic } from '$lib/features/discovery/types';
 	import ExploreFeedSkeleton from './ExploreFeedSkeleton.svelte';
-	import ExploreFeedSourceRow, {
-		type ExploreFeedSourceRowHandlers
-	} from './ExploreFeedSourceRow.svelte';
+	import LiteratureBatchBar from './LiteratureBatchBar.svelte';
+	import ExploreSourceRow from './ExploreSourceRow.svelte';
+	import { discoveryItemToExploreSource, exploreSourceToSearchInput } from '../explore-source';
 
 	/** Curated discovery feed keeps one query and a source-list presentation for every topic. */
 	let { topic }: { topic: FeedTopic | null } = $props();
@@ -62,6 +63,12 @@
 				? 'CanLoadMore'
 				: 'Exhausted'
 	);
+	const selectedKeys = new SvelteSet<string>();
+	const selectedSources = $derived<SearchSourceInput[]>(
+		items
+			.filter((item) => selectedKeys.has(discoveryItemKey(item)))
+			.map((item) => exploreSourceToSearchInput(discoveryItemToExploreSource(item)))
+	);
 
 	// Cap auto-fetches per session so a run of locally-hidden items can't spin forever.
 	let sentinelEl = $state<HTMLDivElement | null>(null);
@@ -103,13 +110,26 @@
 		void feedQuery.fetchNextPage();
 	}
 
-	const handlers: ExploreFeedSourceRowHandlers = {
-		onSaved: (item) => record.mutate({ itemRef: item.itemRef, kind: 'save' }),
-		onHide: (item) => {
-			hidden.add(discoveryItemKey(item));
-			hide.mutate(item.itemRef, { onError: () => toast.error('Gagal menyembunyikan.') });
-		}
-	};
+	function handleSelectedChange(item: DiscoveryItem, selected: boolean): void {
+		const key = discoveryItemKey(item);
+		if (selected) selectedKeys.add(key);
+		else selectedKeys.delete(key);
+	}
+
+	function clearSelection(): void {
+		selectedKeys.clear();
+	}
+
+	function handleSaved(item: DiscoveryItem): void {
+		record.mutate({ itemRef: item.itemRef, kind: 'save' });
+	}
+
+	function handleHide(item: DiscoveryItem): void {
+		const key = discoveryItemKey(item);
+		hidden.add(key);
+		selectedKeys.delete(key);
+		hide.mutate(item.itemRef, { onError: () => toast.error('Gagal menyembunyikan.') });
+	}
 </script>
 
 <section class="pt-8">
@@ -130,12 +150,15 @@
 		{:else if items.length === 0 && feedStatus === 'Exhausted'}
 			{@render emptyState()}
 		{:else}
-			<div
-				class="overflow-hidden rounded-lg border-2 border-border bg-card"
-				aria-label="Temuan untukmu"
-			>
+			<div class="overflow-hidden" aria-label="Temuan untukmu">
 				{#each items as item (discoveryItemKey(item))}
-					<ExploreFeedSourceRow {item} {handlers} />
+					<ExploreSourceRow
+						source={discoveryItemToExploreSource(item)}
+						selected={selectedKeys.has(discoveryItemKey(item))}
+						onSelectedChange={(selected) => handleSelectedChange(item, selected)}
+						onSaved={() => handleSaved(item)}
+						onHide={() => handleHide(item)}
+					/>
 				{/each}
 			</div>
 			{#if feedStatus !== 'Exhausted'}
@@ -145,6 +168,8 @@
 		{/if}
 	</div>
 </section>
+
+<LiteratureBatchBar sources={selectedSources} onClear={clearSelection} />
 
 {#snippet feedFooter()}
 	{#if feedStatus === 'Exhausted'}

@@ -14,7 +14,8 @@
 		type AppliedLiteratureSearchState
 	} from '../literature-search-state.svelte';
 	import type { LiteraturePaper, LiteratureSortId } from '../literature-search-types';
-	import LiteratureResultRow from './LiteratureResultRow.svelte';
+	import { exploreSourceToSearchInput, literaturePaperToExploreSource } from '../explore-source';
+	import ExploreSourceRow from './ExploreSourceRow.svelte';
 	import LiteratureBatchBar from './LiteratureBatchBar.svelte';
 
 	const SORT_OPTIONS: Array<{ id: LiteratureSortId; label: string }> = [
@@ -68,15 +69,7 @@
 	const selectedSources = $derived<SearchSourceInput[]>(
 		items
 			.filter((item) => selectedKeys.has(item.key))
-			.map((item) => ({
-				clientKey: item.key,
-				title: item.title,
-				doi: item.doi,
-				url: item.url,
-				authors: item.authors,
-				year: item.year,
-				venue: item.venue
-			}))
+			.map((item) => exploreSourceToSearchInput(literaturePaperToExploreSource(item)))
 	);
 
 	function toggleSelected(key: string, checked: boolean): void {
@@ -140,14 +133,12 @@
 	{:else if isEmpty}
 		{@render emptyState()}
 	{:else}
-		<div
-			class="divide-y divide-border/80 overflow-hidden rounded-lg border-2 border-border bg-card"
-		>
+		<div class="overflow-hidden" aria-label="Hasil pencarian">
 			{#each items as paper (paper.key)}
-				<LiteratureResultRow
-					{paper}
+				<ExploreSourceRow
+					source={literaturePaperToExploreSource(paper)}
 					selected={selectedKeys.has(paper.key)}
-					onSelectedChange={toggleSelected}
+					onSelectedChange={(selected) => toggleSelected(paper.key, selected)}
 				/>
 			{/each}
 		</div>

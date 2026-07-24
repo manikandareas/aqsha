@@ -123,6 +123,7 @@
 	function handleSuggestionSelect(filterValue: string, filter: LiteratureFilterClause): void {
 		draft.setQuery(filterValue);
 		draft.replaceClause(filter);
+		commitApplied(draft.snapshot());
 	}
 
 	// Submit AND Apply both snapshot the draft, so filters staged before a new query is submitted
