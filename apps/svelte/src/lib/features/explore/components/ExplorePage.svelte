@@ -30,18 +30,20 @@
 	} from '../literature-search-types';
 	import ExploreFindings from './ExploreFindings.svelte';
 	import ExploreFeedSkeleton from './ExploreFeedSkeleton.svelte';
-	import LiteratureSearchHero from './LiteratureSearchHero.svelte';
 	import LiteratureSearchBar from './LiteratureSearchBar.svelte';
-	import LiteratureFilterSidebar from './LiteratureFilterSidebar.svelte';
+	import LiteratureSearchSuggestions from './LiteratureSearchSuggestions.svelte';
 	import LiteratureFilterDrawer from './LiteratureFilterDrawer.svelte';
+	import LiteratureFilterSheet from './LiteratureFilterSheet.svelte';
 	import LiteratureResults from './LiteratureResults.svelte';
 
 	/**
-	 * Explore surface — paper-first literature search. Sticky page header (breadcrumb + left-nav
-	 * toggle) over a scrolling body. Empty `q` → curated feed (Jelajah) under a centered search hero;
-	 * non-empty `q` → direct OpenAlex literature search with a compact bar, filter sidebar/drawer, and
-	 * a dense result list. `q`/`sort`/`f`/`topic` live in the URL via shallow `replaceState`, never a
-	 * full navigation. `topic` only drives the curated feed and is kept for legacy links/breadcrumb.
+	 * Explore surface — paper-first literature search. A breadcrumb header plus a query bar sit over
+	 * a scrolling body; the query bar is always present, so empty `q` and non-empty `q` share the same
+	 * chrome. Empty `q` → curated feed (Jelajah) with a page-owned title and search suggestions;
+	 * non-empty `q` → direct OpenAlex literature search with a dense result list. Filters open in a
+	 * side sheet on desktop or a drawer on mobile. `q`/`sort`/`f`/`topic` live in the
+	 * URL via shallow `replaceState`, never a full navigation. `topic` only drives the curated feed
+	 * and is kept for legacy links/breadcrumb.
 	 */
 	let { feedResult }: { feedResult: Promise<DeferredQueryResult> } = $props();
 
@@ -49,6 +51,11 @@
 		categories: Array<{ id: LiteratureFilterCategoryId; label: string }>;
 		filters: LiteratureFilterDefinition[];
 	} = { categories: [], filters: [] };
+
+	const EXPLORE_CONTENT_CLASS = 'mx-auto w-full max-w-6xl px-5 @2xl/explore:px-6';
+	const EXPLORE_SECTION_CLASS = 'pt-6 sm:pt-8';
+	const EXPLORE_ERROR_CLASS =
+		'rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3';
 
 	// `replaceState` changes browser history but intentionally leaves `$app/state.page.url` untouched.
 	// Keep the rendered state in sync eagerly, then restore it from the browser on Back/Forward.
@@ -85,6 +92,7 @@
 	);
 
 	let filterDrawerOpen = $state(false);
+	let filterSheetOpen = $state(false);
 	const isMobile = new IsMobile(1024);
 
 	function syncAppliedFromLocation(): void {
@@ -125,6 +133,7 @@
 	function handleFilterApply(): void {
 		commitApplied(draft.snapshot());
 		filterDrawerOpen = false;
+		filterSheetOpen = false;
 	}
 
 	function handleFilterReset(): void {
@@ -136,7 +145,7 @@
 	}
 
 	// Sort is a direct toolbar control, not gated by Apply — commit it against the currently applied
-	// filters so an unrelated, unapplied filter edit in the sidebar is never silently activated.
+	// filters so an unrelated, unapplied filter edit in the sheet or drawer is never silently activated.
 	function handleSortChange(sort: LiteratureSortId): void {
 		draft.setSort(sort);
 		commitApplied({ ...applied, sort });
@@ -149,17 +158,14 @@
 		commitApplied(draft.snapshot());
 	}
 
-	// The Filter control is mobile-only; desktop keeps this focus handoff for keyboard callers.
+	// Use a bottom drawer on touch layouts and a side sheet on wider screens so the results keep
+	// their full reading width without a persistent filter column.
 	function handleOpenFiltersInResults(): void {
 		if (isMobile.current) {
 			filterDrawerOpen = true;
 			return;
 		}
-		const sidebar = document.getElementById('advanced-search');
-		const focusable = sidebar?.querySelector<HTMLElement>(
-			'button, [href], input, select, textarea, [tabindex]'
-		);
-		focusable?.focus();
+		filterSheetOpen = true;
 	}
 
 	function handleLoadMore(): void {
@@ -170,7 +176,7 @@
 <svelte:window onpopstate={syncAppliedFromLocation} />
 
 <main class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
-	<div class="@container/explore min-h-0 flex-1 overflow-y-auto">
+	<div class="@container/explore min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
 		<AppPageHeader class="border-b-0">
 			{#snippet title()}
 				<nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5">
@@ -178,98 +184,96 @@
 						type="button"
 						onclick={() => setTopic(null)}
 						class={cn(
-							'shrink-0 truncate rounded-md text-base font-semibold transition-colors',
+							'inline-flex h-11 min-w-0 items-center truncate rounded-md px-1 text-base font-semibold transition-colors',
 							topicLabel ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
 						)}
+						aria-current={topicLabel ? undefined : 'page'}
 					>
 						Jelajahi
 					</button>
 					{#if topicLabel}
 						<Icon icon={ChevronRightIcon} class="size-3.5 shrink-0 text-muted-foreground/60" />
-						<span class="min-w-0 truncate text-base font-semibold text-foreground"
-							>{topicLabel}</span
+						<span
+							aria-current="page"
+							class="min-w-0 truncate text-base font-semibold text-foreground">{topicLabel}</span
 						>
 					{/if}
 				</nav>
 			{/snippet}
 		</AppPageHeader>
 
-		<div class="mx-auto w-full max-w-[1240px] px-5 pb-24 @2xl/explore:px-7">
-			<div class="grid min-w-0 gap-6 pt-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
-				<LiteratureFilterSidebar
-					{catalog}
-					{draft}
-					onChange={handleFilterChange}
-					onApply={handleFilterApply}
-					onReset={handleFilterReset}
+		<div class={cn(EXPLORE_CONTENT_CLASS, 'py-4')}>
+			<header>
+				<h1
+					class="font-heading text-balance text-3xl leading-tight font-bold text-foreground sm:text-4xl"
+				>
+					Cari literatur
+					<span class="explore-search-emoji ml-2 inline-block" aria-hidden="true">🔎</span>
+				</h1>
+			</header>
+		</div>
+
+		<div class={cn(EXPLORE_CONTENT_CLASS, 'py-2 sm:py-3')}>
+			<div class="w-full max-w-3xl space-y-8">
+				<LiteratureSearchBar
+					compact
+					value={draft.q}
+					onValueChange={handleQueryChange}
+					onSubmit={handleSubmitQuery}
+					onOpenFilters={handleOpenFiltersInResults}
 				/>
-				<div class="min-w-0">
-					{#if literatureMode}
-						<section class="pt-0">
-							<div class="mb-5 max-w-[720px]">
-								<LiteratureSearchBar
-									compact
-									value={draft.q}
-									onValueChange={handleQueryChange}
-									onSubmit={handleSubmitQuery}
-									onOpenFilters={handleOpenFiltersInResults}
-								/>
-							</div>
-							<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
-								{#snippet pending()}
-									{@render literatureResultsSkeleton()}
-								{/snippet}
-								{#snippet failed(error, retry)}
-									<div
-										class="rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3"
-									>
-										<p class="text-[13px] font-medium text-destructive">
-											{readableApiErrorMessage(error, 'Hasil belum dapat dimuat.')}
-										</p>
-										<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
-											Coba lagi
-										</Button>
-									</div>
-								{/snippet}
-								<LiteratureResults
-									query={searchQuery}
-									{applied}
-									onSortChange={handleSortChange}
-									onClearFilters={handleClearFilters}
-									onLoadMore={handleLoadMore}
-								/>
-							</DeferredQueryRegion>
-						</section>
-					{:else}
-						<LiteratureSearchHero
-							value={draft.q}
-							onValueChange={handleQueryChange}
-							onSubmit={handleSubmitQuery}
-							onOpenFilters={handleOpenFiltersInResults}
-						/>
-						<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
-							{#snippet pending()}
-								<section class="pt-8"><ExploreFeedSkeleton /></section>
-							{/snippet}
-							{#snippet failed(error, retry)}
-								<section class="pt-8">
-									<div
-										class="rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3"
-									>
-										<p class="text-[13px] font-medium text-destructive">
-											{readableApiErrorMessage(error, 'Temuan belum dapat dimuat.')}
-										</p>
-										<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
-											Coba lagi
-										</Button>
-									</div>
-								</section>
-							{/snippet}
-							<ExploreFindings {topic} />
-						</DeferredQueryRegion>
-					{/if}
-				</div>
+				{#if !literatureMode}
+					<LiteratureSearchSuggestions onSelect={handleQueryChange} />
+				{/if}
 			</div>
+		</div>
+
+		<div class={cn(EXPLORE_CONTENT_CLASS, 'pb-20 sm:pb-24')}>
+			{#if literatureMode}
+				<section class={EXPLORE_SECTION_CLASS}>
+					<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
+						{#snippet pending()}
+							{@render literatureResultsSkeleton()}
+						{/snippet}
+						{#snippet failed(error, retry)}
+							<div class={EXPLORE_ERROR_CLASS}>
+								<p class="text-label font-medium text-destructive">
+									{readableApiErrorMessage(error, 'Hasil belum dapat dimuat.')}
+								</p>
+								<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
+									Coba lagi
+								</Button>
+							</div>
+						{/snippet}
+						<LiteratureResults
+							query={searchQuery}
+							{applied}
+							onSortChange={handleSortChange}
+							onClearFilters={handleClearFilters}
+							onLoadMore={handleLoadMore}
+						/>
+					</DeferredQueryRegion>
+				</section>
+			{:else}
+				<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
+					{#snippet pending()}
+						<section class={EXPLORE_SECTION_CLASS}><ExploreFeedSkeleton /></section>
+					{/snippet}
+					{#snippet failed(error, retry)}
+						<section class={EXPLORE_SECTION_CLASS}>
+							<div class={EXPLORE_ERROR_CLASS}>
+								<p class="text-label font-medium text-destructive">
+									{readableApiErrorMessage(error, 'Temuan belum dapat dimuat.')}
+								</p>
+								<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
+									Coba lagi
+								</Button>
+							</div>
+						</section>
+					{/snippet}
+					<ExploreFindings {topic} />
+				</DeferredQueryRegion>
+			{/if}
 		</div>
 
 		<LiteratureFilterDrawer
@@ -281,6 +285,15 @@
 			onDiscard={handleFilterDiscard}
 			bind:open={filterDrawerOpen}
 		/>
+		<LiteratureFilterSheet
+			{catalog}
+			{draft}
+			onChange={handleFilterChange}
+			onApply={handleFilterApply}
+			onReset={handleFilterReset}
+			onDiscard={handleFilterDiscard}
+			bind:open={filterSheetOpen}
+		/>
 	</div>
 </main>
 
@@ -290,9 +303,11 @@
 			<Skeleton class="h-4 w-24" />
 			<Skeleton class="h-8 w-40" />
 		</div>
-		<div class="divide-y divide-border overflow-hidden rounded-md border-2 border-border bg-card">
+		<div
+			class="divide-y divide-border/80 overflow-hidden rounded-lg border-2 border-border bg-card"
+		>
 			{#each ['a', 'b', 'c', 'd', 'e'] as key (key)}
-				<div class="flex gap-3 px-4 py-3.5">
+				<div class="flex gap-3 px-4 py-5 sm:px-5">
 					<Skeleton class="mt-0.5 size-5 shrink-0 rounded-sm" />
 					<div class="min-w-0 flex-1 space-y-2">
 						<Skeleton class="h-4 w-[70%]" />
@@ -304,3 +319,33 @@
 		</div>
 	</div>
 {/snippet}
+
+<style>
+	.explore-search-emoji {
+		transform-origin: 70% 80%;
+		animation: explore-search-idle 5s ease-in-out infinite;
+	}
+
+	@keyframes explore-search-idle {
+		0%,
+		54%,
+		100% {
+			transform: rotate(-8deg) translateY(0);
+		}
+
+		8%,
+		24% {
+			transform: rotate(7deg) translateY(-2px);
+		}
+
+		16% {
+			transform: rotate(-4deg) translateY(0);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.explore-search-emoji {
+			animation: none;
+		}
+	}
+</style>
