@@ -248,7 +248,7 @@
 									</div>
 								</section>
 							{/snippet}
-							<ExploreFindings {topic} query="" />
+							<ExploreFindings {topic} />
 						</DeferredQueryRegion>
 					{/if}
 				</div>
