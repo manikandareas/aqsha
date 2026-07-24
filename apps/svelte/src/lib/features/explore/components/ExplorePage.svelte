@@ -120,6 +120,11 @@
 		draft.setQuery(query);
 	}
 
+	function handleSuggestionSelect(filterValue: string, filter: LiteratureFilterClause): void {
+		draft.setQuery(filterValue);
+		draft.replaceClause(filter);
+	}
+
 	// Submit AND Apply both snapshot the draft, so filters staged before a new query is submitted
 	// are kept rather than dropped.
 	function handleSubmitQuery(): void {
@@ -223,7 +228,7 @@
 					onOpenFilters={handleOpenFiltersInResults}
 				/>
 				{#if !literatureMode}
-					<LiteratureSearchSuggestions onSelect={handleQueryChange} />
+					<LiteratureSearchSuggestions onSelect={handleSuggestionSelect} />
 				{/if}
 			</div>
 		</div>
