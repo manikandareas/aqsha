@@ -7,11 +7,7 @@
 		LiteratureSortId
 	} from '$lib/features/explore/literature-search-types';
 
-	/**
-	 * Desktop result-state filter surface — the same draft as the popover/drawer, presented as a
-	 * sticky sidebar instead of a floating layer. `lg:block` keeps it out of the DOM's visible flow on
-	 * narrower viewports, where `LiteratureFilterDrawer` takes over instead.
-	 */
+	/** Desktop filter rail shares the draft with the mobile drawer so every viewport applies one query. */
 	let {
 		catalog,
 		draft,
@@ -32,9 +28,16 @@
 
 <aside
 	id="advanced-search"
-	aria-label="Advanced search"
-	class="sticky top-11 hidden max-h-[calc(100svh-2.75rem)] w-[272px] shrink-0 overflow-y-auto border-r-2 border-border bg-card/40 px-4 py-5 lg:block"
+	aria-label="Filter penelitian"
+	class="sticky top-11 hidden h-[calc(100svh-2.75rem)] w-72 shrink-0 flex-col overflow-hidden rounded-lg border-2 border-border bg-card lg:flex"
 >
-	<h2 class="mb-4 font-heading text-base text-foreground">Advanced search</h2>
-	<LiteratureFilterEditor {catalog} {draft} {onChange} {onApply} {onReset} />
+	<div class="border-b-2 border-border px-4 py-4">
+		<h2 class="font-heading text-base text-foreground">Filter penelitian</h2>
+		<p class="mt-1 text-label text-muted-foreground">
+			Persempit sumber tanpa meninggalkan hasil.
+		</p>
+	</div>
+	<div class="min-h-0 flex-1 px-3 py-3">
+		<LiteratureFilterEditor {catalog} {draft} {onChange} {onApply} {onReset} />
+	</div>
 </aside>

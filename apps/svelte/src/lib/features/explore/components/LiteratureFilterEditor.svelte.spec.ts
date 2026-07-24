@@ -18,11 +18,46 @@ it('menahan filter sebagai draft sampai Apply', async () => {
 		onApply,
 		onReset
 	});
-	await page.getByRole('button', { name: 'Dampak' }).click();
 	await page.getByLabelText('Minimal jumlah sitasi').fill('50');
 	expect(onApply).not.toHaveBeenCalled();
 	await page.getByRole('button', { name: 'Terapkan filter' }).click();
 	expect(onApply).toHaveBeenCalledOnce();
 	await page.getByRole('button', { name: 'Reset filter' }).click();
 	expect(onReset).toHaveBeenCalledOnce();
+});
+
+it('opens Publikasi first and lets each category collapse independently', async () => {
+	render(LiteratureFilterEditor, {
+		catalog: {
+			categories: [
+				{ id: 'publication', label: 'Publikasi' },
+				{ id: 'impact', label: 'Dampak' }
+			],
+			filters: [
+				{
+					id: 'publication_date',
+					category: 'publication',
+					label: 'Tanggal publikasi',
+					kind: 'date-range'
+				},
+				{
+					id: 'citation_count',
+					category: 'impact',
+					label: 'Jumlah sitasi',
+					kind: 'number-range'
+				}
+			]
+		},
+		draft: { q: 'climate', sort: 'relevance', filters: [] },
+		onChange: vi.fn(),
+		onApply: vi.fn(),
+		onReset: vi.fn()
+	});
+
+	await expect.element(page.getByLabelText('Mulai tanggal publikasi')).toBeVisible();
+	await expect.element(page.getByLabelText('Minimal jumlah sitasi')).not.toBeVisible();
+	await page.getByRole('button', { name: 'Publikasi' }).click();
+	await expect.element(page.getByLabelText('Mulai tanggal publikasi')).not.toBeVisible();
+	await page.getByRole('button', { name: 'Dampak' }).click();
+	await expect.element(page.getByLabelText('Minimal jumlah sitasi')).toBeVisible();
 });

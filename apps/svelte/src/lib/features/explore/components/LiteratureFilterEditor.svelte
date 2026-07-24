@@ -2,10 +2,14 @@
 	import { untrack } from 'svelte';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Checkbox } from '@aqsha/ui-svelte/components/checkbox';
-	import { Switch } from '@aqsha/ui-svelte/components/switch';
+	import * as Collapsible from '@aqsha/ui-svelte/components/collapsible';
 	import * as Select from '@aqsha/ui-svelte/components/select';
-	import { Icon, XIcon } from '$lib/icons';
-	import { cn } from '@aqsha/ui-svelte/utils';
+	import { Switch } from '@aqsha/ui-svelte/components/switch';
+	import { ChevronDownIcon, Icon, XIcon } from '$lib/icons';
+	import {
+		reconcileFilterAccordionState,
+		type FilterAccordionState
+	} from '../filter-accordion-state';
 	import type {
 		LiteratureFilterCategoryId,
 		LiteratureFilterClause,
@@ -59,13 +63,21 @@
 		}
 	});
 
-	let selectedCategory = $state<LiteratureFilterCategoryId | null>(
-		untrack(() => catalog.categories[0]?.id ?? null)
-	);
+	let accordionState = $state<FilterAccordionState>({ initialized: false, open: {} });
+	let catalogSignature = $state('');
 
-	const categoryFilters = $derived(
-		catalog.filters.filter((filter) => filter.category === selectedCategory)
-	);
+	$effect(() => {
+		const nextSignature = catalog.categories.map((category) => category.id).join('|');
+		if (nextSignature.length === 0 || nextSignature === catalogSignature) return;
+		catalogSignature = nextSignature;
+		accordionState = reconcileFilterAccordionState(accordionState, catalog.categories);
+	});
+
+	function filtersForCategory(
+		category: LiteratureFilterCategoryId
+	): LiteratureFilterDefinition[] {
+		return catalog.filters.filter((filter) => filter.category === category);
+	}
 
 	type ActiveClause = { clause: LiteratureFilterClause; definition: LiteratureFilterDefinition };
 	const activeClauses = $derived<ActiveClause[]>(
@@ -74,6 +86,17 @@
 			return definition ? [{ clause, definition }] : [];
 		})
 	);
+
+	function activeCountForCategory(category: LiteratureFilterCategoryId): number {
+		return activeClauses.filter(({ definition }) => definition.category === category).length;
+	}
+
+	function setCategoryOpen(category: LiteratureFilterCategoryId, open: boolean): void {
+		accordionState = {
+			...accordionState,
+			open: { ...accordionState.open, [category]: open }
+		};
+	}
 
 	function currentValue(filterId: LiteratureFilterId): LiteratureFilterValue | undefined {
 		return workingFilters.find((item) => item.id === filterId)?.value;
@@ -193,39 +216,44 @@
 		</div>
 	{/if}
 
-	<div class="flex min-h-0 flex-1 flex-col gap-4 sm:flex-row">
-		<div
-			class="flex shrink-0 flex-row flex-wrap gap-1.5 sm:w-44 sm:flex-col"
-			aria-label="Kategori filter"
-		>
-			{#each catalog.categories as category (category.id)}
-				<button
-					type="button"
-					aria-pressed={selectedCategory === category.id}
-					onclick={() => (selectedCategory = category.id)}
-					class={cn(
-						'rounded-md border-2 px-3 py-2 text-left text-[13px] font-semibold transition-colors',
-						selectedCategory === category.id
-							? 'border-primary bg-primary/10 text-foreground'
-							: 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'
-					)}
+	<div class="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+		{#each catalog.categories as category (category.id)}
+			{@const filters = filtersForCategory(category.id)}
+			{@const count = activeCountForCategory(category.id)}
+			<Collapsible.Root
+				open={accordionState.open[category.id] ?? false}
+				onOpenChange={(open) => setCategoryOpen(category.id, open)}
+			>
+				<Collapsible.Trigger
+					class="group flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-control font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-muted"
 				>
-					{category.label}
-				</button>
-			{/each}
-		</div>
-
-		<div class="min-w-0 flex-1 space-y-5 overflow-y-auto">
-			{#if categoryFilters.length === 0}
-				<p class="text-[13px] text-muted-foreground">Belum ada filter pada kategori ini.</p>
-			{/if}
-			{#each categoryFilters as filter (filter.id)}
-				{@render filterField(filter)}
-			{/each}
-		</div>
+					<span class="min-w-0 truncate">{category.label}</span>
+					<span class="flex shrink-0 items-center gap-2">
+						{#if count > 0}
+							<span class="rounded-full bg-mint-soft px-1.5 py-0.5 text-micro text-mint-foreground">{count}</span>
+						{/if}
+						<Icon
+							icon={ChevronDownIcon}
+							class="size-4 transition-transform duration-150 group-data-[state=open]:rotate-180 motion-reduce:transition-none"
+						/>
+					</span>
+				</Collapsible.Trigger>
+				<Collapsible.Content>
+					<div class="space-y-4 px-3 pb-4 pt-3">
+						{#if filters.length === 0}
+							<p class="text-label text-muted-foreground">Belum ada filter pada kategori ini.</p>
+						{:else}
+							{#each filters as filter (filter.id)}
+								{@render filterField(filter)}
+							{/each}
+						{/if}
+					</div>
+				</Collapsible.Content>
+			</Collapsible.Root>
+		{/each}
 	</div>
 
-	<div class="flex items-center justify-between gap-3 border-t-2 border-border pt-4">
+	<div class="sticky bottom-0 flex items-center justify-between gap-3 border-t-2 border-border bg-card pt-4">
 		<Button type="button" variant="outline" onclick={onReset}>Reset filter</Button>
 		<Button type="button" onclick={onApply} disabled={!draft.q.trim()}>Terapkan filter</Button>
 	</div>

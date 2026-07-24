@@ -50,8 +50,9 @@
 
 <Drawer.Root {open} onOpenChange={handleOpenChange} direction="bottom">
 	<Drawer.Content aria-describedby={undefined} class="flex max-h-[92svh] flex-col p-0">
-		<Drawer.Header class="border-b border-border pb-3">
-			<Drawer.Title>Advanced search</Drawer.Title>
+		<Drawer.Header class="border-b-2 border-border px-4 pb-3 pt-4">
+			<Drawer.Title>Filter penelitian</Drawer.Title>
+			<Drawer.Description>Atur filter, lalu terapkan saat siap mencari.</Drawer.Description>
 		</Drawer.Header>
 		<div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
 			<LiteratureFilterEditor {catalog} {draft} {onChange} onApply={handleApply} {onReset} />
