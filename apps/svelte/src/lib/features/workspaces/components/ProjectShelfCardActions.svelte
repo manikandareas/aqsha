@@ -46,7 +46,7 @@
 				aria-label="Aksi proyek"
 				onclick={(event) => {
 					stopCardNav(event);
-					props.onclick?.(event);
+					(props as { onclick?: (event: MouseEvent) => void }).onclick?.(event);
 				}}
 				onpointerdown={stopCardNav}
 			>

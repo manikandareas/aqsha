@@ -9,9 +9,9 @@ export const PROJECT_SORT_OPTIONS = [
 	{ id: 'updated-asc', label: 'Terlama diedit' }
 ] as const satisfies readonly { id: ProjectSortId; label: string }[];
 
-export function sortWorkspaces(items: Workspace[], sort: ProjectSortId): Workspace[] {
+export function sortWorkspaces<T extends Workspace>(items: T[], sort: ProjectSortId): T[] {
 	const next = [...items];
-	const byTitle = (a: Workspace, b: Workspace) =>
+	const byTitle = (a: T, b: T) =>
 		projectDisplayTitle(a).localeCompare(projectDisplayTitle(b), 'id', { sensitivity: 'base' });
 
 	switch (sort) {
