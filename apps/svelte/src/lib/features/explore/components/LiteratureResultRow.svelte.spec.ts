@@ -41,3 +41,35 @@ it('merender metadata sumber dan meneruskan canonical key saat dipilih', async (
 	await page.getByRole('checkbox', { name: 'Pilih Climate adaptation' }).click();
 	expect(onSelectedChange).toHaveBeenCalledWith('doi:10.1/climate', true);
 });
+
+it('groups save and canonical source actions beside a long paper title', async () => {
+	render(LiteratureResultRow, {
+		paper: {
+			key: 'doi:10.1/long',
+			title: 'A deliberately long title that must wrap before its source actions do',
+			snippet: 'A readable abstract excerpt.',
+			url: 'https://doi.org/10.1/long',
+			authors: ['A. Researcher', 'B. Researcher'],
+			year: 2024,
+			venue: 'Journal of Usable Research Interfaces',
+			citedByCount: 42,
+			isOpenAccess: true,
+			hasPdf: true,
+			workType: 'review',
+			isRetracted: false,
+			topics: []
+		},
+		selected: false,
+		onSelectedChange: vi.fn()
+	});
+
+	await expect
+		.element(
+			page.getByRole('group', {
+				name: 'Tindakan untuk A deliberately long title that must wrap before its source actions do'
+			})
+		)
+		.toBeVisible();
+	await expect.element(page.getByRole('button', { name: 'Simpan' })).toBeVisible();
+	await expect.element(page.getByRole('link', { name: 'Buka sumber asli' })).toBeVisible();
+});

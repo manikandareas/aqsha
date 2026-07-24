@@ -140,7 +140,7 @@
 	{:else if isEmpty}
 		{@render emptyState()}
 	{:else}
-		<div class="divide-y divide-border overflow-hidden rounded-md border-2 border-border bg-card">
+		<div class="divide-y divide-border/80 overflow-hidden rounded-lg border-2 border-border bg-card">
 			{#each items as paper (paper.key)}
 				<LiteratureResultRow
 					{paper}
@@ -168,16 +168,14 @@
 <LiteratureBatchBar sources={selectedSources} onClear={clearSelection} />
 
 {#snippet skeleton()}
-	<div class="divide-y divide-border overflow-hidden rounded-md border-2 border-border bg-card">
+	<div class="divide-y divide-border/80 overflow-hidden rounded-lg border-2 border-border bg-card">
 		{#each ['a', 'b', 'c', 'd', 'e'] as key (key)}
-			<div class="flex gap-3 px-4 py-3.5">
-				<Skeleton class="mt-0.5 size-5 shrink-0 rounded-sm" />
-				<div class="min-w-0 flex-1 space-y-2">
-					<Skeleton class="h-4 w-[70%]" />
-					<Skeleton class="h-3 w-[45%]" />
-					<Skeleton class="h-3 w-full" />
-					<Skeleton class="h-3 w-[60%]" />
-				</div>
+			<div class="space-y-3 px-4 py-5 sm:px-5">
+				<Skeleton class="h-5 w-[72%]" />
+				<Skeleton class="h-3 w-[42%]" />
+				<Skeleton class="h-3 w-full" />
+				<Skeleton class="h-3 w-[64%]" />
+				<Skeleton class="h-3 w-20" />
 			</div>
 		{/each}
 	</div>
