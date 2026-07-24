@@ -13,7 +13,7 @@ it('menahan filter sebagai draft sampai Apply', async () => {
 				{ id: 'citation_count', category: 'impact', label: 'Jumlah sitasi', kind: 'number-range' }
 			]
 		},
-		draft: { q: 'climate', sort: 'relevance', filters: [] },
+		draft: { q: 'climate', filters: [] },
 		onChange: vi.fn(),
 		onApply,
 		onReset
@@ -48,7 +48,7 @@ it('opens Publikasi first and lets each category collapse independently', async 
 				}
 			]
 		},
-		draft: { q: 'climate', sort: 'relevance', filters: [] },
+		draft: { q: 'climate', filters: [] },
 		onChange: vi.fn(),
 		onApply: vi.fn(),
 		onReset: vi.fn()

@@ -21,7 +21,8 @@
 	import { feedDetailHref, type DiscoveryItem } from '$lib/features/discovery/model';
 	import SaveSourceButton from '$lib/features/discovery/components/SaveSourceButton.svelte';
 
-	let { item, handlers }: { item: DiscoveryItem; handlers: ExploreFeedSourceRowHandlers } = $props();
+	let { item, handlers }: { item: DiscoveryItem; handlers: ExploreFeedSourceRowHandlers } =
+		$props();
 
 	const detailHref = $derived(feedDetailHref(item));
 	const destination = $derived(detailHref ?? item.resolvedUrl ?? item.url);
@@ -31,12 +32,15 @@
 	const summary = $derived(item.tldr ?? item.summary);
 </script>
 
-<article class="group px-4 py-5 transition-colors hover:bg-muted/55 focus-within:bg-muted/55 sm:px-5">
+<article
+	class="group px-4 py-5 transition-colors hover:bg-muted/55 focus-within:bg-muted/55 sm:px-5"
+>
 	<div class="flex min-w-0 items-start justify-between gap-4">
 		<div class="min-w-0 flex-1">
 			<div class="mb-2 flex flex-wrap items-center gap-1.5">
 				{#if item.isOpenAccess}<Badge variant="chip-mint">Open access</Badge>{/if}
-				{#each item.topics.slice(0, 2) as topic (topic)}<Badge variant="outline">{topic}</Badge>{/each}
+				{#each item.topics.slice(0, 2) as topic (topic)}<Badge variant="outline">{topic}</Badge
+					>{/each}
 			</div>
 			<h3 class="text-[15px] leading-5 font-semibold text-foreground sm:text-base">
 				<a
@@ -44,10 +48,13 @@
 					target={isExternal ? '_blank' : undefined}
 					rel={isExternal ? 'noreferrer' : undefined}
 					class="rounded-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-				>{item.title}</a>
+					>{item.title}</a
+				>
 			</h3>
 			<p class="mt-2 text-label text-muted-foreground">{sourceLine}</p>
-			{#if summary}<p class="mt-2 line-clamp-3 max-w-[75ch] text-[13px] leading-5 text-ink-soft">{summary}</p>{/if}
+			{#if summary}<p class="mt-2 line-clamp-3 max-w-[75ch] text-[13px] leading-5 text-ink-soft">
+					{summary}
+				</p>{/if}
 		</div>
 		<div class="flex shrink-0 items-center gap-1">
 			<SaveSourceButton

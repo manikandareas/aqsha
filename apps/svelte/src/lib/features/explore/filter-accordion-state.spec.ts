@@ -8,10 +8,7 @@ const categories = [
 
 describe('reconcileFilterAccordionState', () => {
 	it('opens Publikasi when the async catalog first becomes available', () => {
-		const empty = reconcileFilterAccordionState(
-			{ initialized: false, open: {} },
-			[]
-		);
+		const empty = reconcileFilterAccordionState({ initialized: false, open: {} }, []);
 		expect(empty).toEqual({ initialized: false, open: {} });
 		expect(reconcileFilterAccordionState(empty, categories)).toEqual({
 			initialized: true,

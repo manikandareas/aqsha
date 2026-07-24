@@ -9,6 +9,7 @@
 	import { Icon, ChevronRightIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { getAuthState } from '$lib/auth';
+	import { readableApiErrorMessage } from '$lib/errors';
 	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import { DeferredQueryRegion, type DeferredQueryResult } from '$lib/query';
@@ -49,8 +50,11 @@
 		filters: LiteratureFilterDefinition[];
 	} = { categories: [], filters: [] };
 
-	// Applied state (URL) — single source of truth for what is actually searched/shown.
-	const applied = $derived<AppliedLiteratureSearchState>(readExploreUrl(page.url.searchParams));
+	// `replaceState` changes browser history but intentionally leaves `$app/state.page.url` untouched.
+	// Keep the rendered state in sync eagerly, then restore it from the browser on Back/Forward.
+	let applied = $state<AppliedLiteratureSearchState>(
+		untrack(() => readExploreUrl(page.url.searchParams))
+	);
 	const literatureMode = $derived(applied.q.trim().length > 0);
 	const topic = $derived<FeedTopic | null>(applied.topic);
 	const topicLabel = $derived(topic ? FEED_TOPIC_LABELS[topic] : null);
@@ -83,8 +87,13 @@
 	let filterDrawerOpen = $state(false);
 	const isMobile = new IsMobile(1024);
 
+	function syncAppliedFromLocation(): void {
+		applied = readExploreUrl(new SvelteURL(window.location.href).searchParams);
+	}
+
 	function commitApplied(snapshot: AppliedLiteratureSearchState): void {
-		const url = new SvelteURL(page.url);
+		applied = snapshot;
+		const url = new SvelteURL(window.location.href);
 		url.search = applyExploreUrl(url.searchParams, {
 			q: snapshot.q,
 			sort: snapshot.sort,
@@ -96,9 +105,7 @@
 
 	function setTopic(next: FeedTopic | null): void {
 		draft.topic = next;
-		const url = new SvelteURL(page.url);
-		url.search = applyExploreUrl(url.searchParams, { topic: next }).toString();
-		replaceState(resolve('/app/(product)/explore') + url.search + url.hash, page.state);
+		commitApplied({ ...applied, topic: next });
 	}
 
 	function handleQueryChange(query: string): void {
@@ -160,6 +167,8 @@
 	}
 </script>
 
+<svelte:window onpopstate={syncAppliedFromLocation} />
+
 <main class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
 	<div class="@container/explore min-h-0 flex-1 overflow-y-auto">
 		<AppPageHeader class="border-b-0">
@@ -210,9 +219,13 @@
 								{#snippet pending()}
 									{@render literatureResultsSkeleton()}
 								{/snippet}
-								{#snippet failed(_error, retry)}
-									<div class="rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3">
-										<p class="text-[13px] font-medium text-destructive">Hasil belum dapat dimuat.</p>
+								{#snippet failed(error, retry)}
+									<div
+										class="rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3"
+									>
+										<p class="text-[13px] font-medium text-destructive">
+											{readableApiErrorMessage(error, 'Hasil belum dapat dimuat.')}
+										</p>
 										<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
 											Coba lagi
 										</Button>
@@ -238,10 +251,14 @@
 							{#snippet pending()}
 								<section class="pt-8"><ExploreFeedSkeleton /></section>
 							{/snippet}
-							{#snippet failed(_error, retry)}
+							{#snippet failed(error, retry)}
 								<section class="pt-8">
-									<div class="rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3">
-										<p class="text-[13px] font-medium text-destructive">Temuan belum dapat dimuat.</p>
+									<div
+										class="rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3"
+									>
+										<p class="text-[13px] font-medium text-destructive">
+											{readableApiErrorMessage(error, 'Temuan belum dapat dimuat.')}
+										</p>
 										<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
 											Coba lagi
 										</Button>

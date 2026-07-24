@@ -82,7 +82,9 @@
 	}
 </script>
 
-<article class="group grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-4 py-5 transition-colors hover:bg-muted/55 focus-within:bg-muted/55 sm:gap-x-4 sm:px-5">
+<article
+	class="group grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 px-4 py-5 transition-colors hover:bg-muted/55 focus-within:bg-muted/55 sm:gap-x-4 sm:px-5"
+>
 	<Checkbox
 		checked={selected}
 		onCheckedChange={handleCheckedChange}
@@ -97,28 +99,52 @@
 					{#if paper.isOpenAccess}<Badge variant="chip-mint">Open access</Badge>{/if}
 					{#if workTypeLabel}<Badge variant="outline">{workTypeLabel}</Badge>{/if}
 					{#if paper.isRetracted}
-						<span class="inline-flex items-center gap-1 rounded-sm bg-destructive/10 px-2 py-1 text-label font-semibold text-destructive"><Icon icon={AlertCircleIcon} class="size-3" />Paper ditarik</span>
+						<span
+							class="inline-flex items-center gap-1 rounded-sm bg-destructive/10 px-2 py-1 text-label font-semibold text-destructive"
+							><Icon icon={AlertCircleIcon} class="size-3" />Paper ditarik</span
+						>
 					{/if}
 				</div>
 				<h3 class="text-[15px] leading-5 font-semibold text-foreground sm:text-base">
-					<a href={readerHref} class="rounded-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">{paper.title}</a>
+					<a
+						href={readerHref}
+						class="rounded-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+						>{paper.title}</a
+					>
 				</h3>
 			</div>
 
-			<div role="group" aria-label={`Tindakan untuk ${paper.title}`} class="flex shrink-0 items-center gap-1.5">
+			<div
+				role="group"
+				aria-label={`Tindakan untuk ${paper.title}`}
+				class="flex shrink-0 items-center gap-1.5"
+			>
 				<SaveSourceButton source={saveInput} label="Simpan" variant="outline" size="sm" />
 				{#if paper.url}
-					<a href={paper.url} target="_blank" rel="noreferrer" aria-label="Buka sumber asli" class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"><Icon icon={ExternalLinkIcon} class="size-3.5" /></a>
+					<a
+						href={paper.url}
+						target="_blank"
+						rel="noreferrer"
+						aria-label="Buka sumber asli"
+						class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+						><Icon icon={ExternalLinkIcon} class="size-3.5" /></a
+					>
 				{/if}
 			</div>
 		</div>
 
 		{#if metaLine}<p class="mt-2 text-label text-muted-foreground">{metaLine}</p>{/if}
-		{#if paper.snippet}<p class="mt-2 max-w-[75ch] text-[13px] leading-5 text-ink-soft">{paper.snippet}</p>{/if}
+		{#if paper.snippet}<p class="mt-2 max-w-[75ch] text-[13px] leading-5 text-ink-soft">
+				{paper.snippet}
+			</p>{/if}
 
-		<div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 pt-3 text-label text-muted-foreground">
+		<div
+			class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 pt-3 text-label text-muted-foreground"
+		>
 			{#if citationLabel}<span class="tabular-nums">{citationLabel}</span>{/if}
-			{#if paper.hasPdf}<span class="inline-flex items-center gap-1"><Icon icon={FileTextIcon} class="size-3" />PDF tersedia</span>{/if}
+			{#if paper.hasPdf}<span class="inline-flex items-center gap-1"
+					><Icon icon={FileTextIcon} class="size-3" />PDF tersedia</span
+				>{/if}
 		</div>
 	</div>
 </article>

@@ -15,8 +15,7 @@
 		LiteratureFilterClause,
 		LiteratureFilterDefinition,
 		LiteratureFilterId,
-		LiteratureFilterValue,
-		LiteratureSortId
+		LiteratureFilterValue
 	} from '$lib/features/explore/literature-search-types';
 
 	type LiteratureRangeValue = { min?: number | string; max?: number | string };
@@ -37,7 +36,7 @@
 			categories: Array<{ id: LiteratureFilterCategoryId; label: string }>;
 			filters: LiteratureFilterDefinition[];
 		};
-		draft: { q: string; sort: LiteratureSortId; filters: LiteratureFilterClause[] };
+		draft: { q: string; filters: LiteratureFilterClause[] };
 		onChange: (patch: { filters: LiteratureFilterClause[] }) => void;
 		onApply: () => void;
 		onReset: () => void;
@@ -73,9 +72,7 @@
 		accordionState = reconcileFilterAccordionState(accordionState, catalog.categories);
 	});
 
-	function filtersForCategory(
-		category: LiteratureFilterCategoryId
-	): LiteratureFilterDefinition[] {
+	function filtersForCategory(category: LiteratureFilterCategoryId): LiteratureFilterDefinition[] {
 		return catalog.filters.filter((filter) => filter.category === category);
 	}
 
@@ -230,7 +227,9 @@
 					<span class="min-w-0 truncate">{category.label}</span>
 					<span class="flex shrink-0 items-center gap-2">
 						{#if count > 0}
-							<span class="rounded-full bg-mint-soft px-1.5 py-0.5 text-micro text-mint-foreground">{count}</span>
+							<span class="rounded-full bg-mint-soft px-1.5 py-0.5 text-micro text-mint-foreground"
+								>{count}</span
+							>
 						{/if}
 						<Icon
 							icon={ChevronDownIcon}
@@ -253,7 +252,9 @@
 		{/each}
 	</div>
 
-	<div class="sticky bottom-0 flex items-center justify-between gap-3 border-t-2 border-border bg-card pt-4">
+	<div
+		class="sticky bottom-0 flex items-center justify-between gap-3 border-t-2 border-border bg-card pt-4"
+	>
 		<Button type="button" variant="outline" onclick={onReset}>Reset filter</Button>
 		<Button type="button" onclick={onApply} disabled={!draft.q.trim()}>Terapkan filter</Button>
 	</div>

@@ -4,7 +4,11 @@
 	import { Icon, CheckCircle2Icon, SparklesIcon } from '$lib/icons';
 	import { readableApiErrorMessage } from '$lib/errors';
 	import { getAuthState } from '$lib/auth';
-	import { useFeedInfinite, useHideDiscovery, useRecordInteraction } from '$lib/features/discovery/api';
+	import {
+		useFeedInfinite,
+		useHideDiscovery,
+		useRecordInteraction
+	} from '$lib/features/discovery/api';
 	import {
 		discoveryItemKey,
 		feedItemToDiscoveryItem,
@@ -126,7 +130,10 @@
 		{:else if items.length === 0 && feedStatus === 'Exhausted'}
 			{@render emptyState()}
 		{:else}
-			<div class="overflow-hidden rounded-lg border-2 border-border bg-card" aria-label="Temuan untukmu">
+			<div
+				class="overflow-hidden rounded-lg border-2 border-border bg-card"
+				aria-label="Temuan untukmu"
+			>
 				{#each items as item (discoveryItemKey(item))}
 					<ExploreFeedSourceRow {item} {handlers} />
 				{/each}
@@ -142,7 +149,9 @@
 {#snippet feedFooter()}
 	{#if feedStatus === 'Exhausted'}
 		<div class="mt-8 flex flex-col items-center gap-2 border-t border-border/60 py-10 text-center">
-			<div class="flex size-9 items-center justify-center rounded-full bg-mint-soft text-mint-foreground">
+			<div
+				class="flex size-9 items-center justify-center rounded-full bg-mint-soft text-mint-foreground"
+			>
 				<Icon icon={CheckCircle2Icon} class="size-5" />
 			</div>
 			<p class="text-[14px] font-semibold text-foreground">Kamu sudah baca semua</p>
@@ -151,7 +160,9 @@
 			</p>
 		</div>
 	{:else if feedStatus === 'LoadingMore'}
-		<div class="flex items-center justify-center py-8 text-[12.5px] font-medium text-muted-foreground">
+		<div
+			class="flex items-center justify-center py-8 text-[12.5px] font-medium text-muted-foreground"
+		>
 			Memuat lebih banyak…
 		</div>
 	{:else}
@@ -169,13 +180,16 @@
 
 {#snippet emptyState()}
 	<div class="max-w-[560px] rounded-2xl border-2 border-border bg-card px-5 py-8 text-center">
-		<div class="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-mint-soft text-mint-foreground">
+		<div
+			class="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-mint-soft text-mint-foreground"
+		>
 			<Icon icon={SparklesIcon} class="size-5" />
 		</div>
 		<h3 class="text-[15px] font-semibold text-foreground">Belum ada item</h3>
 		<p class="mx-auto mt-1.5 max-w-[380px] text-[13px] font-medium leading-5 text-muted-foreground">
 			{#if topic}
-				Belum ada konten untuk bidang ini. Coba bidang lain atau kembali setelah pembaruan berikutnya.
+				Belum ada konten untuk bidang ini. Coba bidang lain atau kembali setelah pembaruan
+				berikutnya.
 			{:else}
 				Konten akan muncul setelah pembaruan terjadwal berikutnya.
 			{/if}

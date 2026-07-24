@@ -34,13 +34,7 @@
 	</div>
 
 	<div class="w-full max-w-[640px]">
-		<LiteratureSearchBar
-			compact={false}
-			{value}
-			{onValueChange}
-			{onSubmit}
-			{onOpenFilters}
-		/>
+		<LiteratureSearchBar compact={false} {value} {onValueChange} {onSubmit} {onOpenFilters} />
 	</div>
 
 	<div class="flex flex-wrap items-center justify-center gap-2">

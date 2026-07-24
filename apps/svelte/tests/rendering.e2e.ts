@@ -44,11 +44,44 @@ test.describe('authenticated rendering', () => {
 		expect(requests).toHaveLength(1);
 	});
 
+	test('Explore immediately switches from landing to results after a query submit', async ({
+		page
+	}) => {
+		await page.goto('/app/explore');
+		await page.getByLabel('Cari paper').fill('transformer neural networks');
+		await page.getByRole('button', { name: 'Cari' }).click();
+
+		await expect(page).toHaveURL(/(?:\?|&)q=transformer(?:\+|%20)neural(?:\+|%20)networks/);
+		await expect(page.getByRole('heading', { name: 'Cari literatur' })).toBeHidden();
+		await expect(page.getByText('Urutkan')).toBeVisible();
+	});
+
 	test('Explore membuka drawer filter dari landing mobile', async ({ page }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.goto('/app/explore');
 		await page.getByRole('button', { name: 'Filter' }).click();
 		await expect(page.getByRole('dialog', { name: 'Filter penelitian' })).toBeVisible();
 		await expect(page.getByRole('complementary', { name: 'Filter penelitian' })).toBeHidden();
+	});
+
+	test('Explore keeps desktop filters usable and feed is a source list without an ad banner', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 1440, height: 960 });
+		await page.goto('/app/explore');
+
+		const rail = page.getByRole('complementary', { name: 'Filter penelitian' });
+		await expect(rail).toBeVisible();
+		await expect(rail.getByLabel('Mulai tanggal publikasi')).toBeVisible();
+		await rail.getByRole('button', { name: 'Publikasi' }).click();
+		await expect(rail.getByLabel('Mulai tanggal publikasi')).toBeHidden();
+		await rail.getByRole('button', { name: 'Dampak' }).click();
+		await expect(rail.getByLabel('Minimal jumlah sitasi')).toBeVisible();
+
+		const feed = page.getByLabel('Temuan untukmu');
+		await expect(feed).toBeVisible();
+		await expect(feed.locator('article').first()).toBeVisible();
+		await expect(feed.getByRole('img')).toHaveCount(0);
+		await expect(page.getByText('Baca selengkapnya')).toHaveCount(0);
 	});
 });

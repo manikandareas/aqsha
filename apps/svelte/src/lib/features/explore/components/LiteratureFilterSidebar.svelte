@@ -33,9 +33,7 @@
 >
 	<div class="border-b-2 border-border px-4 py-4">
 		<h2 class="font-heading text-base text-foreground">Filter penelitian</h2>
-		<p class="mt-1 text-label text-muted-foreground">
-			Persempit sumber tanpa meninggalkan hasil.
-		</p>
+		<p class="mt-1 text-label text-muted-foreground">Persempit sumber tanpa meninggalkan hasil.</p>
 	</div>
 	<div class="min-h-0 flex-1 px-3 py-3">
 		<LiteratureFilterEditor {catalog} {draft} {onChange} {onApply} {onReset} />

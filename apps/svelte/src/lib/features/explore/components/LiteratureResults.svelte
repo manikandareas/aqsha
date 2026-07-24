@@ -140,7 +140,9 @@
 	{:else if isEmpty}
 		{@render emptyState()}
 	{:else}
-		<div class="divide-y divide-border/80 overflow-hidden rounded-lg border-2 border-border bg-card">
+		<div
+			class="divide-y divide-border/80 overflow-hidden rounded-lg border-2 border-border bg-card"
+		>
 			{#each items as paper (paper.key)}
 				<LiteratureResultRow
 					{paper}
