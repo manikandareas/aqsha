@@ -29,10 +29,6 @@ const linkColumns = [
     { label: "Blog", href: "/blog" },
     { label: "Apa yang baru", href: "/changelog" },
   ],
-  [
-    { label: "Dapatkan kabar saat rilis", href: "/waitlist" },
-    { label: "Gabung waitlist", href: "/waitlist" },
-  ],
 ] as const;
 
 const year = new Date().getFullYear();
@@ -126,7 +122,7 @@ for (let x = 0; x < TILE_W; x += PX) {
         </nav>
 
         <nav aria-label="Halaman" class="mt-9">
-          <div class="grid max-w-md grid-cols-2 gap-x-10">
+          <div class="max-w-md">
             {
               linkColumns.map((column) => (
                 <ul class="space-y-3">

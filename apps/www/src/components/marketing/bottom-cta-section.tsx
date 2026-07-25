@@ -9,7 +9,6 @@ import {
 } from "motion/react";
 import { useRef } from "react";
 
-import { MagneticButton } from "@/components/marketing/magnetic-button";
 import { MotionProvider } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
 import { EASE_OUT } from "@/lib/motion";
@@ -137,14 +136,12 @@ export function BottomCtaSection() {
               },
             }}
           >
-            <MagneticButton radius={160} strength={0.45}>
-              <Button
-                asChild
-                className="h-14 rounded-full px-7 text-base font-medium"
-              >
-                <a href="/waitlist">Gabung waitlist →</a>
-              </Button>
-            </MagneticButton>
+            <Button
+              disabled
+              className="h-14 rounded-full px-7 text-base font-medium"
+            >
+              Gabung waitlist →
+            </Button>
           </m.div>
         </m.div>
       </div>

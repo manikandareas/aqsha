@@ -51,7 +51,6 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
   const solidFace = !isHero || scrolled;
   const [menuOpen, setMenuOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const waitlistLabel = "Gabung waitlist";
 
   const { scrollY } = useScroll();
   const logoSpacing = useTransform(scrollY, [0, 300], ["0em", "0.06em"]);
@@ -124,15 +123,8 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
 
         <div className="col-start-3 flex items-center justify-self-end gap-2 sm:gap-3">
           <ThemeToggle />
-          <a
-            href="/waitlist"
-            className="hidden rounded-full px-2 py-1.5 text-sm font-medium text-foreground/75 transition-colors hover:text-foreground sm:inline-block"
-          >
-            Dapatkan kabar saat rilis
-          </a>
-          <span aria-hidden className="hidden h-5 w-px bg-border sm:block" />
-          <Button asChild size="sm" className="h-9 rounded-full px-4">
-            <a href="/waitlist">{waitlistLabel}</a>
+          <Button disabled size="sm" className="h-9 rounded-full px-4">
+            Gabung waitlist
           </Button>
           <button
             type="button"
@@ -176,7 +168,6 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
                 openGroup={openGroup}
                 onOpenGroupChange={setOpenGroup}
                 onNavigate={() => setMenuOpen(false)}
-                waitlistLabel={waitlistLabel}
               />
             </m.nav>
           </>

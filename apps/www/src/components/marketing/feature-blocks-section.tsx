@@ -257,8 +257,8 @@ export function FeatureBlocksSection() {
                 <Button asChild variant="outline" className="h-11 px-5">
                   <a href="#faq">Tanya-tanya dulu</a>
                 </Button>
-                <Button asChild className="h-11 px-5">
-                  <a href="/waitlist">Gabung waitlist →</a>
+                <Button disabled className="h-11 px-5">
+                  Gabung waitlist →
                 </Button>
               </div>
               <CtaHandArrow className="pt-1" />

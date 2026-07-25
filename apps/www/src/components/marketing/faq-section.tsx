@@ -265,8 +265,8 @@ export function FaqSection() {
                   <p className="text-sm leading-snug text-muted-foreground">
                     Atau coba langsung — gratis.
                   </p>
-                  <Button asChild size="sm">
-                    <a href="/waitlist">Gabung waitlist</a>
+                  <Button disabled size="sm">
+                    Gabung waitlist
                   </Button>
                 </div>
               </m.div>

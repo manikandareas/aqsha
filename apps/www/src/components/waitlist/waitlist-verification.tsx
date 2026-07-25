@@ -55,10 +55,10 @@ export function WaitlistVerification() {
         Tautan verifikasi tidak valid atau sudah kedaluwarsa.
       </p>
       <a
-        href="/waitlist"
+        href="/"
         className="inline-flex h-12 items-center justify-center rounded-full bg-primary px-7 text-base font-medium text-primary-foreground transition-opacity hover:opacity-90"
       >
-        Daftar ulang di waitlist
+        Kembali ke beranda
       </a>
     </div>
   );

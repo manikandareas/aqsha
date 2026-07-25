@@ -14,32 +14,28 @@ import { Button } from "@/components/ui/button";
 import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
-const WAITLIST_HREF = "/waitlist";
 const WAITLIST_PRICING_CTA = "Daftar untuk akses saat rilis";
 
 const planPresentation = {
-  free: { href: WAITLIST_HREF, cta: WAITLIST_PRICING_CTA, badge: null, includes: null },
+  free: { cta: WAITLIST_PRICING_CTA, badge: null, includes: null },
   starter: {
-    href: WAITLIST_HREF,
     cta: WAITLIST_PRICING_CTA,
     badge: "populer",
     includes: "semua di Free, plus",
   },
   plus: {
-    href: WAITLIST_HREF,
     cta: WAITLIST_PRICING_CTA,
     badge: null,
     includes: "semua di Starter, plus",
   },
   ultra: {
-    href: WAITLIST_HREF,
     cta: WAITLIST_PRICING_CTA,
     badge: "power",
     includes: "semua di Plus, plus",
   },
 } satisfies Record<
   PublicPlanKey,
-  { href: string; cta: string; badge: string | null; includes: string | null }
+  { cta: string; badge: string | null; includes: string | null }
 >;
 
 /** Resting tilt per receipt — a row of struk laid loosely on the counter. */
@@ -299,11 +295,11 @@ function PlanReceipt({
         </p>
         <div className="pt-4">
           <Button
-            asChild
+            disabled
             variant={highlight ? "default" : "outline"}
             className="h-11 w-full rounded-full font-sans text-sm font-medium"
           >
-            <a href={presentation.href}>{presentation.cta}</a>
+            {presentation.cta}
           </Button>
           <p className="pt-4 text-center text-xs text-muted-foreground">
             · · · terima kasih · · ·

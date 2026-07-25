@@ -20,6 +20,8 @@ const props = Astro.props as Props;
 -->
 <BaseLayout {...props}>
   <LandingHeader client:load />
-  <slot />
+  <div class="min-h-[90vh]">
+    <slot />
+  </div>
   <LandingFooter />
 </BaseLayout>
