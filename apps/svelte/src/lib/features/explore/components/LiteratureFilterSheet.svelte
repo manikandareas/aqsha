@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Drawer from '@aqsha/ui-svelte/components/drawer';
+	import * as Sheet from '@aqsha/ui-svelte/components/sheet';
 	import LiteratureFilterEditor from './LiteratureFilterEditor.svelte';
 	import type {
 		LiteratureFilterCategoryId,
@@ -8,11 +8,7 @@
 		LiteratureSortId
 	} from '$lib/features/explore/literature-search-types';
 
-	/**
-	 * Mobile result-state filter surface — same draft/editor as the sidebar and popover, presented as
-	 * a bottom sheet. Only reports `onDiscard` when the sheet closes without an Apply in between, so a
-	 * successful Apply never triggers a spurious draft rollback.
-	 */
+	/** Desktop filter surface — a side sheet keeps the result list full width while preserving the same draft lifecycle as the mobile drawer. */
 	let {
 		catalog,
 		draft,
@@ -48,14 +44,18 @@
 	}
 </script>
 
-<Drawer.Root {open} onOpenChange={handleOpenChange} direction="bottom">
-	<Drawer.Content aria-describedby={undefined} class="flex max-h-[92svh] flex-col p-0">
-		<Drawer.Header class="border-b-2 border-border px-4 pb-3 pt-4">
-			<Drawer.Title>Filter penelitian</Drawer.Title>
-			<Drawer.Description class="sr-only">Atur filter, lalu terapkan saat siap mencari.</Drawer.Description>
-		</Drawer.Header>
-		<div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-4 pb-4">
+<Sheet.Root {open} onOpenChange={handleOpenChange}>
+	<Sheet.Content
+		side="right"
+		aria-describedby={undefined}
+		class="flex w-full max-w-md flex-col gap-0 bg-card p-0"
+	>
+		<Sheet.Header class="shrink-0 border-b-2 border-border px-5 pb-4 pt-5 pr-16">
+			<Sheet.Title>Filter penelitian</Sheet.Title>
+			<Sheet.Description class="sr-only">Atur filter, lalu terapkan saat siap mencari.</Sheet.Description>
+		</Sheet.Header>
+		<div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pt-4">
 			<LiteratureFilterEditor {catalog} {draft} {onChange} onApply={handleApply} {onReset} />
 		</div>
-	</Drawer.Content>
-</Drawer.Root>
+	</Sheet.Content>
+</Sheet.Root>

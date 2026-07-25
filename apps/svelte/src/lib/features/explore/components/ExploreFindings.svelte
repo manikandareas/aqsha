@@ -141,7 +141,7 @@
 	>
 		{#if feedQuery.isError}
 			<div
-				class="max-w-[760px] rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive"
+				class="max-w-190 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-[13px] font-medium text-destructive"
 			>
 				{readableApiErrorMessage(feedQuery.error, 'Gagal memuat.')}
 			</div>

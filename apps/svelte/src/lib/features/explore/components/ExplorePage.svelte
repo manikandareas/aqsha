@@ -220,7 +220,7 @@
 		</div>
 
 		<div class={cn(EXPLORE_CONTENT_CLASS, 'py-2 sm:py-3')}>
-			<div class="w-full max-w-3xl space-y-8">
+			<div class="w-full space-y-8">
 				<LiteratureSearchBar
 					compact
 					value={draft.q}

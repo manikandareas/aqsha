@@ -27,13 +27,13 @@
 <form
 	onsubmit={handleSubmit}
 	class={cn(
-		'flex w-full items-center gap-2 rounded-xl border-2 border-border bg-background transition-colors focus-within:border-ring/55',
+		'flex w-full items-center gap-2 max-w-3xl rounded-xl border-2 border-border bg-background transition-colors focus-within:border-ring/55',
 		compact ? 'px-3 py-2' : 'px-4 py-3.5'
 	)}
 >
 	<Icon
 		icon={SearchIcon}
-		class={cn('shrink-0 text-muted-foreground', compact ? 'size-4' : 'size-[18px]')}
+		class={cn('shrink-0 text-muted-foreground', compact ? 'size-4' : 'size-4.5')}
 	/>
 	<input
 		{value}
@@ -51,7 +51,7 @@
 		variant="outline"
 		size={compact ? 'sm' : 'default'}
 		onclick={onOpenFilters}
-		class="shrink-0 gap-1.5 lg:hidden"
+		class="shrink-0 gap-1.5"
 	>
 		<Icon icon={FilterIcon} class="size-4" />
 		Filter

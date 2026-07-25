@@ -21,8 +21,8 @@
 	type LiteratureRangeValue = { min?: number | string; max?: number | string };
 
 	/**
-	 * Reusable Filter Builder body shared by the popover (pre-search), the desktop sidebar, and the
-	 * mobile drawer. Holds every edit as local draft state and only reports it upward through
+	 * Reusable Filter Builder body shared by the pre-search flow, desktop sheet, and mobile drawer.
+	 * Holds every edit as local draft state and only reports it upward through
 	 * `onChange`; nothing here fetches or touches the URL — the parent commits on `onApply`.
 	 */
 	let {
@@ -188,23 +188,27 @@
 	}
 
 	const inputClass =
-		'h-9 rounded-md border-2 border-border bg-background px-2.5 text-[13px] text-foreground outline-none focus-visible:border-ring';
-	const fieldLabelClass = 'grid gap-1 text-[12px] font-medium text-muted-foreground';
+		'h-9 w-full min-w-0 max-w-full rounded-md border-2 border-border bg-background px-2.5 text-[13px] text-foreground outline-none focus-visible:border-ring';
+	const fieldLabelClass = 'grid min-w-0 gap-1 text-[12px] font-medium text-muted-foreground';
+	const rangeGridClass = 'grid grid-cols-1 gap-2 @min-[20rem]/filter-field:grid-cols-2';
+	const actionsClass =
+		'sticky bottom-0 z-10 mt-auto flex shrink-0 flex-col gap-2 border-t-2 border-border bg-card pt-4 pb-4 @min-[20rem]/filter-field:flex-row @min-[20rem]/filter-field:items-center @min-[20rem]/filter-field:justify-between';
+	const actionButtonClass = 'w-full @min-[20rem]/filter-field:w-auto';
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-4">
+<div class="@container/filter-field flex min-h-full min-w-0 flex-1 flex-col gap-4">
 	{#if activeClauses.length > 0}
 		<div class="flex flex-wrap items-center gap-1.5" aria-label="Filter aktif">
 			{#each activeClauses as { clause, definition } (clause.id)}
 				<span
-					class="inline-flex items-center gap-1.5 rounded-full border-2 border-border bg-secondary/40 py-1 pl-3 pr-1.5 text-[12px] font-medium text-foreground"
+					class="inline-flex max-w-full items-center gap-1.5 rounded-full border-2 border-border bg-secondary/40 py-1 pl-3 pr-1.5 text-label font-medium text-foreground"
 				>
-					{chipLabel(clause, definition)}
+					<span class="min-w-0 truncate">{chipLabel(clause, definition)}</span>
 					<button
 						type="button"
 						onclick={() => removeClause(clause.id)}
 						aria-label={`Hapus filter ${definition.label}`}
-						class="flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+						class="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
 					>
 						<Icon icon={XIcon} class="size-3" />
 					</button>
@@ -213,7 +217,7 @@
 		</div>
 	{/if}
 
-	<div class="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+	<div class="min-h-0 min-w-0 flex-1 space-y-2">
 		{#each catalog.categories as category (category.id)}
 			{@const filters = filtersForCategory(category.id)}
 			{@const count = activeCountForCategory(category.id)}
@@ -238,7 +242,7 @@
 					</span>
 				</Collapsible.Trigger>
 				<Collapsible.Content>
-					<div class="space-y-4 px-3 pb-4 pt-3">
+					<div class="min-w-0 space-y-4 px-1 pb-4 pt-3 sm:px-3">
 						{#if filters.length === 0}
 							<p class="text-label text-muted-foreground">Belum ada filter pada kategori ini.</p>
 						{:else}
@@ -252,20 +256,22 @@
 		{/each}
 	</div>
 
-	<div
-		class="sticky bottom-0 flex items-center justify-between gap-3 border-t-2 border-border bg-card pt-4"
-	>
-		<Button type="button" variant="outline" onclick={onReset}>Reset filter</Button>
-		<Button type="button" onclick={onApply} disabled={!draft.q.trim()}>Terapkan filter</Button>
+	<div class={actionsClass}>
+		<Button type="button" variant="outline" class={actionButtonClass} onclick={onReset}
+			>Reset filter</Button
+		>
+		<Button type="button" class={actionButtonClass} onclick={onApply} disabled={!draft.q.trim()}
+			>Terapkan filter</Button
+		>
 	</div>
 </div>
 
 {#snippet filterField(filter: LiteratureFilterDefinition)}
 	{#if filter.kind === 'number-range'}
 		{@const range = rangeValue(filter.id)}
-		<div class="grid grid-cols-2 gap-2">
+		<div class={rangeGridClass}>
 			<label class={fieldLabelClass} for={`${uid}-${filter.id}-min`}>
-				{`Minimal ${filter.label.toLowerCase()}`}
+				<span class="leading-snug">Minimal {filter.label.toLowerCase()}</span>
 				<input
 					id={`${uid}-${filter.id}-min`}
 					type="number"
@@ -276,7 +282,7 @@
 				/>
 			</label>
 			<label class={fieldLabelClass} for={`${uid}-${filter.id}-max`}>
-				{`Maksimal ${filter.label.toLowerCase()}`}
+				<span class="leading-snug">Maksimal {filter.label.toLowerCase()}</span>
 				<input
 					id={`${uid}-${filter.id}-max`}
 					type="number"
@@ -289,9 +295,9 @@
 		</div>
 	{:else if filter.kind === 'date-range'}
 		{@const range = rangeValue(filter.id)}
-		<div class="grid grid-cols-2 gap-2">
+		<div class={rangeGridClass}>
 			<label class={fieldLabelClass} for={`${uid}-${filter.id}-min`}>
-				{`Mulai ${filter.label.toLowerCase()}`}
+				<span class="leading-snug">Mulai {filter.label.toLowerCase()}</span>
 				<input
 					id={`${uid}-${filter.id}-min`}
 					type="date"
@@ -301,7 +307,7 @@
 				/>
 			</label>
 			<label class={fieldLabelClass} for={`${uid}-${filter.id}-max`}>
-				{`Hingga ${filter.label.toLowerCase()}`}
+				<span class="leading-snug">Hingga {filter.label.toLowerCase()}</span>
 				<input
 					id={`${uid}-${filter.id}-max`}
 					type="date"
@@ -313,12 +319,13 @@
 		</div>
 	{:else if filter.kind === 'toggle'}
 		<label
-			class="flex items-center justify-between gap-3 rounded-md border-2 border-border px-3 py-2.5 text-[13px] font-medium text-foreground"
+			class="flex min-w-0 items-center justify-between gap-3 rounded-md border-2 border-border px-3 py-2.5 text-[13px] font-medium text-foreground"
 			for={`${uid}-${filter.id}`}
 		>
-			{filter.label}
+			<span class="min-w-0 leading-snug">{filter.label}</span>
 			<Switch
 				id={`${uid}-${filter.id}`}
+				class="shrink-0"
 				checked={boolValue(filter.id)}
 				onCheckedChange={(checked) => setValue(filter.id, checked ? true : undefined)}
 			/>
@@ -326,8 +333,8 @@
 	{:else if filter.kind === 'select'}
 		{@const selectId = `${uid}-${filter.id}`}
 		{@const selected = textValue(filter.id)}
-		<div class="grid gap-1">
-			<span id={`${selectId}-label`} class="text-[12px] font-medium text-muted-foreground">
+		<div class="grid min-w-0 gap-1">
+			<span id={`${selectId}-label`} class="text-label font-medium text-muted-foreground">
 				{filter.label}
 			</span>
 			<Select.Root
@@ -335,8 +342,10 @@
 				value={selected}
 				onValueChange={(value) => setValue(filter.id, value || undefined)}
 			>
-				<Select.Trigger id={selectId} aria-labelledby={`${selectId}-label`} class="w-full">
-					{filter.options?.find((option) => option.value === selected)?.label ?? 'Pilih opsi'}
+				<Select.Trigger id={selectId} aria-labelledby={`${selectId}-label`} class="w-full min-w-0">
+					<span class="truncate">
+						{filter.options?.find((option) => option.value === selected)?.label ?? 'Pilih opsi'}
+					</span>
 				</Select.Trigger>
 				<Select.Content>
 					{#each filter.options ?? [] as option (option.value)}
@@ -347,20 +356,21 @@
 		</div>
 	{:else if filter.kind === 'multi-select'}
 		{@const selectedValues = multiValue(filter.id)}
-		<fieldset class="grid gap-2">
-			<legend class="mb-1 text-[12px] font-medium text-muted-foreground">{filter.label}</legend>
+		<fieldset class="grid min-w-0 gap-2">
+			<legend class="mb-1 text-label font-medium text-muted-foreground">{filter.label}</legend>
 			{#each filter.options ?? [] as option (option.value)}
 				<label
-					class="flex items-center gap-2.5 text-[13px] text-foreground"
+					class="flex min-w-0 items-start gap-2.5 text-[13px] text-foreground"
 					for={`${uid}-${filter.id}-${option.value}`}
 				>
 					<Checkbox
 						id={`${uid}-${filter.id}-${option.value}`}
+						class="mt-0.5 shrink-0"
 						checked={selectedValues.includes(option.value)}
 						onCheckedChange={(checked) =>
 							toggleMultiOption(filter.id, option.value, checked === true)}
 					/>
-					{option.label}
+					<span class="min-w-0 leading-snug">{option.label}</span>
 				</label>
 			{/each}
 		</fieldset>

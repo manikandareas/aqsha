@@ -54,7 +54,7 @@
 >
 	{#if !compact}
 		<h1
-			class="font-heading mb-6 max-w-[760px] text-[clamp(30px,3.6vw,46px)] leading-[1.07] font-medium tracking-tight text-balance text-foreground"
+			class="font-heading mb-6 max-w-190 text-[clamp(30px,3.6vw,46px)] leading-[1.07] font-medium tracking-tight text-balance text-foreground"
 			transition:slide={reduce ? { duration: 0 } : { duration: 200 }}
 		>
 			{greeting}

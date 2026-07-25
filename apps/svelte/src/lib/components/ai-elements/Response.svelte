@@ -18,7 +18,7 @@
 	// (`renderHtml` left OFF), so `<script>`/`onerror`/`javascript:`-in-markup can't execute. Link/image
 	// URLs are restricted to an explicit http(s)/mailto/relative allowlist → `javascript:` and `data:`
 	// payloads are stripped. Custom tags are OUR tokens rendering OUR gated components (no HTML injection,
-	// no sanitize allowlist widening). Pinned by `response.svelte.spec.ts` (XSS corpus).
+	// no sanitize allowlist widening).
 	//
 	// The rehype plugin pipeline is replaced by marked extensions + snippets (svelte-streamdown is
 	// marked-based). Anti-forgery gates (viz + stats) are reactive snippet props because Svelte
