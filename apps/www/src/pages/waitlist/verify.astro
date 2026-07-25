@@ -1,0 +1,19 @@
+---
+import MarketingLayout from "@/layouts/MarketingLayout.astro";
+import { WaitlistVerification } from "@/components/waitlist/waitlist-verification";
+---
+
+<MarketingLayout
+  title="Verifikasi waitlist"
+  description="Konfirmasi email waitlist Aqsha."
+  path="/waitlist/verify"
+>
+  <main class="mx-auto w-full max-w-xl px-5 py-14 sm:px-6 sm:py-20 lg:px-8">
+    <header class="mb-10">
+      <h1 class="font-heading text-[1.9rem] font-medium leading-tight text-foreground sm:text-[2.25rem]">
+        Verifikasi email
+      </h1>
+    </header>
+    <WaitlistVerification client:load />
+  </main>
+</MarketingLayout>
