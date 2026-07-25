@@ -255,3 +255,26 @@ export {
   KNOWN_PROVIDERS,
   type ProviderFolder,
 } from "./integrations";
+
+// Waitlist publik — double opt-in via Resend (marketing site → API).
+export {
+  createWaitlistVerificationToken,
+  hashWaitlistVerificationToken,
+  normalizeWaitlistEmail,
+  normalizeWaitlistJoinInput,
+  type NormalizedWaitlistJoinInput,
+  type WaitlistJoinInput,
+  WAITLIST_COMPANY_MAX_CHARS,
+  WAITLIST_TOKEN_TTL_MS,
+} from "./waitlist/model";
+export {
+  renderedVerificationEmail,
+  sendWaitlistVerificationEmail,
+  type WaitlistEmailSender,
+} from "./clients/resend";
+export {
+  type WaitlistJoinResult,
+  type WaitlistServiceConfig,
+  WaitlistService,
+  type WaitlistVerificationConfig,
+} from "./waitlist.service";
