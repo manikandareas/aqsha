@@ -31,3 +31,4 @@ export * from "./billingPendingWebhooks";
 export * from "./billingCreditPeriods";
 export * from "./providerUsageLedger";
 export * from "./usageDailyRollup";
+export * from "./waitlistEntries";

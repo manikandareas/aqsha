@@ -23,3 +23,4 @@ export * from "./feedRepo";
 export * from "./paperCacheRepo";
 export * from "./feedInteractionRepo";
 export * from "./billingRepo";
+export * from "./waitlistRepo";
