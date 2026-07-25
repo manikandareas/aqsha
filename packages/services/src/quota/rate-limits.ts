@@ -18,7 +18,10 @@ export type RateLimitRule =
   | "citations:create"
   | "citations:import"
   | "integrations:connect"
-  | "integrations:sync";
+  | "integrations:sync"
+  | "waitlist:submit-ip"
+  | "waitlist:submit-email"
+  | "waitlist:verify-ip";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
@@ -42,6 +45,10 @@ const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number
   "integrations:connect": { points: 10, duration: 60 },
   // Preview/commit/refresh sync provider — tembak API eksternal (Mendeley/Zotero).
   "integrations:sync": { points: 10, duration: 60 },
+  // Waitlist publik (tanpa auth) — key = IP atau email ternormalisasi, bukan ownerUserId.
+  "waitlist:submit-ip": { points: 5, duration: 600 },
+  "waitlist:submit-email": { points: 3, duration: 3600 },
+  "waitlist:verify-ip": { points: 10, duration: 600 },
 };
 
 /** Konfigurasi rule (points/duration) — dipakai `getSendStatus` untuk hitung cooldown. */

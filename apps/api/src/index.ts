@@ -19,6 +19,7 @@ import { preferences } from "./routes/preferences";
 import { security } from "./routes/security";
 import { threads } from "./routes/threads";
 import { users } from "./routes/users";
+import { waitlist } from "./routes/waitlist";
 import { webhooks } from "./routes/webhooks";
 import { workspaces } from "./routes/workspaces";
 
@@ -31,9 +32,17 @@ export const app = new Elysia()
   // lintas-origin: setiap route baru yang ingin header respons custom-nya DIBACA klien
   // (mis. X-Next-Cursor) harus menambahkannya di sini, kalau tidak header itu ada di wire
   // tapi tak terbaca Eden client (gagal senyap).
-  .use(cors({ exposeHeaders: ["Content-Type", "Content-Length", "Accept-Ranges", "Content-Range"] }))
+  // `origin: true` merefleksikan Origin request — mencakup marketing waitlist
+  // (`PUBLIC_SITE_URL`, fallback lokal http://localhost:4321) dan app product.
+  .use(
+    cors({
+      origin: true,
+      exposeHeaders: ["Content-Type", "Content-Length", "Accept-Ranges", "Content-Range"],
+    }),
+  )
   .use(openapi())
   .use(health)
+  .use(waitlist)
   .use(users)
   .use(security)
   .use(onboarding)
