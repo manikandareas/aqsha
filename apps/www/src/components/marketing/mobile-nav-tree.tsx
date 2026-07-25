@@ -4,7 +4,6 @@ import { AnimatePresence, m, useReducedMotion } from "motion/react";
 
 import { ArrowDownIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { appUrl } from "@/lib/app-url";
 import { navTree } from "@/lib/marketing/nav";
 import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -13,19 +12,19 @@ type MobileNavTreeProps = {
   openGroup: string | null;
   onOpenGroupChange: (label: string | null) => void;
   onNavigate: () => void;
-  /** CTA copy — matches the desktop chrome variant. */
-  signUpLabel: string;
+  /** CTA copy — matches the desktop chrome waitlist label. */
+  waitlistLabel: string;
 };
 
 /**
  * MobileNavTree — accordion over the same `navTree` as MegaNav: items with
- * description, footer links per menu, plus auth actions.
+ * description, footer links per menu, plus waitlist actions.
  */
 export function MobileNavTree({
   openGroup,
   onOpenGroupChange,
   onNavigate,
-  signUpLabel,
+  waitlistLabel,
 }: MobileNavTreeProps) {
   const reduce = useReducedMotion();
 
@@ -132,10 +131,10 @@ export function MobileNavTree({
           variant="ghost"
           className="h-11 flex-1 rounded-xl text-sm text-foreground/80 hover:bg-muted hover:text-foreground"
         >
-          <a href={appUrl("/sign-in")}>Masuk</a>
+          <a href="/waitlist">Dapatkan kabar saat rilis</a>
         </Button>
         <Button asChild className="h-11 flex-1 rounded-xl text-sm">
-          <a href={appUrl("/sign-up")}>{signUpLabel}</a>
+          <a href="/waitlist">{waitlistLabel}</a>
         </Button>
       </div>
     </div>

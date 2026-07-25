@@ -13,7 +13,6 @@ import {
   featureHash,
   type FeatureKey,
 } from "@/data/features";
-import { appUrl } from "@/lib/app-url";
 import { EASE_OUT, FRAME_SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { LatestUpdate } from "@/lib/marketing/latest";
@@ -302,7 +301,7 @@ export function LandingHeroSection({
             <m.div variants={buttonItem(reduce)}>
               <MagneticButton radius={140} strength={0.35}>
                 <Button asChild size="lg">
-                  <a href={appUrl("/sign-up")}>Mulai gratis</a>
+                  <a href="/waitlist">Gabung waitlist</a>
                 </Button>
               </MagneticButton>
             </m.div>

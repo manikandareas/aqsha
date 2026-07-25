@@ -12,7 +12,6 @@ import { useRef } from "react";
 import { MagneticButton } from "@/components/marketing/magnetic-button";
 import { MotionProvider } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
-import { appUrl } from "@/lib/app-url";
 import { EASE_OUT } from "@/lib/motion";
 
 const HEADLINE = "Nulis riset yang bisa kamu pertahanin.";
@@ -143,7 +142,7 @@ export function BottomCtaSection() {
                 asChild
                 className="h-14 rounded-full px-7 text-base font-medium"
               >
-                <a href={appUrl("/sign-up")}>Coba gratis →</a>
+                <a href="/waitlist">Gabung waitlist →</a>
               </Button>
             </MagneticButton>
           </m.div>

@@ -14,7 +14,6 @@ import { MegaNav } from "@/components/marketing/mega-nav";
 import { MobileNavTree } from "@/components/marketing/mobile-nav-tree";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { appUrl } from "@/lib/app-url";
 import { NAV_DESKTOP_MQ } from "@/lib/marketing/nav";
 import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -52,7 +51,7 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
   const solidFace = !isHero || scrolled;
   const [menuOpen, setMenuOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const signUpLabel = variant === "hero" ? "Mulai gratis" : "Coba gratis";
+  const waitlistLabel = "Gabung waitlist";
 
   const { scrollY } = useScroll();
   const logoSpacing = useTransform(scrollY, [0, 300], ["0em", "0.06em"]);
@@ -126,14 +125,14 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
         <div className="col-start-3 flex items-center justify-self-end gap-2 sm:gap-3">
           <ThemeToggle />
           <a
-            href={appUrl("/sign-in")}
+            href="/waitlist"
             className="hidden rounded-full px-2 py-1.5 text-sm font-medium text-foreground/75 transition-colors hover:text-foreground sm:inline-block"
           >
-            Masuk
+            Dapatkan kabar saat rilis
           </a>
           <span aria-hidden className="hidden h-5 w-px bg-border sm:block" />
           <Button asChild size="sm" className="h-9 rounded-full px-4">
-            <a href={appUrl("/sign-up")}>{signUpLabel}</a>
+            <a href="/waitlist">{waitlistLabel}</a>
           </Button>
           <button
             type="button"
@@ -177,7 +176,7 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
                 openGroup={openGroup}
                 onOpenGroupChange={setOpenGroup}
                 onNavigate={() => setMenuOpen(false)}
-                signUpLabel={signUpLabel}
+                waitlistLabel={waitlistLabel}
               />
             </m.nav>
           </>

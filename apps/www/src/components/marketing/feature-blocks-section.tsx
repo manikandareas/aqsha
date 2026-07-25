@@ -16,7 +16,6 @@ import {
   FEATURES,
   featurePartnerIndex,
 } from "@/data/features";
-import { appUrl } from "@/lib/app-url";
 import { EASE_OUT } from "@/lib/motion";
 
 type Feature = (typeof FEATURES)[keyof typeof FEATURES];
@@ -259,7 +258,7 @@ export function FeatureBlocksSection() {
                   <a href="#faq">Tanya-tanya dulu</a>
                 </Button>
                 <Button asChild className="h-11 px-5">
-                  <a href={appUrl("/sign-up")}>Coba gratis →</a>
+                  <a href="/waitlist">Gabung waitlist →</a>
                 </Button>
               </div>
               <CtaHandArrow className="pt-1" />

@@ -12,7 +12,6 @@ import {
 import { faqItems } from "@/components/marketing/faq-data";
 import { MotionProvider } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
-import { appUrl } from "@/lib/app-url";
 import { EASE_OUT, IN_VIEW_ONCE } from "@/lib/motion";
 import { contactEmail } from "@/lib/seo-config";
 import { cn } from "@/lib/utils";
@@ -267,7 +266,7 @@ export function FaqSection() {
                     Atau coba langsung — gratis.
                   </p>
                   <Button asChild size="sm">
-                    <a href={appUrl("/sign-up")}>Coba gratis</a>
+                    <a href="/waitlist">Gabung waitlist</a>
                   </Button>
                 </div>
               </m.div>

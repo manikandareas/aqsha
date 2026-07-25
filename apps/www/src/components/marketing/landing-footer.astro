@@ -6,7 +6,6 @@ import {
   XSocialIcon,
 } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { appUrl } from "@/lib/app-url";
 
 /* Sosial: href masih "#" sampai akun resminya ada. */
 const socialLinks = [
@@ -31,8 +30,8 @@ const linkColumns = [
     { label: "Apa yang baru", href: "/changelog" },
   ],
   [
-    { label: "Masuk", href: appUrl("/sign-in") },
-    { label: "Coba gratis", href: appUrl("/sign-up") },
+    { label: "Dapatkan kabar saat rilis", href: "/waitlist" },
+    { label: "Gabung waitlist", href: "/waitlist" },
   ],
 ] as const;
 

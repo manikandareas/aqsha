@@ -11,27 +11,29 @@ import {
 
 import { MotionProvider } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
-import { appUrl } from "@/lib/app-url";
 import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
+const WAITLIST_HREF = "/waitlist";
+const WAITLIST_PRICING_CTA = "Daftar untuk akses saat rilis";
+
 const planPresentation = {
-  free: { href: appUrl("/sign-up"), cta: "Mulai gratis", badge: null, includes: null },
+  free: { href: WAITLIST_HREF, cta: WAITLIST_PRICING_CTA, badge: null, includes: null },
   starter: {
-    href: appUrl("/sign-up?plan=starter"),
-    cta: "Pilih Starter",
+    href: WAITLIST_HREF,
+    cta: WAITLIST_PRICING_CTA,
     badge: "populer",
     includes: "semua di Free, plus",
   },
   plus: {
-    href: appUrl("/sign-up?plan=plus"),
-    cta: "Pilih Plus",
+    href: WAITLIST_HREF,
+    cta: WAITLIST_PRICING_CTA,
     badge: null,
     includes: "semua di Starter, plus",
   },
   ultra: {
-    href: appUrl("/sign-up?plan=ultra"),
-    cta: "Pilih Ultra",
+    href: WAITLIST_HREF,
+    cta: WAITLIST_PRICING_CTA,
     badge: "power",
     includes: "semua di Plus, plus",
   },
