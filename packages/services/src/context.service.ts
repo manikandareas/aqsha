@@ -230,7 +230,7 @@ type NotePaper = {
   doi?: string;
   url: string;
   abstract?: string;
-  snippet: string;
+  snippet: string | null;
 };
 
 type NoteFeedItem = {

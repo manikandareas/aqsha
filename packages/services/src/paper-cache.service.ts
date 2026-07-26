@@ -22,7 +22,7 @@ export type PapersByKeysItem = {
 function toDetail(row: {
   key: string;
   title: string;
-  snippet: string;
+  snippet: string | null;
   abstract: string | null;
   url: string;
   pdfUrl: string | null;
@@ -37,6 +37,10 @@ function toDetail(row: {
   venue: string | null;
   citedByCount: number | null;
   isOpenAccess: boolean | null;
+  oaStatus: string | null;
+  workType: string | null;
+  language: string | null;
+  isRetracted: boolean;
   topics: string[];
   score: number | null;
   lastSeenAt: number;
@@ -60,6 +64,10 @@ function toDetail(row: {
     venue: o(row.venue),
     citedByCount: o(row.citedByCount),
     isOpenAccess: o(row.isOpenAccess),
+    oaStatus: o(row.oaStatus),
+    workType: o(row.workType),
+    language: o(row.language),
+    isRetracted: row.isRetracted,
     topics: row.topics,
     score: o(row.score),
     lastSeenAt: row.lastSeenAt,

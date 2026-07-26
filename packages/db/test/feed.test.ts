@@ -209,6 +209,35 @@ describe("FeedInteractionRepo — saved/hidden refs", () => {
   });
 });
 
+describe("explore_papers literature fields", () => {
+  itest("menyimpan dan membaca kembali oaStatus/workType/language/isRetracted", async () => {
+    const key = PKEY("lit1");
+    await PaperCacheRepo.upsertMany(db, [
+      {
+        key,
+        title: "Paper uji",
+        snippet: null,
+        url: "https://example.org/a",
+        provider: "OpenAlex",
+        sourceLabel: "OpenAlex",
+        authors: ["A"],
+        topics: [],
+        oaStatus: "gold",
+        workType: "article",
+        language: "en",
+        isRetracted: true,
+        lastSeenAt: Date.now(),
+      },
+    ]);
+    const row = await PaperCacheRepo.getByKey(db, key);
+    expect(row?.oaStatus).toBe("gold");
+    expect(row?.workType).toBe("article");
+    expect(row?.language).toBe("en");
+    expect(row?.isRetracted).toBe(true);
+    expect(row?.snippet).toBeNull();
+  });
+});
+
 describe("FeedRepo — news enrichment", () => {
   itest("listNewsNeedingEnrichment menemukan gdelt tanpa articleText; patch mengeluarkannya", async () => {
     const news = await FeedRepo.upsertByDedupeKey(

@@ -197,8 +197,8 @@ export function paperToFeedInput(
   return {
     kind: "paper",
     title: paper.title,
-    summary: collapseTrim(paper.snippet, 400),
-    tldr: firstSentence(paper.abstract ?? paper.snippet),
+    summary: collapseTrim(paper.snippet ?? "", 400),
+    tldr: firstSentence(paper.abstract ?? paper.snippet ?? ""),
     url: paper.url,
     provider: "openalex",
     sourceLabel: paper.sourceLabel,
