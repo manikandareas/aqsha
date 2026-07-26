@@ -19,6 +19,7 @@
 		resolveVedivadBlockAtPoint
 	} from '../lib/annotation-hover-targets';
 	import { placePins, type PinCandidate } from '../lib/annotation-pins';
+	import { findAnnotationAnchor } from '../lib/annotation-reanchor';
 	import type { AnnotationView } from '../api';
 	import AnnotationModeLayer from './AnnotationModeLayer.svelte';
 	import AnnotationPinLayer from './AnnotationPinLayer.svelte';
@@ -41,6 +42,7 @@
 		proposalHunkCount = 0,
 		onReviewProposal,
 		annotationMode = $bindable(false),
+		pinNumbers = $bindable(new Map<string, number>()),
 		project = null,
 		source = '',
 		mainFilePath = '/main.typ',
@@ -60,6 +62,8 @@
 		onReviewProposal?: () => void;
 		/** Mode anotasi — dikontrol dari header panel induk. */
 		annotationMode?: boolean;
+		/** Nomor pin per anotasi, dipublikasikan ke induk agar chip composer memakai nomor yang sama. */
+		pinNumbers?: Map<string, number>;
 		project?: TypstProject | null;
 		source?: string;
 		mainFilePath?: string;
@@ -85,6 +89,10 @@
 
 	const pins = $derived(placePins(pinCandidates));
 	const annotationsById = $derived(new Map((annotations ?? []).map((a) => [a.id, a] as const)));
+
+	$effect(() => {
+		pinNumbers = new Map(pins.map((pin) => [pin.id, pin.number] as const));
+	});
 
 	const stageWidth = $derived(fitWidth > 0 ? Math.max(280, Math.round(fitWidth * zoom)) : 0);
 
@@ -281,14 +289,24 @@
 		const candidates: PinCandidate[] = [];
 		for (const a of annotations) {
 			if (a.status === 'resolved' || a.status === 'dismissed') continue;
-			const boxes = overlayBoxes(svgHost, stageEl, a.page, a.rects);
-			if (boxes.length > 0) {
+			const anchored = a.selectedText ? findAnnotationAnchor(svgHost, a.selectedText) : null;
+			// Koordinat tersimpan bersifat absolut; sesudah dokumen berubah hanya pencarian teks yang
+			// masih dapat dipercaya untuk menempatkan pin.
+			const boxes = anchored
+				? [anchorBox(anchored, stageEl)]
+				: overlayBoxes(svgHost, stageEl, a.page, a.rects);
+			const floating = Boolean(a.selectedText) && anchored === null;
+			// Sorotan kotak dilewati untuk anotasi melayang: kotaknya menandai teks yang sudah bukan
+			// teks anotasi itu lagi.
+			if (!floating && boxes.length > 0) {
 				items.push({
 					id: a.id,
 					active: a.id === activeAnnotationId,
 					selected: selectedAnnotationIds?.has(a.id) ?? false,
 					boxes
 				});
+			}
+			if (boxes.length > 0) {
 				const first = boxes[0]!;
 				candidates.push({
 					id: a.id,
@@ -297,12 +315,24 @@
 					left: Math.max(first.left - 14, 10),
 					top: first.top + 8,
 					status: a.status === 'sent' ? 'sent' : 'open',
-					floating: false
+					floating
 				});
 			}
 		}
 		overlayItems = items;
 		pinCandidates = candidates;
+	}
+
+	/** Kotak elemen ter-tambat dalam koordinat stage. */
+	function anchorBox(el: Element, stage: HTMLElement): OverlayBox {
+		const box = el.getBoundingClientRect();
+		const stageBox = stage.getBoundingClientRect();
+		return {
+			left: box.left - stageBox.left,
+			top: box.top - stageBox.top,
+			width: box.width,
+			height: box.height
+		};
 	}
 
 	function setZoom(next: number): void {

@@ -31,6 +31,8 @@ type ProjectAnnotationBridgeOptions = {
 	scrollToText: (text: string) => void;
 	setComposerDraft: (text: string) => void;
 	selectChat: () => void;
+	/** Nomor pin anotasi di preview, supaya chip merujuk penanda yang sama dengan yang dilihat user. */
+	getPinNumber: (id: string) => number | null;
 };
 
 /** Connects preview annotations to composer context chips and sent-turn bookkeeping. */
@@ -75,6 +77,8 @@ export class ProjectAnnotationBridge {
 						return;
 					}
 					const selectedText = annotation.selectedText ?? draft.selectedText;
+					const pinNumber = this.#options.getPinNumber(annotation.id);
+					const numberedLabel = pinNumber ? `${pinNumber}. ${elementLabel}` : elementLabel;
 					this.#options.mentions.addSelectionRef({
 						kind: 'document-annotation',
 						workspaceId: this.#options.workspaceId(),
@@ -82,8 +86,8 @@ export class ProjectAnnotationBridge {
 						page: annotation.page,
 						selectedText,
 						note: annotation.note ?? note,
-						elementLabel,
-						label: buildDocumentAnnotationMentionLabel(elementLabel, selectedText)
+						elementLabel: numberedLabel,
+						label: buildDocumentAnnotationMentionLabel(numberedLabel, selectedText)
 					});
 				},
 				onError: (error) => toast.error(readableApiErrorMessage(error, 'Gagal menyimpan anotasi.'))
@@ -102,7 +106,9 @@ export class ProjectAnnotationBridge {
 		const annotation = this.#options.getAnnotations().find((item) => item.id === id);
 		if (!annotation) return;
 		const selectedText = annotation.selectedText ?? '';
-		const elementLabel = annotation.selectedText ?? 'Bagian dokumen';
+		const baseLabel = annotation.selectedText ?? 'Bagian dokumen';
+		const pinNumber = this.#options.getPinNumber(annotation.id);
+		const elementLabel = pinNumber ? `${pinNumber}. ${baseLabel}` : baseLabel;
 		this.#options.mentions.addSelectionRef({
 			kind: 'document-annotation',
 			workspaceId: this.#options.workspaceId(),

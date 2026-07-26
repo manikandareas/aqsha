@@ -186,7 +186,8 @@
 		markSent: (input) => markSent.mutate(input),
 		scrollToText: (text) => previewRef?.scrollToHeading(text),
 		setComposerDraft: (text) => mentions.setComposerDraft(text),
-		selectChat: () => selectLeftMode('chat')
+		selectChat: () => selectLeftMode('chat'),
+		getPinNumber: (id) => pinNumbers.get(id) ?? null
 	});
 
 	const proposalController = new ProjectProposalController({
@@ -236,6 +237,7 @@
 	let previewVisited = $state(false);
 	let annotationMode = $state(false);
 	let activeTocIndex = $state(0);
+	let pinNumbers = $state(new Map<string, number>());
 
 	const visibleAnnotationIds = $derived(
 		(annotations.data ?? []).flatMap((annotation) =>
@@ -479,6 +481,7 @@
 				<Preview
 					bind:this={previewRef}
 					bind:annotationMode
+					bind:pinNumbers
 					svg={runtime.previewSvg}
 					project={runtime.typstProject}
 					source={runtime.source}

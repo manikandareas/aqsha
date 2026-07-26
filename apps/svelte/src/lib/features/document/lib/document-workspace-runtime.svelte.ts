@@ -45,6 +45,7 @@ type PreviewComponent = Component<
 		proposalHunkCount?: number;
 		onReviewProposal?: () => void;
 		annotationMode?: boolean;
+		pinNumbers?: Map<string, number>;
 		onToggleAnnotationContext?: (id: string) => void;
 		onAskAnnotation?: (id: string) => void;
 		onDismissAnnotation?: (id: string) => void;
