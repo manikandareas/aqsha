@@ -3,10 +3,12 @@ import type {
   BibliographySort,
   Citation,
   CitationAuthor,
+  CitationIngestStatus,
   CitationMetadataStatus,
   CitationProvider,
   CitationSource,
   CitationStyleId,
+  CitationTextCoverage,
   DbOrTx,
   NewCitation,
 } from "@aqsha/db";
@@ -38,6 +40,9 @@ export type CitationListItem = {
   tags: string[];
   source: CitationSource;
   metadataStatus: CitationMetadataStatus;
+  /** Kemajuan pipeline ingest item ini — dipakai kartu perpustakaan untuk melapor. */
+  ingestStatus: CitationIngestStatus;
+  textCoverage: CitationTextCoverage;
   artifactId: string | null;
   updatedAt: number;
 };
@@ -84,6 +89,8 @@ export function toListItem(row: Citation): CitationListItem {
     tags: row.tags,
     source: row.source as CitationSource,
     metadataStatus: row.metadataStatus as CitationMetadataStatus,
+    ingestStatus: row.ingestStatus,
+    textCoverage: row.textCoverage,
     artifactId: row.artifactId,
     updatedAt: row.updatedAt,
   };

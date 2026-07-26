@@ -5,6 +5,8 @@
 export type CitationAuthor = { family?: string; given?: string; literal?: string };
 export type CitationSource = 'import' | 'provider_sync' | 'artifact' | 'doi' | 'manual';
 export type CitationMetadataStatus = 'verified' | 'needs_review' | 'incomplete';
+export type CitationIngestStatus = 'pending' | 'processing' | 'ready' | 'failed';
+export type CitationTextCoverage = 'none' | 'abstract' | 'full_text';
 export type CitationStyleId = 'apa-7' | 'ieee' | 'vancouver' | 'chicago-author-date';
 export type BibliographySort = 'author' | 'year' | 'title';
 export type ImportDuplicatePolicy = 'skip' | 'merge' | 'import';
@@ -21,6 +23,8 @@ export type CitationListItem = {
 	tags: string[];
 	source: CitationSource;
 	metadataStatus: CitationMetadataStatus;
+	ingestStatus: CitationIngestStatus;
+	textCoverage: CitationTextCoverage;
 	artifactId: string | null;
 	updatedAt: number;
 };
