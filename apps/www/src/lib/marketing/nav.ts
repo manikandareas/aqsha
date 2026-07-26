@@ -60,7 +60,7 @@ function featureNavItem(key: FeatureKey): NavItem {
 export const navTree: NavTopItem[] = [
   {
     type: "menu",
-    label: "Cara Aqsha bekerja",
+    label: "Fitur Aqsha",
     items: FEATURE_NAV_KEYS.map(featureNavItem),
     footerLinks: [
       { href: "/#cara-kerja", label: "Alur penulisan" },

@@ -126,15 +126,8 @@ export function MobileNavTree({
           ),
         )}
       </ul>
-      <div className="flex gap-2 border-t border-border/70 p-3">
-        <Button
-          asChild
-          variant="ghost"
-          className="h-11 flex-1 rounded-xl text-sm text-foreground/80 hover:bg-muted hover:text-foreground"
-        >
-          <a href={WAITLIST_PATH}>Dapatkan kabar saat rilis</a>
-        </Button>
-        <Button asChild className="h-11 flex-1 rounded-xl text-sm">
+      <div className="border-t border-border/70 p-3">
+        <Button asChild className="h-11 w-full rounded-xl text-sm">
           <a href={WAITLIST_PATH}>{waitlistLabel}</a>
         </Button>
       </div>

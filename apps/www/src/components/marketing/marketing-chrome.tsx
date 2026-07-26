@@ -125,13 +125,6 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
 
         <div className="col-start-3 flex items-center justify-self-end gap-2 sm:gap-3">
           <ThemeToggle />
-          <a
-            href={WAITLIST_PATH}
-            className="hidden rounded-full px-2 py-1.5 text-sm font-medium text-foreground/75 transition-colors hover:text-foreground sm:inline-block"
-          >
-            Dapatkan kabar saat rilis
-          </a>
-          <span aria-hidden className="hidden h-5 w-px bg-border sm:block" />
           <Button asChild size="sm" className="h-9 rounded-full px-4">
             <a href={WAITLIST_PATH}>{waitlistLabel}</a>
           </Button>
