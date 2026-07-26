@@ -9,6 +9,7 @@ import { FeedRepo, PaperCacheRepo, throwAppError } from "@aqsha/db";
 import { getCache, putCache } from "./papers/external-cache";
 import { fetchOpenAlexWorks } from "./feed/openAlex";
 import { extractDoi } from "./papers/identifiers";
+import { literaturePaperToExplorePaper } from "./papers/work";
 import { ResearchService, type ProviderSearchResult, type ResearchCandidate } from "./research";
 import { InterestService } from "./interest.service";
 import { PaperCacheService } from "./paper-cache.service";
@@ -205,7 +206,7 @@ export const ExploreService = {
     let openAlexStatus: ExploreProviderStatus = { provider: "OpenAlex", status: "ready" };
     try {
       const { papers, works } = await fetchOpenAlexWorks({ query: openAlexQuery, limit, fromYear, page, now });
-      items = papers;
+      items = papers.map(literaturePaperToExplorePaper);
       // Sinyal load-more dari jumlah works MENTAH OpenAlex (bukan `papers` yang sudah di-map/
       // dedup): satu work tak-terpetakan/duplikat pada halaman penuh jangan sampai menyetel
       // nextPage=null dan menyembunyikan halaman berikutnya yang sebenarnya masih ada.
@@ -296,7 +297,7 @@ export const ExploreService = {
         limit: 8,
         now,
       });
-      papers = found;
+      papers = found.map(literaturePaperToExplorePaper);
     } catch {
       // best-effort
     }

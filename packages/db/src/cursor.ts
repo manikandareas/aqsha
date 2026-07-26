@@ -6,8 +6,7 @@
  * mengirim balik via `?cursor=`. `id` adalah tiebreaker stabil karena `updatedAt`
  * (epoch-ms) bisa berbenturan antar baris.
  *
- * Reusable: dipakai `WorkspaceRepo` (P2) dan akan dipakai repo paginated lain
- * (threads/feed) di fase berikutnya.
+ * Reusable: dipakai repo paginated mana pun (workspaces, threads, artifacts, citations, feed).
  */
 export type KeysetCursor = { u: number; i: string };
 
@@ -29,47 +28,6 @@ export function decodeKeysetCursor(value: string | null | undefined): KeysetCurs
       return { u: (parsed as KeysetCursor).u, i: (parsed as KeysetCursor).i };
     }
     return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Cursor untuk feed BERIMBANG paper↔news (FeedRepo.paginateBalanced). Dua lane keyset
- * independen (paper vs non-paper) digabung jadi satu token. Per-lane: `KeysetCursor`
- * (lanjut), `"end"` (lane habis — JANGAN re-query), atau `null` (mulai dari atas).
- * Sentinel `"end"` mencegah lane yang sudah habis ke-restart saat lane lain masih jalan.
- */
-export type LaneCursor = KeysetCursor | "end";
-export type BalancedCursor = { p: LaneCursor | null; n: LaneCursor | null };
-
-function normalizeLane(value: unknown): LaneCursor | null {
-  if (value === "end") return "end";
-  if (
-    value &&
-    typeof value === "object" &&
-    typeof (value as KeysetCursor).u === "number" &&
-    typeof (value as KeysetCursor).i === "string"
-  ) {
-    return { u: (value as KeysetCursor).u, i: (value as KeysetCursor).i };
-  }
-  return null;
-}
-
-export function encodeBalancedCursor(cursor: BalancedCursor): string {
-  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64");
-}
-
-/** Decode toleran: korup → `null` (perlakukan sebagai halaman pertama, kedua lane dari atas). */
-export function decodeBalancedCursor(value: string | null | undefined): BalancedCursor | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(value, "base64").toString("utf8")) as {
-      p?: unknown;
-      n?: unknown;
-    };
-    if (!parsed || typeof parsed !== "object") return null;
-    return { p: normalizeLane(parsed.p), n: normalizeLane(parsed.n) };
   } catch {
     return null;
   }
