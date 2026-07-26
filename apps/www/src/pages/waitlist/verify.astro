@@ -8,12 +8,17 @@ import { WaitlistVerification } from "@/components/waitlist/waitlist-verificatio
   description="Konfirmasi email untuk akses awal Aqsha."
   path="/waitlist/verify"
 >
-  <main class="mx-auto w-full max-w-xl px-5 py-14 sm:px-6 sm:py-20 lg:px-8">
-    <header class="mb-10">
-      <h1 class="font-heading text-[1.9rem] font-medium leading-tight text-foreground sm:text-[2.25rem]">
+  <main class="w-full overflow-x-clip bg-background">
+    <div class="mx-auto w-full max-w-6xl px-5 py-14 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
+      <h1 class="font-heading mx-auto max-w-md text-center text-[1.9rem] font-medium leading-tight text-foreground sm:text-[2.25rem]">
         Verifikasi email
       </h1>
-    </header>
-    <WaitlistVerification client:load />
+      <p class="mx-auto mt-3 max-w-sm text-center text-sm leading-relaxed text-muted-foreground">
+        Satu langkah terakhir sebelum namamu masuk daftar akses awal.
+      </p>
+      <div class="mt-8 sm:mt-10">
+        <WaitlistVerification client:load />
+      </div>
+    </div>
   </main>
 </MarketingLayout>
