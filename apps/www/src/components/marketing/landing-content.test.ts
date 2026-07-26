@@ -8,11 +8,19 @@ const indexSource = await Bun.file(
 const founderSource = await Bun.file(
   new URL("./founder-story-section.tsx", import.meta.url),
 ).text();
+const marqueeSource = await Bun.file(
+  new URL("./audience-marquee-section.tsx", import.meta.url),
+).text();
 
-test("landing uses an audience marker instead of unsupported social proof", () => {
+test("landing uses a worldwide literature marquee rather than customer social proof", () => {
   expect(indexSource).toContain('<AudienceMarqueeSection client:visible />');
   expect(indexSource).not.toContain("UniversityMarqueeSection");
   expect(indexSource).not.toContain("TestimonialSection");
+  expect(marqueeSource).toContain("LITERATURE_COUNT = 322_000_000");
+  expect(marqueeSource).toContain("LiveLiteratureCount");
+  expect(marqueeSource).toContain("marquee-track");
+  expect(marqueeSource).toContain("langsung ke skripsimu");
+  expect(marqueeSource).toContain("Harvard");
 });
 
 test("founder story no longer embeds the old product tour media", () => {

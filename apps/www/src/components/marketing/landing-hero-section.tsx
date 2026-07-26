@@ -17,7 +17,6 @@ import {
 import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { EASE_OUT, FRAME_SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import type { LatestUpdate } from "@/lib/marketing/latest";
 
 const buttonContainer = {
   hidden: {},
@@ -220,15 +219,12 @@ function HeroFrameCard({
 
 /**
  * LandingHeroSection — centered editorial hero on bg-background: faint
- * blueprint grid, pencil doodles in the margins, big centered heading, two
- * design-system CTAs, and an overlapping stack of feature frames clipped by
- * the hero's bottom edge (each one a shortcut into its feature block).
+ * blueprint grid, pencil doodles in the margins, a static waitlist badge,
+ * big centered heading, two design-system CTAs, and an overlapping stack of
+ * feature frames clipped by the hero's bottom edge (each one a shortcut into
+ * its feature block).
  */
-export function LandingHeroSection({
-  latestUpdate,
-}: {
-  latestUpdate: LatestUpdate | null;
-}) {
+export function LandingHeroSection() {
   const reduce = useReducedMotion();
   // Frame stack hover state lives here so neighbours can react together.
   const [activeFrame, setActiveFrame] = useState<number | null>(null);
@@ -253,20 +249,18 @@ export function LandingHeroSection({
           seimbang di tengah; desktop tetap full viewport. */}
       <div className="relative z-20 mx-auto flex min-h-[88svh] w-full max-w-7xl flex-col sm:min-h-svh">
         <div className="flex flex-1 flex-col items-center justify-center px-4 pb-8 pt-24 text-center sm:px-6 sm:pb-10 sm:pt-40">
-          {latestUpdate ? (
-            <m.a
-              href={latestUpdate.href}
-              className="lip-static mb-6 inline-flex max-w-full items-center gap-2 rounded-full border-2 border-border bg-card py-1 pl-1.5 pr-3.5 text-sm text-foreground transition-colors hover:bg-muted"
-              initial={reduce ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, ease: EASE_OUT }}
-            >
-              <span className="shrink-0 rounded-full border-2 border-coral-soft-border bg-coral-soft px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-coral-foreground">
-                {latestUpdate.tag}
-              </span>
-              <span className="min-w-0 truncate">{latestUpdate.title}</span>
-            </m.a>
-          ) : null}
+          <m.a
+            href={WAITLIST_PATH}
+            className="lip-static mb-6 inline-flex max-w-full items-center gap-2 rounded-full border-2 border-border bg-card py-1 pl-1.5 pr-3.5 text-sm text-foreground transition-colors hover:bg-muted"
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: EASE_OUT }}
+          >
+            <span className="shrink-0 rounded-full border-2 border-coral-soft-border bg-coral-soft px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-coral-foreground">
+              Waitlist
+            </span>
+            <span className="min-w-0 truncate">Gabung untuk akses awal</span>
+          </m.a>
 
           <m.h1
             className="font-heading max-w-3xl text-balance text-[2.6rem] font-medium leading-[1.08] tracking-normal text-foreground sm:text-6xl sm:leading-[1.05] lg:text-[4.25rem]"
@@ -276,16 +270,16 @@ export function LandingHeroSection({
             animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1 }}
             transition={{ duration: 0.95, ease: EASE_OUT }}
           >
-            Riset dan karya tulis, tetap satu benang.
+            Kenalan sama Astra, AI asisten risetmu.
           </m.h1>
 
           <m.p
-            className="mt-5 max-w-xl text-pretty text-base leading-relaxed text-foreground/80 sm:mt-6 sm:text-lg sm:leading-relaxed"
+            className="mt-5 max-w-xl text-pretty text-sm leading-relaxed text-foreground/80 sm:mt-6 sm:text-base sm:leading-relaxed"
             initial={reduce ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.12, duration: 0.55, ease: EASE_OUT }}
           >
-            Mulai dari proyek, lanjutkan di dokumen Typst, dan tautkan referensi saat drafmu bertumbuh bersama Astra.
+            Cari sumber, susun draf, dan biarkan format tetap tertata. Dengan akses ke 322+ juta literatur ilmiah, Aqsha memberi kamu lebih banyak waktu untuk meneliti—bukan membetulkan layout.
           </m.p>
 
           <m.div

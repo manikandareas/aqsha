@@ -23,7 +23,7 @@ const entries = (await getCollection("changelog"))
   )
   .map((e) => mapChangelogEntry(e));
 
-const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
+const { teaserLatest } = mapLandingLatest(entries[0] ?? null);
 ---
 
 <!--
@@ -39,7 +39,7 @@ const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
 >
   <main class="min-h-svh bg-background text-foreground">
     <StructuredData />
-    <LandingHeroZone client:load latestUpdate={latestUpdate} />
+    <LandingHeroZone client:load />
     <AudienceMarqueeSection client:visible />
     <WhyAqshaSection client:visible />
     <WhatsNewTeaserSection latest={teaserLatest} />
