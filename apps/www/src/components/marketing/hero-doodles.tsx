@@ -40,7 +40,7 @@ export function HeroDoodles() {
       >
         <Starburst className="ml-8 rotate-6" delay={0.75} mode="animate" />
         <HandNote className="mt-2 -rotate-3" delay={0.85} mode="animate">
-          tiap klaim ada sumbernya
+          ide dan sumber, satu benang
         </HandNote>
       </ScrollParallax>
 

@@ -2,7 +2,7 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import LandingFooter from "@/components/marketing/landing-footer.astro";
 import WhatsNewTeaserSection from "@/components/marketing/whats-new-teaser-section.astro";
-// import { AudienceSection } from "@/components/marketing/audience-section";
+import { AudienceMarqueeSection } from "@/components/marketing/audience-marquee-section";
 import { BottomCtaSection } from "@/components/marketing/bottom-cta-section";
 import { FaqSection } from "@/components/marketing/faq-section";
 import { FeatureBlocksSection } from "@/components/marketing/feature-blocks-section";
@@ -10,8 +10,6 @@ import { FounderStorySection } from "@/components/marketing/founder-story-sectio
 import { LandingHeroZone } from "@/components/marketing/landing-hero-zone";
 import { PricingSection } from "@/components/marketing/pricing-section";
 import { StructuredData } from "@/components/marketing/structured-data";
-import { TestimonialSection } from "@/components/marketing/testimonial-section";
-import { UniversityMarqueeSection } from "@/components/marketing/university-marquee-section";
 import { WhyAqshaSection } from "@/components/marketing/why-aqsha-section";
 import { mapChangelogEntry } from "@/lib/changelog/map";
 import { mapLandingLatest } from "@/lib/marketing/latest";
@@ -36,19 +34,17 @@ const { latestUpdate, teaserLatest } = mapLandingLatest(entries[0] ?? null);
 -->
 <BaseLayout
   title="Asisten AI buat skripsi, tesis & paper"
-  description="Aqsha ngecek tiap sumber ke paper aslinya — jadi kamu nggak ketahuan pas sidang atau direview dosen. Cari jurnal, nulis bareng Astra, semua di satu tempat."
+  description="Aqsha menyatukan proyek karya tulis, dokumen Typst, referensi, dan Astra supaya risetmu bergerak menjadi draf yang siap direview."
   path="/"
 >
   <main class="min-h-svh bg-background text-foreground">
     <StructuredData />
     <LandingHeroZone client:load latestUpdate={latestUpdate} />
-    <UniversityMarqueeSection client:visible />
+    <AudienceMarqueeSection client:visible />
     <WhyAqshaSection client:visible />
     <WhatsNewTeaserSection latest={teaserLatest} />
     <FeatureBlocksSection client:visible />
     <FounderStorySection client:visible />
-    {/* <AudienceSection client:visible /> */}
-    <TestimonialSection client:visible />
     <PricingSection client:visible />
     <FaqSection client:visible />
     <BottomCtaSection client:visible />

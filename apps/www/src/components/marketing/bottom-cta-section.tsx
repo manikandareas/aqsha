@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { EASE_OUT } from "@/lib/motion";
 
-const HEADLINE = "Nulis riset yang bisa kamu pertahanin.";
+const HEADLINE = "Beri risetmu satu tempat untuk bertumbuh.";
 
 function RevealWord({
   word,
@@ -92,8 +92,8 @@ export function BottomCtaSection() {
           viewport={{ once: true, amount: 0.75 }}
           transition={{ delay: 0.1, duration: 0.55 }}
         >
-          Daftar gratis, buka satu tempat buat semua risetmu, dan biarin tiap
-          sumber kecek bener — langsung dari browser.
+          Aqsha membantu kamu menautkan proyek, sumber, dan draf—lalu tetap
+          memegang keputusan pada setiap perubahan penting.
         </m.p>
         <m.div
           className="mt-10 flex flex-col items-center justify-center gap-3 sm:mt-12 sm:flex-row"
