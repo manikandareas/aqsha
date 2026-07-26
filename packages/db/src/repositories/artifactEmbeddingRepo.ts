@@ -1,9 +1,11 @@
-import { and, cosineDistance, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, cosineDistance, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { artifacts } from "../schema/artifacts";
 import {
   artifactEmbeddings,
   type NewArtifactEmbedding,
 } from "../schema/artifactEmbeddings";
+import { citations } from "../schema/citations";
+import { workspaceCitationLinks } from "../schema/workspaceCitationLinks";
 import type { DbOrTx } from "../types";
 
 /** Satu chunk mirip hasil ANN search (untuk RagService.searchThreadDocuments). */
@@ -12,6 +14,10 @@ export type ArtifactEmbeddingMatch = {
   chunkIndex: number;
   content: string;
   title: string;
+  /** Terisi bila chunk berasal dari item perpustakaan. */
+  citationId: string | null;
+  /** Kunci `@key` sitasi; null bila belum ter-assign. */
+  bibKey: string | null;
   /** Jarak cosine (`0` identik, `2` berlawanan). */
   distance: number;
 };
@@ -22,8 +28,36 @@ export type ArtifactEmbeddingLexicalMatch = {
   chunkIndex: number;
   content: string;
   title: string;
+  /** Terisi bila chunk berasal dari item perpustakaan. */
+  citationId: string | null;
+  /** Kunci `@key` sitasi; null bila belum ter-assign. */
+  bibKey: string | null;
   rank: number;
 };
+
+/**
+ * Paper perpustakaan hidup di level akun (`workspace_id` null), jadi keanggotaan
+ * proyeknya dibaca dari tautan referensi — bukan dari kolom pada chunk. Satu paper
+ * karena itu bisa dipakai banyak proyek tanpa duplikasi, dan melepas tautan langsung
+ * mempersempit hasil tanpa reindex.
+ */
+function workspaceScope(workspaceId: string): SQL {
+  return sql`(${artifactEmbeddings.workspaceId} = ${workspaceId} or exists (
+      select 1 from ${citations} c
+        join ${workspaceCitationLinks} l on l.citation_id = c.id
+       where c.artifact_id = ${artifactEmbeddings.artifactId}
+         and l.workspace_id = ${workspaceId}
+         and c.deleted_at is null
+    ))`;
+}
+
+/** Identitas sitasi per chunk — subquery agar tak mempersempit hasil pencarian. */
+const citationIdExpr = sql<string | null>`(select c.id from ${citations} c
+    where c.artifact_id = ${artifactEmbeddings.artifactId}
+      and c.deleted_at is null limit 1)`;
+const bibKeyExpr = sql<string | null>`(select c.bib_key from ${citations} c
+    where c.artifact_id = ${artifactEmbeddings.artifactId}
+      and c.deleted_at is null limit 1)`;
 
 /**
  * Repo artifact_embeddings (pgvector) — query Drizzle saja. P3 write/delete;
@@ -38,7 +72,7 @@ export const ArtifactEmbeddingRepo = {
   /**
    * ANN cosine search (HNSW `vector_cosine_ops` sudah ada). Selalu scope owner; lalu
    * scope dokumen ke thread (JOIN `artifacts.thread_id`, sebab `artifact_embeddings`
-   * TIDAK punya thread_id) ATAU ke workspace (`artifact_embeddings.workspace_id`).
+   * TIDAK punya thread_id) ATAU ke workspace (lihat `workspaceScope`).
    * Hanya artifact aktif. ORDER BY jarak ASC + LIMIT memakai index HNSW.
    */
   async searchSimilar(
@@ -57,13 +91,15 @@ export const ArtifactEmbeddingRepo = {
       eq(artifacts.status, "active"),
     ];
     if (args.threadId) where.push(eq(artifacts.threadId, args.threadId));
-    if (args.workspaceId) where.push(eq(artifactEmbeddings.workspaceId, args.workspaceId));
+    if (args.workspaceId) where.push(workspaceScope(args.workspaceId));
     const rows = await db
       .select({
         artifactId: artifactEmbeddings.artifactId,
         chunkIndex: artifactEmbeddings.chunkIndex,
         content: artifactEmbeddings.content,
         title: artifacts.title,
+        citationId: citationIdExpr,
+        bibKey: bibKeyExpr,
         distance,
       })
       .from(artifactEmbeddings)
@@ -76,6 +112,8 @@ export const ArtifactEmbeddingRepo = {
       chunkIndex: r.chunkIndex,
       content: r.content,
       title: r.title,
+      citationId: r.citationId,
+      bibKey: r.bibKey,
       distance: Number(r.distance),
     }));
   },
@@ -103,13 +141,15 @@ export const ArtifactEmbeddingRepo = {
       sql`${artifactEmbeddings.contentTsv} @@ ${tsq}`,
     ];
     if (args.threadId) where.push(eq(artifacts.threadId, args.threadId));
-    if (args.workspaceId) where.push(eq(artifactEmbeddings.workspaceId, args.workspaceId));
+    if (args.workspaceId) where.push(workspaceScope(args.workspaceId));
     const rows = await db
       .select({
         artifactId: artifactEmbeddings.artifactId,
         chunkIndex: artifactEmbeddings.chunkIndex,
         content: artifactEmbeddings.content,
         title: artifacts.title,
+        citationId: citationIdExpr,
+        bibKey: bibKeyExpr,
         rank,
       })
       .from(artifactEmbeddings)
@@ -122,6 +162,8 @@ export const ArtifactEmbeddingRepo = {
       chunkIndex: r.chunkIndex,
       content: r.content,
       title: r.title,
+      citationId: r.citationId,
+      bibKey: r.bibKey,
       rank: Number(r.rank),
     }));
   },

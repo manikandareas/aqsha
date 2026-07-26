@@ -20,6 +20,13 @@ export type ThreadDocumentMatch = {
   content: string;
   /** Skor relevansi `[0..1]` (1 = paling mirip), diturunkan dari jarak cosine. */
   score: number;
+  /** Terisi bila chunk berasal dari item perpustakaan. */
+  citationId?: string;
+  /**
+   * Kunci `@key` hanya sah bila sudah ter-assign; saat null, pemanggil WAJIB
+   * mengambilnya dari daftar referensi proyek agar tidak lahir sitasi yatim.
+   */
+  bibKey?: string;
 };
 
 /**
@@ -126,7 +133,14 @@ export const RagService = {
 /** Konstanta RRF standar; meredam dominasi rank-1 satu jalur (skor ≈ Σ 1/(K + rank)). */
 const RRF_K = 60;
 
-type RankedChunk = { artifactId: string; chunkIndex: number; content: string; title: string };
+type RankedChunk = {
+  artifactId: string;
+  chunkIndex: number;
+  content: string;
+  title: string;
+  citationId: string | null;
+  bibKey: string | null;
+};
 
 /**
  * Reciprocal Rank Fusion: tiap chunk dapat skor Σ 1/(RRF_K + rank0) dari semua jalur yang
@@ -159,5 +173,7 @@ function fuseByReciprocalRank(
       chunkIndex: chunk.chunkIndex,
       content: chunk.content,
       score: Number(score.toFixed(4)),
+      ...(chunk.citationId ? { citationId: chunk.citationId } : {}),
+      ...(chunk.bibKey ? { bibKey: chunk.bibKey } : {}),
     }));
 }
