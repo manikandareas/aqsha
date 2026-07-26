@@ -330,6 +330,13 @@
       "when": 1784635800797,
       "tag": "0046_typst_proposal_resubmit",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1785078853233,
+      "tag": "0047_open_nighthawk",
+      "breakpoints": true
     }
   ]
 }
