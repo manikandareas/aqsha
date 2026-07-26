@@ -33,6 +33,12 @@ export {
   renderProjectManifest,
 } from "./project-facts";
 export {
+  type DocumentIssues,
+  type DocumentReport,
+  DocumentReportService,
+  inspectDocumentSource,
+} from "./document-report";
+export {
   applyHunkSelection,
   computeProposalHunks,
   type ProposalHunk,

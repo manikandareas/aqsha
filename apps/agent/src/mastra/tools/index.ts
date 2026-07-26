@@ -1,4 +1,5 @@
 import { askQuestions } from "./ask-questions";
+import { checkDocument } from "./check-document";
 import { createWorkspace } from "./create-workspace";
 import { deleteArtifact } from "./delete-artifact";
 import { exportAnalysisResults } from "./export-analysis-results";
@@ -47,6 +48,8 @@ export const readTools = {
   // Peta bab proyek (murah) + baca satu bab; jalur orientasi & anchor sebelum propose_document_edit.
   get_document_outline: getDocumentOutline,
   read_document_section: readDocumentSection,
+  // Pemeriksa integritas dokumen (menjalankan compile) — untuk pertanyaan "apa yang masih kurang".
+  check_document: checkDocument,
   // Sumber Typst penuh — hanya untuk dokumen kosong / tulis-ulang menyeluruh.
   get_document_source: getDocumentSource,
 };
