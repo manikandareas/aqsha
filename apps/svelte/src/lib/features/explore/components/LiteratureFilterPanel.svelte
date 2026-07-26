@@ -18,9 +18,10 @@
 	 * bottom drawer. Both modes share one editor. The draft lifecycle stays with the page: edits are
 	 * staged through `onChange` and only reach the URL on Apply.
 	 *
-	 * Dressed as the mirror of the nav rail rather than as a floating detail card: the same
-	 * `bg-sidebar` surface separated from the results by colour alone, the same 12px gutter, and the
-	 * same compact icon buttons.
+	 * Dressed in the nav rail's language — same `bg-sidebar` surface, 12px gutter, compact icon
+	 * buttons — but inset: docked it floats as a rounded card with a gutter around it, so the results
+	 * column keeps its full bleed. As a drawer it sits flush, since a bottom sheet already has its
+	 * own rounded lip.
 	 */
 	let {
 		open,
@@ -66,8 +67,13 @@
 	});
 </script>
 
-{#snippet panelBody()}
-	<div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar">
+{#snippet panelBody(inset: boolean)}
+	<div
+		class={cn(
+			'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sidebar',
+			inset && 'm-2 rounded-xl'
+		)}
+	>
 		<div class="flex shrink-0 items-center justify-between gap-2 px-3 pt-3.5 pb-2">
 			<div class="flex min-w-0 items-center gap-1.5">
 				<h2 class="truncate text-label font-medium text-muted-foreground">Filter penelitian</h2>
@@ -97,25 +103,29 @@
 {/snippet}
 
 {#if inline}
+	<!--
+		The gutter is the card's own margin, not padding on this column: the track collapses to 0
+		when closed, and padding has a border-box floor that would leave a sliver behind.
+	-->
 	<aside
 		aria-label="Filter penelitian"
 		inert={!open}
 		aria-hidden={!open}
 		class={cn(
-			'@container flex min-h-0 w-auto min-w-0 flex-col overflow-hidden bg-sidebar transition-opacity ease-out',
+			'@container flex min-h-0 w-auto min-w-0 flex-col overflow-hidden transition-opacity ease-out',
 			!open && 'opacity-0'
 		)}
 		style="transition-duration: {PANEL_TRANSITION_MS}ms"
 	>
 		{#if present}
-			{@render panelBody()}
+			{@render panelBody(true)}
 		{/if}
 	</aside>
 {:else}
 	<Drawer.Root {open} onOpenChange={(next) => !next && onClose()} direction="bottom">
 		<Drawer.Content aria-describedby={undefined} class="flex h-[88svh] flex-col bg-sidebar p-0">
 			<Drawer.Title class="sr-only">Filter penelitian</Drawer.Title>
-			{@render panelBody()}
+			{@render panelBody(false)}
 		</Drawer.Content>
 	</Drawer.Root>
 {/if}
