@@ -4,7 +4,6 @@
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import * as Alert from '@aqsha/ui-svelte/components/alert';
 	import * as Select from '@aqsha/ui-svelte/components/select';
-	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import { Icon, AlertCircleIcon, SparklesIcon } from '$lib/icons';
 	import { readableApiErrorMessage } from '$lib/errors';
 	import type { useLiteratureSearch } from '$lib/features/discovery/api';
@@ -16,6 +15,7 @@
 	import type { LiteraturePaper, LiteratureSortId } from '../literature-search-types';
 	import { exploreSourceToSearchInput, literaturePaperToExploreSource } from '../explore-source';
 	import ExploreSourceRow from './ExploreSourceRow.svelte';
+	import ExploreSourceListSkeleton from './ExploreSourceListSkeleton.svelte';
 	import LiteratureBatchBar from './LiteratureBatchBar.svelte';
 
 	const SORT_OPTIONS: Array<{ id: LiteratureSortId; label: string }> = [
@@ -83,7 +83,9 @@
 </script>
 
 <div class="flex flex-col gap-4">
-	<div class="flex flex-wrap items-center justify-between gap-3">
+	<div
+		class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3"
+	>
 		<p class="text-label font-medium text-muted-foreground">
 			{#if total !== null}
 				{total.toLocaleString('id-ID')} hasil
@@ -94,8 +96,11 @@
 				· {activeFilterCount} filter aktif
 			{/if}
 		</p>
-		<div class="flex items-center gap-1.5">
-			<span id="literature-sort-label" class="text-label font-medium text-muted-foreground">
+		<div class="flex w-full items-center gap-1.5 sm:w-auto">
+			<span
+				id="literature-sort-label"
+				class="shrink-0 text-label font-medium text-muted-foreground"
+			>
 				Urutkan
 			</span>
 			<Select.Root
@@ -103,8 +108,13 @@
 				value={applied.sort}
 				onValueChange={(value) => onSortChange(value as LiteratureSortId)}
 			>
-				<Select.Trigger aria-labelledby="literature-sort-label" class="w-56 max-w-full">
-					{SORT_OPTIONS.find((option) => option.id === applied.sort)?.label ?? 'Relevansi'}
+				<Select.Trigger
+					aria-labelledby="literature-sort-label"
+					class="w-full min-w-0 flex-1 sm:w-56 sm:flex-none"
+				>
+					<span class="truncate">
+						{SORT_OPTIONS.find((option) => option.id === applied.sort)?.label ?? 'Relevansi'}
+					</span>
 				</Select.Trigger>
 				<Select.Content align="end">
 					{#each SORT_OPTIONS as option (option.id)}
@@ -129,7 +139,7 @@
 			</Alert.Action>
 		</Alert.Root>
 	{:else if query.isPending}
-		{@render skeleton()}
+		<ExploreSourceListSkeleton label="Memuat hasil pencarian…" />
 	{:else if isEmpty}
 		{@render emptyState()}
 	{:else}
@@ -160,22 +170,10 @@
 
 <LiteratureBatchBar sources={selectedSources} onClear={clearSelection} />
 
-{#snippet skeleton()}
-	<div class="divide-y divide-border/80 overflow-hidden rounded-lg border-2 border-border bg-card">
-		{#each ['a', 'b', 'c', 'd', 'e'] as key (key)}
-			<div class="space-y-3 px-4 py-5 sm:px-5">
-				<Skeleton class="h-5 w-[72%]" />
-				<Skeleton class="h-3 w-[42%]" />
-				<Skeleton class="h-3 w-full" />
-				<Skeleton class="h-3 w-[64%]" />
-				<Skeleton class="h-3 w-20" />
-			</div>
-		{/each}
-	</div>
-{/snippet}
-
 {#snippet emptyState()}
-	<div class="max-w-[560px] rounded-2xl border-2 border-border bg-card px-5 py-8 text-center">
+	<div
+		class="max-w-[560px] rounded-2xl border-2 border-border bg-card px-4 py-8 text-center sm:px-5"
+	>
 		<div
 			class="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-mint-soft text-mint-foreground"
 		>

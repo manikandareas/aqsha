@@ -132,7 +132,7 @@
 	}
 </script>
 
-<section class="pt-8">
+<section class="pt-6 sm:pt-8">
 	<div
 		class={[
 			'@container/feed',
@@ -204,7 +204,9 @@
 {/snippet}
 
 {#snippet emptyState()}
-	<div class="max-w-[560px] rounded-2xl border-2 border-border bg-card px-5 py-8 text-center">
+	<div
+		class="max-w-[560px] rounded-2xl border-2 border-border bg-card px-4 py-8 text-center sm:px-5"
+	>
 		<div
 			class="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-mint-soft text-mint-foreground"
 		>

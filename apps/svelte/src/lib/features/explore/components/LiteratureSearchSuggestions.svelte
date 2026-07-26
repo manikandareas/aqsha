@@ -76,7 +76,7 @@
 				type="button"
 				onclick={() => onSelect(suggestion.filterValue, { id: 'field', value: suggestion.fieldId })}
 				aria-label={`Cari topik ${suggestion.label}`}
-				class="group relative aspect-3/4 w-full min-w-44 flex-1 snap-start overflow-hidden rounded-lg border-2 border-border bg-card text-left transition-[border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-foreground/45 active:translate-y-0 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+				class="group relative aspect-3/4 w-full min-w-32 flex-1 snap-start overflow-hidden rounded-lg border-2 border-border bg-card text-left transition-[border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-foreground/45 active:translate-y-0 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:min-w-40 lg:min-w-44"
 			>
 				<img
 					src={suggestion.image}

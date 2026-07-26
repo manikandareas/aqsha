@@ -187,8 +187,9 @@
 		return parts.length > 0 ? `${definition.label} (${parts.join('–')})` : definition.label;
 	}
 
+	// 16px on touch widths — anything smaller makes iOS Safari zoom the page when the field focuses.
 	const inputClass =
-		'h-9 w-full min-w-0 max-w-full rounded-md border-2 border-border bg-background px-2.5 text-[13px] text-foreground outline-none focus-visible:border-ring';
+		'h-10 w-full min-w-0 max-w-full rounded-md border-2 border-border bg-background px-2.5 text-base text-foreground outline-none focus-visible:border-ring sm:h-9 sm:text-[13px]';
 	const fieldLabelClass = 'grid min-w-0 gap-1 text-[12px] font-medium text-muted-foreground';
 	const rangeGridClass = 'grid grid-cols-1 gap-2 @min-[20rem]/filter-field:grid-cols-2';
 	const actionsClass =

@@ -64,12 +64,15 @@
 	/>
 
 	<div class="min-w-0">
-		<div class="flex min-w-0 items-start justify-between gap-4">
+		<div class="flex min-w-0 items-start justify-between gap-2 sm:gap-4">
 			<div class="min-w-0 flex-1">
 				<div class="mb-2 flex flex-wrap items-center gap-1.5">
 					{#if source.isOpenAccess}<Badge variant="chip-mint">Open access</Badge>{/if}
+					<!-- Badges never wrap internally, so a long topic must truncate or it overflows the row. -->
 					{#each source.topics.slice(0, 2) as topic (topic)}
-						<Badge variant="outline">{topic}</Badge>
+						<Badge variant="outline" class="max-w-full"
+							><span class="min-w-0 truncate">{topic}</span></Badge
+						>
 					{/each}
 					{#if source.isRetracted}
 						<span
@@ -78,7 +81,7 @@
 						>
 					{/if}
 				</div>
-				<h3 class="text-[15px] leading-5 font-semibold text-foreground sm:text-base">
+				<h3 class="text-[15px] leading-5 font-semibold break-words text-foreground sm:text-base">
 					<a
 						href={source.href}
 						target={source.external ? '_blank' : undefined}

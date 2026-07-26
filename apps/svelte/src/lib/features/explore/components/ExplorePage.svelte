@@ -5,7 +5,6 @@
 	import { page } from '$app/state';
 	import { SvelteURL } from 'svelte/reactivity';
 	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Skeleton } from '@aqsha/ui-svelte/components/skeleton';
 	import { Icon, ChevronRightIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { getAuthState } from '$lib/auth';
@@ -35,6 +34,7 @@
 	import LiteratureFilterDrawer from './LiteratureFilterDrawer.svelte';
 	import LiteratureFilterSheet from './LiteratureFilterSheet.svelte';
 	import LiteratureResults from './LiteratureResults.svelte';
+	import LiteratureResultsSkeleton from './LiteratureResultsSkeleton.svelte';
 
 	/**
 	 * Explore surface — paper-first literature search. A breadcrumb header plus a query bar sit over
@@ -52,7 +52,7 @@
 		filters: LiteratureFilterDefinition[];
 	} = { categories: [], filters: [] };
 
-	const EXPLORE_CONTENT_CLASS = 'mx-auto w-full max-w-6xl px-5 @2xl/explore:px-6';
+	const EXPLORE_CONTENT_CLASS = 'mx-auto w-full max-w-6xl px-4 sm:px-5 @2xl/explore:px-6';
 	const EXPLORE_SECTION_CLASS = 'pt-6 sm:pt-8';
 	const EXPLORE_ERROR_CLASS =
 		'rounded-lg border-2 border-destructive/25 bg-destructive/10 px-4 py-3';
@@ -208,10 +208,10 @@
 			{/snippet}
 		</AppPageHeader>
 
-		<div class={cn(EXPLORE_CONTENT_CLASS, 'py-4')}>
+		<div class={cn(EXPLORE_CONTENT_CLASS, 'py-3 sm:py-4')}>
 			<header>
 				<h1
-					class="font-heading text-balance text-3xl leading-tight font-bold text-foreground sm:text-4xl"
+					class="font-heading text-balance text-[28px] leading-tight font-bold text-foreground sm:text-3xl md:text-4xl"
 				>
 					Cari literatur
 					<span class="explore-search-emoji ml-2 inline-block" aria-hidden="true">🔎</span>
@@ -220,7 +220,7 @@
 		</div>
 
 		<div class={cn(EXPLORE_CONTENT_CLASS, 'py-2 sm:py-3')}>
-			<div class="w-full space-y-8">
+			<div class="w-full space-y-6 sm:space-y-8">
 				<LiteratureSearchBar
 					compact
 					value={draft.q}
@@ -234,12 +234,13 @@
 			</div>
 		</div>
 
-		<div class={cn(EXPLORE_CONTENT_CLASS, 'pb-20 sm:pb-24')}>
+		<!-- Bottom room for the floating batch bar, which wraps to two lines on phone widths. -->
+		<div class={cn(EXPLORE_CONTENT_CLASS, 'pb-28 sm:pb-24')}>
 			{#if literatureMode}
 				<section class={EXPLORE_SECTION_CLASS}>
 					<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
 						{#snippet pending()}
-							{@render literatureResultsSkeleton()}
+							<LiteratureResultsSkeleton />
 						{/snippet}
 						{#snippet failed(error, retry)}
 							<div class={EXPLORE_ERROR_CLASS}>
@@ -302,29 +303,6 @@
 		/>
 	</div>
 </main>
-
-{#snippet literatureResultsSkeleton()}
-	<div class="flex flex-col gap-4">
-		<div class="flex items-center justify-between gap-3">
-			<Skeleton class="h-4 w-24" />
-			<Skeleton class="h-8 w-40" />
-		</div>
-		<div
-			class="divide-y divide-border/80 overflow-hidden rounded-lg border-2 border-border bg-card"
-		>
-			{#each ['a', 'b', 'c', 'd', 'e'] as key (key)}
-				<div class="flex gap-3 px-4 py-5 sm:px-5">
-					<Skeleton class="mt-0.5 size-5 shrink-0 rounded-sm" />
-					<div class="min-w-0 flex-1 space-y-2">
-						<Skeleton class="h-4 w-[70%]" />
-						<Skeleton class="h-3 w-[45%]" />
-						<Skeleton class="h-3 w-full" />
-					</div>
-				</div>
-			{/each}
-		</div>
-	</div>
-{/snippet}
 
 <style>
 	.explore-search-emoji {
