@@ -36,7 +36,7 @@ const softwareApplication = {
   "@type": "SoftwareApplication",
   name: siteName,
   description: defaultDescription,
-  applicationCategory: "EducationalApplication",
+  applicationCategory: "WritingApplication",
   operatingSystem: "Web",
   url: siteUrl,
   offers: {

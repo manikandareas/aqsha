@@ -9,7 +9,7 @@ export const siteUrl = (
 export const siteName = "Aqsha";
 export const orgLegalName = "Aqsha";
 export const defaultDescription =
-  "Asisten AI untuk skripsi, tesis, dan paper. Aqsha mengecek tiap sumber ke paper aslinya — cari jurnal, menulis bareng Astra, semua di satu tempat.";
+  "Aqsha adalah workspace riset dan penulisan untuk proyek karya tulis: dokumen Typst, referensi terhubung, dan Astra yang mengusulkan perubahan untuk kamu review.";
 export const locale = "id_ID";
 export const htmlLang = "id";
 export const contactEmail = "vitoandareas15@gmail.com";
@@ -39,6 +39,6 @@ export const themeColor = "#0a0a0a";
 export const backgroundColor = "#ffffff";
 
 export const ogImage = {
-  title: "Asisten AI buat skripsi, tesis & paper",
-  subtitle: "Sumber yang nggak ngarang.",
+  title: "Aqsha untuk riset dan karya tulis",
+  subtitle: "Proyek, sumber, dan draf yang tetap terhubung.",
 };

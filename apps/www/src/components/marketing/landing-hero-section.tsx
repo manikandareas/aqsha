@@ -243,7 +243,7 @@ export function LandingHeroSection({
     <section
       data-hero
       className="relative isolate w-full overflow-hidden bg-background"
-      aria-label="Perkenalan Astra, asisten riset Aqsha"
+      aria-label="Perkenalan Aqsha untuk riset dan karya tulis"
     >
       <div aria-hidden className="hero-grid pointer-events-none absolute inset-0" />
       <HeroDoodles />
@@ -276,7 +276,7 @@ export function LandingHeroSection({
             animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1 }}
             transition={{ duration: 0.95, ease: EASE_OUT }}
           >
-            Kenalan sama Astra, asisten risetmu
+            Riset dan karya tulis, tetap satu benang.
           </m.h1>
 
           <m.p
@@ -285,8 +285,7 @@ export function LandingHeroSection({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.12, duration: 0.55, ease: EASE_OUT }}
           >
-            Aqsha itu ruang kerja AI tempat kamu baca, nulis, dan sitasi — tiap
-            klaim tetap bisa dilacak balik ke paper aslinya.
+            Mulai dari proyek, lanjutkan di dokumen Typst, dan tautkan referensi saat drafmu bertumbuh bersama Astra.
           </m.p>
 
           <m.div
@@ -304,7 +303,7 @@ export function LandingHeroSection({
             </m.div>
             <m.div variants={buttonItem(reduce)}>
               <Button asChild variant="outline" size="lg">
-                <a href="#bandingin">Bandingin sama yang lain</a>
+                <a href="#cara-kerja">Lihat cara kerjanya</a>
               </Button>
             </m.div>
           </m.div>
