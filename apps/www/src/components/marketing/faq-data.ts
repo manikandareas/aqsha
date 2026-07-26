@@ -2,22 +2,22 @@
 export const faqItems = [
   {
     q: "Apa itu Aqsha?",
-    a: "Aqsha adalah asisten AI untuk skripsi, tesis, dan paper. Kamu bisa cari jurnal, menyimpan sumber, dan menulis bareng Astra dalam satu tempat — semua jalan di browser tanpa instal apa-apa.",
+    a: "Aqsha adalah workspace riset dan penulisan untuk karya tulis akademik. Kamu mengelola proyek, dokumen Typst, referensi, dan bantuan Astra dalam satu alur.",
   },
   {
-    q: "Gimana Aqsha mengecek kutipan?",
-    a: "Sebelum draf dikirim, Aqsha mencocokkan tiap kutipan ke paper aslinya — bukan cuma judulnya. Kutipan yang cocok ditandai hijau (aman), yang meragukan ditandai supaya bisa kamu cek dulu.",
+    q: "Karya tulis apa yang bisa dimulai di Aqsha?",
+    a: "Kamu bisa memulai skripsi, tesis, disertasi, artikel jurnal, proposal, makalah, atau proyek bebas. Setiap jenis memberi kamu titik mulai yang sesuai, lalu tetap bisa kamu kembangkan sendiri.",
   },
   {
-    q: "Apakah Astra menulis seluruh tugas untukku?",
-    a: "Tidak. Astra membantu mencari dan menyusun bahan dari jurnal, tapi arah riset tetap di tanganmu. AI membantu membereskan, bukan mengambil alih — tulisan tetap punyamu.",
+    q: "Apa peran Astra saat aku menulis?",
+    a: "Astra bekerja dalam konteks proyekmu: membantu berpikir, menyusun outline, mencari bahan saat diperlukan, dan mengusulkan edit. Perubahan pada dokumen resmi tetap menunggu review dan keputusanmu.",
   },
   {
-    q: "Apakah Aqsha gratis?",
-    a: "Ada paket gratis untuk mulai tanpa biaya. Paket berbayar (Starter, Plus, Ultra) menambah kredit, Deep Research, dan kapasitas workspace. Tagihan jelas dan bisa dibatalkan kapan saja.",
+    q: "Bagaimana referensi terhubung dengan proyek?",
+    a: "Perpustakaan menyimpan sitasi milik akunmu. Saat sebuah sumber ditautkan ke proyek, ia tetap tersedia untuk draf dan bibliografi proyek itu tanpa membuat salinan metadata baru.",
   },
   {
-    q: "Perlu instal aplikasi?",
-    a: "Tidak. Aqsha berjalan sepenuhnya di browser, jadi bisa dibuka dari perangkat mana saja, kapan saja.",
+    q: "Apakah Aqsha sudah bisa dipakai sekarang?",
+    a: "Aqsha sedang menyiapkan akses awal. Daftar di waitlist untuk mengonfirmasi email dan mendapatkan kabar saat akses dibuka.",
   },
 ] as const;

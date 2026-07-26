@@ -81,7 +81,7 @@ function planFeatureRows(planKey: PublicPlanKey) {
             : "—",
     },
     {
-      label: "Workspace",
+      label: "Proyek",
       value:
         plan.workspaceLimit === UNLIMITED
           ? "∞"

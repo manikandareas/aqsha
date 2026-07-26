@@ -57,18 +57,17 @@ function featureNavItem(key: FeatureKey): NavItem {
   };
 }
 
-/** Urutan = prioritas: fitur dulu, lalu persona, harga, baru konten. */
 export const navTree: NavTopItem[] = [
   {
     type: "menu",
-    label: "Fitur Aqsha",
+    label: "Cara Aqsha bekerja",
     items: FEATURE_NAV_KEYS.map(featureNavItem),
     footerLinks: [
-      { href: "/#cara-kerja", label: "Cara kerja" },
-      { href: "/#bandingin", label: "Bandingin Aqsha" },
+      { href: "/#cara-kerja", label: "Alur penulisan" },
+      { href: "/#bandingin", label: "Kenapa berbasis proyek" },
     ],
   },
-  { type: "link", label: "About", href: "/#cerita-pembuat" },
+  { type: "link", label: "Mengapa Aqsha", href: "/#cerita-pembuat" },
   { type: "link", label: "Harga", href: "/#pricing" },
   { type: "link", label: "Blog", href: "/blog" },
   { type: "link", label: "Changelog", href: "/changelog" },
