@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { citationCrudMethods } from "../src/citations/citation-crud.methods";
 import * as queue from "../src/clients/queue";
 import { LibraryIngestService } from "../src/library/library-ingest.service";
+import { PaperMetadataService } from "../src/paper-metadata.service";
 
 const OWNER = "user_1";
 const ARTIFACT = "art_1";
@@ -111,5 +112,89 @@ describe("state machine", () => {
     patch.mockClear();
     await LibraryIngestService.run({} as never, { ownerUserId: OWNER, citationId: "c2" });
     expect(patch).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolve metadata", () => {
+  test("judul turunan nama file diperlakukan sebagai placeholder", async () => {
+    const patches: Array<Record<string, unknown>> = [];
+    spyOn(CitationRepo, "updateById").mockImplementation(
+      async (_db: unknown, _id: string, patch: Record<string, unknown>) => {
+        patches.push(patch);
+      },
+    );
+    spyOn(PaperMetadataService, "upsert").mockResolvedValue({ ok: true } as never);
+    const citation = {
+      id: "c3",
+      ownerUserId: OWNER,
+      source: "artifact",
+      title: "makalah-metodologi.pdf",
+      doi: "10.1234/uji",
+      venue: null,
+      publishedYear: null,
+      authorsJson: [],
+      cslJson: {},
+    };
+    await LibraryIngestService.resolveMetadata({} as never, {
+      ownerUserId: OWNER,
+      citation: citation as never,
+      artifactId: "art_3",
+      resolve: async () =>
+        ({
+          title: "Metodologi Penelitian Kualitatif",
+          authors: [{ name: "Sari, R." }],
+          metadataSource: "crossref",
+          affiliations: [],
+          pdfCandidates: [],
+        }) as never,
+    });
+    expect(patches[0]?.title).toBe("Metodologi Penelitian Kualitatif");
+  });
+
+  test("judul yang diisi pengguna tidak ditimpa", async () => {
+    const patches: Array<Record<string, unknown>> = [];
+    spyOn(CitationRepo, "updateById").mockImplementation(
+      async (_db: unknown, _id: string, patch: Record<string, unknown>) => {
+        patches.push(patch);
+      },
+    );
+    spyOn(PaperMetadataService, "upsert").mockResolvedValue({ ok: true } as never);
+    await LibraryIngestService.resolveMetadata({} as never, {
+      ownerUserId: OWNER,
+      citation: {
+        id: "c4",
+        ownerUserId: OWNER,
+        source: "manual",
+        title: "Judul pilihan saya",
+        doi: "10.1234/uji",
+        venue: null,
+        publishedYear: null,
+        authorsJson: [],
+        cslJson: {},
+      } as never,
+      artifactId: "art_4",
+      resolve: async () =>
+        ({
+          title: "Judul resmi penerbit",
+          authors: [],
+          metadataSource: "crossref",
+          affiliations: [],
+          pdfCandidates: [],
+        }) as never,
+    });
+    expect(patches[0]?.title).toBeUndefined();
+  });
+
+  test("resolver gagal tidak melempar", async () => {
+    spyOn(PaperMetadataService, "upsert").mockResolvedValue({ ok: true } as never);
+    const result = await LibraryIngestService.resolveMetadata({} as never, {
+      ownerUserId: OWNER,
+      citation: { id: "c5", ownerUserId: OWNER, doi: "10.1/x", cslJson: {} } as never,
+      artifactId: "art_5",
+      resolve: async () => {
+        throw new Error("provider mati");
+      },
+    });
+    expect(result).toBeNull();
   });
 });

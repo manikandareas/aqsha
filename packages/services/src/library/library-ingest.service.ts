@@ -1,8 +1,25 @@
 import { ArtifactRepo, type Citation, CitationRepo, type Db } from "@aqsha/db";
 import { artifactFamilyForType } from "../artifacts/model";
 import { ARTIFACT_QUEUES, enqueue, removeJob } from "../clients/queue";
+import { PaperMetadataService } from "../paper-metadata.service";
+import { type ClassifiedUrl, classifyPaperText } from "../papers/identifiers";
+import type { ResolvedPaper } from "../papers/model";
+import { resolvePaper } from "../papers/resolve";
 
 export type LibraryIngestJob = { ownerUserId: string; citationId: string };
+
+/**
+ * Judul unggahan lahir dari nama file, dan itu placeholder — bukan pilihan pengguna.
+ * Tanpa pengecualian ini paper selamanya bernama `skripsi-final-v2.pdf`.
+ */
+function titleIsPlaceholder(citation: Citation): boolean {
+  return citation.source === "artifact" && /\.(pdf|docx?)$/i.test(citation.title.trim());
+}
+
+function identifierFor(citation: Citation): ClassifiedUrl | null {
+  const probe = [citation.doi, citation.url, citation.title].filter(Boolean).join("\n");
+  return classifyPaperText(probe);
+}
 
 /** Teks fallback saat item belum punya PDF: cukup untuk satu chunk yang bermakna. */
 function referenceText(citation: Citation): string {
@@ -88,6 +105,71 @@ export const LibraryIngestService = {
   },
 
   /**
+   * Best-effort: identifier tak ditemukan atau provider mati BUKAN kegagalan item.
+   * Patch hanya field yang kosong supaya entri manual pengguna tak pernah tertimpa.
+   * `resolve` dapat disuntik untuk pengujian.
+   */
+  async resolveMetadata(
+    db: Db,
+    input: {
+      ownerUserId: string;
+      citation: Citation;
+      artifactId: string;
+      resolve?: (classified: ClassifiedUrl) => Promise<ResolvedPaper | null>;
+    },
+  ): Promise<ResolvedPaper | null> {
+    const classified = identifierFor(input.citation);
+    if (!classified) return null;
+    const run = input.resolve ?? ((c: ClassifiedUrl) => resolvePaper({ classified: c }));
+    let resolved: ResolvedPaper | null = null;
+    try {
+      resolved = await run(classified);
+    } catch {
+      return null;
+    }
+    if (!resolved) return null;
+
+    const patch: Record<string, unknown> = {};
+    if (resolved.title && (!input.citation.title || titleIsPlaceholder(input.citation))) {
+      patch.title = resolved.title;
+    }
+    if (resolved.doi && !input.citation.doi) patch.doi = resolved.doi;
+    if (resolved.journal && !input.citation.venue) patch.venue = resolved.journal;
+    if (resolved.publisher && !input.citation.publisher) patch.publisher = resolved.publisher;
+    if (resolved.publishedYear && !input.citation.publishedYear) {
+      patch.publishedYear = resolved.publishedYear;
+    }
+    if (resolved.authors.length > 0 && (input.citation.authorsJson ?? []).length === 0) {
+      patch.authorsJson = resolved.authors.map((a) => ({ literal: a.name }));
+    }
+    if (Object.keys(patch).length > 0) {
+      patch.metadataStatus = "verified";
+      patch.updatedAt = Date.now();
+      await CitationRepo.updateById(db, input.citation.id, patch);
+    }
+
+    await PaperMetadataService.upsert(db, {
+      ownerUserId: input.ownerUserId,
+      artifactId: input.artifactId,
+      workspaceId: null,
+      metadataSource: resolved.metadataSource,
+      ...(resolved.title ? { title: resolved.title } : {}),
+      ...(resolved.abstract ? { abstract: resolved.abstract } : {}),
+      ...(resolved.doi ? { doi: resolved.doi } : {}),
+      authors: resolved.authors,
+      affiliations: resolved.affiliations,
+      ...(resolved.journal ? { journal: resolved.journal } : {}),
+      ...(resolved.publisher ? { publisher: resolved.publisher } : {}),
+      ...(resolved.publishedYear ? { publishedYear: resolved.publishedYear } : {}),
+      ...(resolved.arxivId ? { arxivId: resolved.arxivId } : {}),
+      ...(resolved.landingPageUrl ? { sourceUrl: resolved.landingPageUrl } : {}),
+      ...(resolved.oaStatus ? { oaStatus: resolved.oaStatus } : {}),
+      confidence: 0.95,
+    });
+    return resolved;
+  },
+
+  /**
    * State machine ingest. Idempoten: setiap langkah aman diulang, dan retry BullMQ
    * membaca ulang state dari DB alih-alih mempercayai payload job yang bisa basi.
    */
@@ -102,7 +184,15 @@ export const LibraryIngestService = {
       updatedAt: Date.now(),
     });
     try {
-      await this.ensureArtifact(db, { ownerUserId: job.ownerUserId, citation });
+      const artifactId = await this.ensureArtifact(db, {
+        ownerUserId: job.ownerUserId,
+        citation,
+      });
+      await this.resolveMetadata(db, {
+        ownerUserId: job.ownerUserId,
+        citation,
+        artifactId,
+      });
       await CitationRepo.updateById(db, citation.id, {
         ingestStatus: "ready",
         ingestedAt: Date.now(),
