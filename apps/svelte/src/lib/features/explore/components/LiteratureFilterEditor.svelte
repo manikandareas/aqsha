@@ -5,7 +5,7 @@
 	import * as Select from '@aqsha/ui-svelte/components/select';
 	import { Switch } from '@aqsha/ui-svelte/components/switch';
 	import { cn } from '@aqsha/ui-svelte/utils';
-	import { ChevronDownIcon, Icon, XIcon } from '$lib/icons';
+	import { ChevronRightIcon, Icon, XIcon } from '$lib/icons';
 	import {
 		reconcileFilterAccordionState,
 		type FilterAccordionState
@@ -254,14 +254,14 @@
 			<div class="flex flex-wrap items-center gap-1.5">
 				{#each activeClauses as { clause, definition } (clause.id)}
 					<span
-						class="inline-flex max-w-full items-center gap-1.5 rounded-full border-2 border-border bg-secondary/40 py-1 pr-1.5 pl-3 text-label font-medium text-foreground"
+						class="inline-flex max-w-full items-center gap-1.5 rounded-full border-2 border-border bg-background py-1 pr-1.5 pl-3 text-label font-medium text-foreground"
 					>
 						<span class="min-w-0 truncate">{chipLabel(clause, definition)}</span>
 						<button
 							type="button"
 							onclick={() => removeClause(clause.id)}
 							aria-label={`Hapus filter ${definition.label}`}
-							class="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+							class="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 						>
 							<Icon icon={XIcon} class="size-3" />
 						</button>
@@ -271,7 +271,7 @@
 		</section>
 	{/if}
 
-	<div class="min-h-0 min-w-0 flex-1 space-y-1">
+	<div class="min-h-0 min-w-0 flex-1 space-y-0.5">
 		{#each catalog.categories as category (category.id)}
 			{@const toggles = togglesForCategory(category.id)}
 			{@const fields = fieldsForCategory(category.id)}
@@ -280,29 +280,31 @@
 				open={accordionState.open[category.id] ?? false}
 				onOpenChange={(open) => setCategoryOpen(category.id, open)}
 			>
+				<!-- Leading chevron that swings to 90°, like the nav rail's collapsible sections. -->
 				<Collapsible.Trigger
-					class="group flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-control font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-muted"
+					class="group flex min-h-7 w-full min-w-0 items-center gap-1 rounded-sm px-1 py-1 text-left transition-[background-color] duration-150 ease-out hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 				>
-					<span class="min-w-0 truncate">{category.label}</span>
-					<span class="flex shrink-0 items-center gap-2">
-						{#if count > 0}
-							<span class="rounded-full bg-mint-soft px-1.5 py-0.5 text-micro text-mint-foreground"
-								>{count}</span
-							>
-						{/if}
-						<Icon
-							icon={ChevronDownIcon}
-							class="size-4 transition-transform duration-150 group-data-[state=open]:rotate-180 motion-reduce:transition-none"
-						/>
-					</span>
+					<Icon
+						icon={ChevronRightIcon}
+						class="size-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-out group-data-[state=open]:rotate-90 motion-reduce:transition-none"
+					/>
+					<span class="min-w-0 flex-1 truncate text-label font-medium text-muted-foreground"
+						>{category.label}</span
+					>
+					{#if count > 0}
+						<span
+							class="shrink-0 rounded-full bg-mint-soft px-1.5 py-0.5 text-micro text-mint-foreground"
+							>{count}</span
+						>
+					{/if}
 				</Collapsible.Trigger>
 				<Collapsible.Content>
-					<div class="min-w-0 space-y-5 px-1 pt-3 pb-5 sm:px-3">
+					<div class="min-w-0 space-y-5 pt-2 pr-1 pb-5 pl-4">
 						{#if toggles.length === 0 && fields.length === 0}
 							<p class={hintClass}>Belum ada filter pada kategori ini.</p>
 						{/if}
 						{#if toggles.length > 0}
-							<fieldset class="min-w-0 rounded-md border-2 border-border">
+							<fieldset class="min-w-0 rounded-md border-2 border-border bg-background">
 								<legend class="sr-only">Opsi {category.label}</legend>
 								{#each toggles as filter (filter.id)}
 									<label
@@ -330,7 +332,7 @@
 	</div>
 
 	<div
-		class="sticky bottom-0 z-10 mt-auto flex shrink-0 flex-col gap-2 border-t-2 border-border bg-background pt-4 pb-4 @min-[20rem]/filter-field:flex-row @min-[20rem]/filter-field:items-center @min-[20rem]/filter-field:justify-between"
+		class="sticky bottom-0 z-10 mt-auto flex shrink-0 flex-col gap-2 border-t border-sidebar-border bg-sidebar pt-3 pb-3 @min-[20rem]/filter-field:flex-row @min-[20rem]/filter-field:items-center @min-[20rem]/filter-field:justify-between"
 	>
 		<Button
 			type="button"

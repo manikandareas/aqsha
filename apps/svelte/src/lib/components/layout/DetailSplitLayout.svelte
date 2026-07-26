@@ -4,7 +4,6 @@
 	import { PanelInline } from '$lib/hooks/panel-inline.svelte';
 	import { detailSplitMainSurfaceClass, PANEL_TRANSITION_MS } from './panel-surface';
 	import { panelExpandContext } from './panel-expand.svelte';
-	import { cn } from '@aqsha/ui-svelte/utils';
 
 	/**
 	 * Two-column main + side-panel split. Reuses `Sidebar.Provider` as the panel's open/close state
@@ -17,12 +16,15 @@
 		main,
 		side,
 		sideOpen,
-		onSideOpenChange
+		onSideOpenChange,
+		sideWidth = 'clamp(26rem,32vw,32rem)'
 	}: {
 		main: Snippet;
 		side: Snippet;
 		sideOpen: boolean;
 		onSideOpenChange: (open: boolean) => void;
+		/** Docked width of the side track. Any CSS length; the closed/expanded tracks are fixed. */
+		sideWidth?: string;
 	} = $props();
 
 	const panelInline = new PanelInline();
@@ -31,6 +33,8 @@
 
 	// Expanded = a 30:70 split, sticky across open/close within the page mount.
 	let expanded = $state(false);
+
+	const sideTrack = $derived(inset ? (expanded ? '70%' : sideWidth) : '0rem');
 
 	panelExpandContext.set({
 		get canExpand() {
@@ -52,15 +56,8 @@
 	class="flex min-h-0 min-h-svh flex-1 flex-col overflow-hidden bg-background"
 >
 	<div
-		style="transition-duration: {PANEL_TRANSITION_MS}ms"
-		class={cn(
-			'grid min-h-0 w-full flex-1 transition-[grid-template-columns] ease-out',
-			inset
-				? expanded
-					? 'grid-cols-[minmax(0,1fr)_70%]'
-					: 'grid-cols-[minmax(0,1fr)_clamp(26rem,32vw,32rem)]'
-				: 'grid-cols-[minmax(0,1fr)_0rem]'
-		)}
+		style="transition-duration: {PANEL_TRANSITION_MS}ms; grid-template-columns: minmax(0,1fr) {sideTrack}"
+		class="grid min-h-0 w-full flex-1 transition-[grid-template-columns] ease-out"
 	>
 		<Sidebar.Inset class={detailSplitMainSurfaceClass}>
 			{@render main()}

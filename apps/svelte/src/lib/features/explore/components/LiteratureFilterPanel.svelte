@@ -1,14 +1,8 @@
 <script lang="ts">
 	import * as Drawer from '@aqsha/ui-svelte/components/drawer';
-	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { Icon, XIcon } from '$lib/icons';
-	import SidePanelFrame from '$lib/components/layout/SidePanelFrame.svelte';
-	import {
-		PANEL_TRANSITION_MS,
-		panelHeaderBarClass,
-		sidePanelColumnClass
-	} from '$lib/components/layout/panel-surface';
+	import { PANEL_TRANSITION_MS } from '$lib/components/layout/panel-surface';
 	import { PanelInline } from '$lib/hooks/panel-inline.svelte';
 	import LiteratureFilterEditor from './LiteratureFilterEditor.svelte';
 	import type {
@@ -23,6 +17,10 @@
 	 * right column — results reflow beside it instead of being covered; below it, it overlays as a
 	 * bottom drawer. Both modes share one editor. The draft lifecycle stays with the page: edits are
 	 * staged through `onChange` and only reach the URL on Apply.
+	 *
+	 * Dressed as the mirror of the nav rail rather than as a floating detail card: the same
+	 * `bg-sidebar` surface separated from the results by colour alone, the same 12px gutter, and the
+	 * same compact icon buttons.
 	 */
 	let {
 		open,
@@ -68,36 +66,33 @@
 	});
 </script>
 
-{#snippet header()}
-	<div class={panelHeaderBarClass}>
-		<div class="flex min-w-0 items-center gap-2">
-			<h2 class="truncate text-sm font-semibold text-foreground">Filter penelitian</h2>
-			{#if activeCount > 0}
-				<span
-					class="shrink-0 rounded-full bg-mint-soft px-1.5 py-0.5 text-micro text-mint-foreground"
-					aria-label={`${activeCount} filter aktif`}
-				>
-					{activeCount}
-				</span>
-			{/if}
+{#snippet panelBody()}
+	<div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-sidebar">
+		<div class="flex shrink-0 items-center justify-between gap-2 px-3 pt-3.5 pb-2">
+			<div class="flex min-w-0 items-center gap-1.5">
+				<h2 class="truncate text-label font-medium text-muted-foreground">Filter penelitian</h2>
+				{#if activeCount > 0}
+					<span
+						class="shrink-0 rounded-full bg-mint-soft px-1.5 py-0.5 text-micro text-mint-foreground"
+						aria-label={`${activeCount} filter aktif`}
+					>
+						{activeCount}
+					</span>
+				{/if}
+			</div>
+			<button
+				type="button"
+				onclick={onClose}
+				aria-label="Tutup filter"
+				class="flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-[background-color,color] duration-150 ease-out hover:bg-primary/10 hover:text-primary"
+			>
+				<Icon icon={XIcon} class="size-3.5" />
+			</button>
 		</div>
-		<Button
-			type="button"
-			variant="ghost"
-			size="icon-sm"
-			class="-mr-1.5 text-muted-foreground hover:text-foreground"
-			aria-label="Tutup filter"
-			onclick={onClose}
-		>
-			<Icon icon={XIcon} class="size-4" />
-		</Button>
-	</div>
-{/snippet}
 
-{#snippet body()}
-	<!-- Matches the header bar's inset so the drawer (no card) keeps one left edge top to bottom. -->
-	<div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pt-4">
-		<LiteratureFilterEditor {catalog} {draft} {onChange} {onApply} {onReset} />
+		<div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pt-1">
+			<LiteratureFilterEditor {catalog} {draft} {onChange} {onApply} {onReset} />
+		</div>
 	</div>
 {/snippet}
 
@@ -106,18 +101,21 @@
 		aria-label="Filter penelitian"
 		inert={!open}
 		aria-hidden={!open}
-		class={cn(sidePanelColumnClass, 'transition-opacity ease-out', !open && 'opacity-0')}
+		class={cn(
+			'@container flex min-h-0 w-auto min-w-0 flex-col overflow-hidden bg-sidebar transition-opacity ease-out',
+			!open && 'opacity-0'
+		)}
 		style="transition-duration: {PANEL_TRANSITION_MS}ms"
 	>
 		{#if present}
-			<SidePanelFrame {header} children={body} />
+			{@render panelBody()}
 		{/if}
 	</aside>
 {:else}
 	<Drawer.Root {open} onOpenChange={(next) => !next && onClose()} direction="bottom">
-		<Drawer.Content aria-describedby={undefined} class="flex h-[88svh] flex-col p-0">
+		<Drawer.Content aria-describedby={undefined} class="flex h-[88svh] flex-col bg-sidebar p-0">
 			<Drawer.Title class="sr-only">Filter penelitian</Drawer.Title>
-			<SidePanelFrame {header} children={body} />
+			{@render panelBody()}
 		</Drawer.Content>
 	</Drawer.Root>
 {/if}

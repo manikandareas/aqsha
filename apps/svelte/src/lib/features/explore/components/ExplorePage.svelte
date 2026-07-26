@@ -186,8 +186,13 @@
 	body scrolls instead of the results column.
 -->
 <div class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
+	<!--
+		Narrower than the default detail track: this column holds controls, not reading content, so
+		it sits closer to the nav rail's width and leaves the result list its full measure.
+	-->
 	<DetailSplitLayout
 		sideOpen={filterPanelOpen}
+		sideWidth="clamp(20rem,24vw,24rem)"
 		onSideOpenChange={(open) => {
 			if (!open) closeFilterPanel();
 		}}
