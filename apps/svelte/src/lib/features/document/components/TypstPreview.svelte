@@ -392,8 +392,10 @@
 		<div
 			class="m-3 flex items-center justify-between gap-3 rounded-lg border-2 border-border bg-card px-3 py-2"
 		>
-			<span class="text-label">Astra mengusulkan {proposalHunkCount} bagian.</span>
-			<Button type="button" size="sm" onclick={() => onReviewProposal?.()}>Tinjau usulan</Button>
+			<span class="text-label">
+				Astra mengusulkan suntingan · {proposalHunkCount} bagian tersisa.
+			</span>
+			<Button type="button" size="sm" onclick={() => onReviewProposal?.()}>Buka editor</Button>
 		</div>
 	{/if}
 	<div
