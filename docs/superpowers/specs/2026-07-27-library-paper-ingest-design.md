@@ -177,7 +177,7 @@ Ikon status metadata di kanan bawah tetap. Penanda cakupan teks (teks penuh / ab
 
 `packages/db` — kueri scope dengan empat kasus yang membedakan benar-salahnya disjungsi: chunk milik proyek, chunk paper tertaut, chunk paper **tidak** tertaut, dan chunk sitasi terhapus. Ditambah uji kapasitas: artifact `source = 'reference'` tidak menambah hitungan.
 
-`apps/svelte` — context menu dan status kartu sebagai `.svelte.test.ts` di project browser; rune `$state` tidak ter-compile di runner node. Spec kontrak rute yang ada (`library-page-contract.spec.ts`, `url-state-boundaries.spec.ts`) diperluas untuk rute artifacts kanonik beserta redirect-nya.
+`apps/svelte` — vitest di app ini hanya punya satu project bernuansa `node` (`vite.config.ts`), jadi logika diuji sebagai modul murni, bukan komponen ter-render: model aksi context menu, pemetaan `ingest_status` → tampilan kartu, dan parsing DOI dari teks clipboard masing-masing jadi `*.spec.ts`. Kontrak sumber mengikuti pola `library-page-contract.spec.ts` dan `library-actions.spec.ts` yang membaca file `.svelte` lalu menguji penanda kuncinya; keduanya diperluas untuk rute artifacts kanonik beserta redirect-nya. Perilaku klik kanan sungguhan diuji lewat Playwright.
 
 ## Di luar ruang lingkup
 
