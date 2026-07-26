@@ -80,10 +80,13 @@ export async function resolveSemanticAreaRange(options: {
 			}
 		}
 		if (hits.length === 0) return null;
-		if (new Set(hits.map((hit) => hit.page)).size > 1) {
-			return { ok: false, reason: 'different-page' };
-		}
-		const sorted = hits.toSorted((a, b) => a.index - b.index);
+		// Satu anotasi hanya hidup di satu halaman (kolom `page` + rects ternormalisasi terhadapnya),
+		// jadi drag lintas halaman dijepit ke halaman tempat gestur dimulai alih-alih dibatalkan —
+		// membatalkan membuat seleksi mendadak kosong begitu auto-scroll melewati batas halaman.
+		const anchorPage = anchorPageNumber(pages, start, hits[0]!.page);
+		const pageHits = hits.filter((hit) => hit.page === anchorPage);
+		if (pageHits.length === 0) return null;
+		const sorted = pageHits.toSorted((a, b) => a.index - b.index);
 		const first = sorted[0]!;
 		const last = sorted[sorted.length - 1]!;
 		const resolveRun = (hit: (typeof hits)[number]) => {
@@ -118,10 +121,10 @@ export async function resolveSemanticAreaRange(options: {
 		return rect ? intersectsClientRect(selectionRect, rect) : false;
 	});
 	if (hits.length === 0) return null;
-	if (new Set(hits.map((block) => block.page)).size > 1) {
-		return { ok: false, reason: 'different-page' };
-	}
-	const sorted = hits.toSorted((a, b) => {
+	const anchorPage = anchorPageNumber(pages, start, hits[0]!.page);
+	const pageHits = hits.filter((block) => block.page === anchorPage);
+	if (pageHits.length === 0) return null;
+	const sorted = pageHits.toSorted((a, b) => {
 		if (a.selection.renderer !== 'semantic-layer') return 1;
 		if (b.selection.renderer !== 'semantic-layer') return -1;
 		return a.selection.start - b.selection.start;
@@ -133,6 +136,27 @@ export async function resolveSemanticAreaRange(options: {
 		svgHost,
 		source
 	});
+}
+
+/**
+ * Nomor halaman tempat gestur dimulai (1-based). Titik awal bisa jatuh di sela antar halaman —
+ * mis. saat drag dimulai persis di jarak antar lembar — jadi halaman terdekat secara vertikal
+ * dipakai, dengan `fallback` bila belum ada halaman ter-render.
+ */
+export function anchorPageNumber(pages: Element[], start: ClientPoint, fallback: number): number {
+	let nearest = fallback;
+	let nearestDistance = Number.POSITIVE_INFINITY;
+	for (let i = 0; i < pages.length; i += 1) {
+		const box = pages[i]!.getBoundingClientRect();
+		if (start.clientY >= box.top && start.clientY <= box.bottom) return i + 1;
+		const distance =
+			start.clientY < box.top ? box.top - start.clientY : start.clientY - box.bottom;
+		if (distance < nearestDistance) {
+			nearestDistance = distance;
+			nearest = i + 1;
+		}
+	}
+	return nearest;
 }
 
 function normalizedRunRects(page: Element, start: number, end: number): AnnotationRect[] {
