@@ -432,17 +432,21 @@ export const ArtifactService = {
   },
 
   /**
-   * Step 1 upload: presign PUT (workspace-scoped, P3). Thread-attachment headless
-   * upload menyusul P6. Assert owner + active dulu (tanpa cek tipe/size — itu di finalize).
+   * Step 1 upload: presign PUT (P3). Thread-attachment headless upload menyusul P6.
+   * Assert owner + active dulu (tanpa cek tipe/size — itu di finalize). Target presign
+   * sendiri sudah owner-scoped, jadi unggahan perpustakaan (tanpa proyek tujuan) sah:
+   * assert workspace hanyalah gerbang kepemilikan saat penggugah menyebut tujuannya.
    */
   async generateUploadUrl(
     db: DbOrTx,
     ownerUserId: string,
-    workspaceId: string,
+    workspaceId?: string | null,
   ): Promise<{ uploadUrl: string; key: string }> {
-    await WorkspaceService.assertWorkspaceOwner(db, ownerUserId, workspaceId, {
-      requireActive: true,
-    });
+    if (workspaceId) {
+      await WorkspaceService.assertWorkspaceOwner(db, ownerUserId, workspaceId, {
+        requireActive: true,
+      });
+    }
     return StorageService.generateUploadTarget(ownerUserId);
   },
 
@@ -457,7 +461,8 @@ export const ArtifactService = {
     input: {
       ownerUserId: string;
       ownerEmail?: string | null;
-      workspaceId: string;
+      /** Null = paper perpustakaan level akun, tidak dititipkan ke proyek mana pun. */
+      workspaceId: string | null;
       folderId?: string;
       key: string;
       fileName: string;
@@ -476,12 +481,16 @@ export const ArtifactService = {
     const now = Date.now();
 
     await db.transaction(async (tx) => {
-      await WorkspaceService.assertWorkspaceOwner(tx, input.ownerUserId, input.workspaceId, {
-        requireActive: true,
-      });
+      // Paper perpustakaan hidup di level akun; assert workspace hanya relevan saat
+      // artifact memang dititipkan ke sebuah proyek.
+      if (input.workspaceId) {
+        await WorkspaceService.assertWorkspaceOwner(tx, input.ownerUserId, input.workspaceId, {
+          requireActive: true,
+        });
+      }
       if (input.folderId) {
         await FolderService.assertFolderOwner(tx, input.ownerUserId, input.folderId, {
-          workspaceId: input.workspaceId,
+          workspaceId: input.workspaceId ?? undefined,
         });
       }
       await assertLibraryCapacity(tx, input.ownerUserId, input.ownerEmail);
@@ -494,6 +503,7 @@ export const ArtifactService = {
         artifactType,
         artifactFamily: artifactFamilyForType(artifactType),
         source: "upload",
+
         title,
         language: defaultLanguageForArtifactType(artifactType) ?? null,
         mimeType: input.mimeType,
@@ -541,7 +551,9 @@ export const ArtifactService = {
     });
 
     // PDF → metadata enrichment (resolver) di worker (Slice 7), hanya bila ada teks.
-    if (artifactType === "pdf" && enrichText && enrichText.trim()) {
+    // Unggahan perpustakaan (tanpa proyek) tidak lewat sini: resolver-nya dijalankan
+    // pipeline ingest perpustakaan, yang juga mengurus PDF open access dan embedding.
+    if (artifactType === "pdf" && input.workspaceId && enrichText && enrichText.trim()) {
       await enqueue(ARTIFACT_QUEUES.paperEnrichment, {
         ownerUserId: input.ownerUserId,
         artifactId,
@@ -1106,7 +1118,8 @@ export const ArtifactService = {
     input: {
       ownerUserId: string;
       artifactId: string;
-      workspaceId: string;
+      /** Null = paper perpustakaan level akun, tidak dititipkan ke proyek mana pun. */
+      workspaceId: string | null;
       bytes: Uint8Array;
       byteSize: number;
       fileName: string;

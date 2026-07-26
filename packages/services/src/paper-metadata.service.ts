@@ -25,7 +25,8 @@ const METADATA_SOURCE_RANK: Record<string, number> = {
 export type PaperMetadataInput = {
   ownerUserId: string;
   artifactId: string;
-  workspaceId: string;
+  /** Null = paper perpustakaan level akun, tidak dititipkan ke proyek mana pun. */
+  workspaceId: string | null;
   metadataSource: string;
   title?: string;
   abstract?: string;

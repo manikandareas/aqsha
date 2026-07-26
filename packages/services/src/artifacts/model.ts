@@ -53,7 +53,7 @@ export const artifactFamilies = [
 ] as const;
 export type ArtifactFamily = (typeof artifactFamilies)[number];
 
-export const artifactSources = ["manual", "upload", "agent", "url"] as const;
+export const artifactSources = ["manual", "upload", "agent", "url", "reference"] as const;
 export type ArtifactSource = (typeof artifactSources)[number];
 
 export const indexingStatuses = ["not_indexed", "pending", "ready", "failed"] as const;

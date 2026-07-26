@@ -8,6 +8,7 @@ import type {
 } from "@aqsha/db";
 import {
   ArtifactPaperMetadataRepo,
+  ArtifactRepo,
   CitationRepo,
   decodeKeysetCursor,
   DocumentCitationUsageRepo,
@@ -247,8 +248,10 @@ export const citationCrudMethods = {
 
   /**
    * Buat citation dari artifact paper (artifact bridge). Baca `artifact_paper_metadata`
-   * (owner-scoped + membawa `workspace_id` artifact) — tanpa memindahkan file; hasil
-   * citation masuk perpustakaan akun. Idempotent: artifact yang sudah tertaut /
+   * bila sudah ada — tanpa memindahkan file; hasil citation masuk perpustakaan akun.
+   * Tanpa `workspaceId` = unggahan perpustakaan level akun, dan tanpa metadata paper
+   * judul artifact dipakai sebagai placeholder sampai resolver melengkapinya.
+   * Idempotent: artifact yang sudah tertaut /
    * duplikat canonical key tidak menggandakan; row duplikat tanpa tautan artifact
    * "diadopsi" (di-set `artifact_id`).
    */
@@ -256,35 +259,43 @@ export const citationCrudMethods = {
     db: DbOrTx,
     input: {
       ownerUserId: string;
-      workspaceId: string;
+      workspaceId?: string | null;
       artifactId: string;
       tags?: string[];
     },
   ): Promise<CreateFromArtifactResult> {
-    await WorkspaceService.assertWorkspaceOwner(
-      db,
-      input.ownerUserId,
-      input.workspaceId,
-      {
-        requireActive: true,
-      },
-    );
+    if (input.workspaceId) {
+      await WorkspaceService.assertWorkspaceOwner(
+        db,
+        input.ownerUserId,
+        input.workspaceId,
+        {
+          requireActive: true,
+        },
+      );
+    }
     const meta = await ArtifactPaperMetadataRepo.findByArtifact(
       db,
       input.ownerUserId,
       input.artifactId,
     );
-    if (!meta || meta.workspaceId !== input.workspaceId) {
+    // Metadata paper belum tentu ada: unggahan baru masuk sebelum resolver jalan.
+    // Judul artifact menjadi placeholder, dan pipeline ingest yang memperbaikinya.
+    const scopedMeta =
+      meta && (!input.workspaceId || meta.workspaceId === input.workspaceId) ? meta : null;
+    const artifact = await ArtifactRepo.findById(db, input.artifactId);
+    if (!artifact || artifact.ownerUserId !== input.ownerUserId) {
       throwAppError({
-        message: "Artifact ini belum punya metadata paper di workspace ini",
-        code: "citation_artifact_no_metadata",
+        message: "Artifact tidak ditemukan",
+        code: "artifact_not_found",
         status: 404,
         severity: "warning",
       });
     }
-    if (!meta.title?.trim()) {
+    const title = scopedMeta?.title?.trim() || artifact.title.trim();
+    if (!title) {
       throwAppError({
-        message: "Metadata paper belum punya judul untuk disitasi",
+        message: "Artifact ini belum punya judul untuk disitasi",
         code: "citation_artifact_no_metadata",
         status: 404,
         severity: "warning",
@@ -303,7 +314,9 @@ export const citationCrudMethods = {
         linkedExisting: true,
       };
     }
-    const csl = buildCslFromPaperMetadata(meta);
+    // Metadata paper mungkin belum ada saat unggahan baru masuk; CSL minimal dari
+    // judul artifact cukup untuk membuat item, dan pipeline ingest melengkapinya.
+    const csl = scopedMeta ? buildCslFromPaperMetadata(scopedMeta) : { type: "document", title };
     const row = rowFromCsl({
       ownerUserId: input.ownerUserId,
       source: "artifact",
