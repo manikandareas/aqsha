@@ -1,4 +1,10 @@
-import { ArtifactRepo, type Citation, CitationRepo, type Db } from "@aqsha/db";
+import {
+  ArtifactRepo,
+  type Citation,
+  CitationRepo,
+  type CitationTextCoverage,
+  type Db,
+} from "@aqsha/db";
 import { ArtifactService } from "../artifact.service";
 import { artifactFamilyForType } from "../artifacts/model";
 import { ARTIFACT_QUEUES, enqueue, removeJob } from "../clients/queue";
@@ -8,6 +14,7 @@ import { type ClassifiedUrl, classifyPaperText } from "../papers/identifiers";
 import type { ResolvedPaper } from "../papers/model";
 import { resolvePaper } from "../papers/resolve";
 import { getRateLimiter } from "../quota/rate-limits";
+import { RagService } from "../rag.service";
 
 export type LibraryIngestJob = { ownerUserId: string; citationId: string };
 
@@ -240,16 +247,35 @@ export const LibraryIngestService = {
         citation,
         artifactId,
       });
-      if (resolved) {
-        await this.fetchOpenAccessPdf(db, {
+      const upgraded = resolved
+        ? await this.fetchOpenAccessPdf(db, {
+            ownerUserId: job.ownerUserId,
+            citation,
+            artifactId,
+            resolved,
+          })
+        : false;
+
+      // `ingestResolvedPdf` sudah mengekstrak dan meng-index teks penuh; jalur tanpa
+      // PDF meng-embed satu chunk dari metadata supaya item tetap dapat ditemukan.
+      let coverage: CitationTextCoverage = "full_text";
+      if (!upgraded) {
+        // Baca ulang: langkah resolve mungkin baru saja mengisi judul, penulis, dan
+        // venue — teks yang di-embed harus versi terbarunya, bukan snapshot awal.
+        const fresh = (await CitationRepo.findById(db, job.ownerUserId, citation.id)) ?? citation;
+        const text = referenceText(fresh);
+        const entry = await RagService.index(db, {
           ownerUserId: job.ownerUserId,
-          citation,
           artifactId,
-          resolved,
+          workspaceId: null,
+          text,
         });
+        coverage = entry ? "abstract" : "none";
       }
+
       await CitationRepo.updateById(db, citation.id, {
         ingestStatus: "ready",
+        textCoverage: coverage,
         ingestedAt: Date.now(),
         ingestError: null,
         updatedAt: Date.now(),

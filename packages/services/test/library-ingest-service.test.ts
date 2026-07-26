@@ -10,6 +10,7 @@ import { LibraryIngestService } from "../src/library/library-ingest.service";
 import { ArtifactService } from "../src/artifact.service";
 import { PaperMetadataService } from "../src/paper-metadata.service";
 import * as rateLimits from "../src/quota/rate-limits";
+import { RagService } from "../src/rag.service";
 
 const OWNER = "user_1";
 const ARTIFACT = "art_1";
@@ -262,5 +263,64 @@ describe("ambil PDF open access", () => {
     });
     expect(upgraded).toBe(true);
     expect(ingest).toHaveBeenCalled();
+  });
+});
+
+describe("embed dan cakupan", () => {
+  test("tanpa PDF, cakupan abstrak dari judul dan penulis", async () => {
+    const patches: Array<Record<string, unknown>> = [];
+    spyOn(CitationRepo, "findById").mockResolvedValue({
+      id: "c9",
+      ownerUserId: OWNER,
+      artifactId: "art_9",
+      title: "Judul referensi",
+      venue: "Jurnal",
+      publishedYear: 2024,
+      authorsJson: [{ family: "Sari", given: "R." }],
+      cslJson: { abstract: "Ringkasan penelitian." },
+      doi: null,
+      url: null,
+      deletedAt: null,
+    } as never);
+    spyOn(CitationRepo, "updateById").mockImplementation(
+      async (_db: unknown, _id: string, patch: Record<string, unknown>) => {
+        patches.push(patch);
+      },
+    );
+    const indexed: string[] = [];
+    spyOn(RagService, "index").mockImplementation(async (_db: unknown, args: { text: string }) => {
+      indexed.push(args.text);
+      return "artifact:art_9";
+    });
+    await LibraryIngestService.run({} as never, { ownerUserId: OWNER, citationId: "c9" });
+    expect(indexed[0]).toContain("Ringkasan penelitian.");
+    const final = patches.at(-1) as { ingestStatus: string; textCoverage: string };
+    expect(final.ingestStatus).toBe("ready");
+    expect(final.textCoverage).toBe("abstract");
+  });
+
+  test("embedding gagal menandai item failed lalu melempar", async () => {
+    const patches: Array<Record<string, unknown>> = [];
+    spyOn(CitationRepo, "findById").mockResolvedValue({
+      id: "c10",
+      ownerUserId: OWNER,
+      artifactId: "art_10",
+      title: "Judul",
+      authorsJson: [],
+      cslJson: {},
+      deletedAt: null,
+    } as never);
+    spyOn(CitationRepo, "updateById").mockImplementation(
+      async (_db: unknown, _id: string, patch: Record<string, unknown>) => {
+        patches.push(patch);
+      },
+    );
+    spyOn(RagService, "index").mockRejectedValue(new Error("embedding ditolak"));
+    await expect(
+      LibraryIngestService.run({} as never, { ownerUserId: OWNER, citationId: "c10" }),
+    ).rejects.toThrow("embedding ditolak");
+    const final = patches.at(-1) as { ingestStatus: string; ingestError: string };
+    expect(final.ingestStatus).toBe("failed");
+    expect(final.ingestError).toBe("embedding ditolak");
   });
 });
