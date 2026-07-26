@@ -23,6 +23,7 @@ import { type ArtifactCleanupJob, processArtifactCleanup } from "./artifact-clea
 import { type ArtifactIndexingJob, processArtifactIndexing } from "./artifact-indexing.worker";
 import { type FeedHydrationJob, processFeedHydration } from "./feed-hydration.worker";
 import { type IntegrationSyncJob, processIntegrationSync } from "./integration-sync.worker";
+import { type LibraryIngestJob, processLibraryIngest } from "./library-ingest.worker";
 import { type PaperEnrichmentJob, processPaperEnrichment } from "./paper-enrichment.worker";
 import { type ThreadTitleJob, processThreadTitle } from "./thread-title.worker";
 import { type UrlIngestionJob, processUrlIngestion } from "./url-ingestion.worker";
@@ -52,6 +53,11 @@ const workers = [
   new Worker<PaperEnrichmentJob>(ARTIFACT_QUEUES.paperEnrichment, processPaperEnrichment, {
     connection,
     concurrency: CONCURRENCY,
+  }),
+  // Concurrency 2 — tiap job memanggil Crossref/OpenAlex dan mungkin mengunduh PDF.
+  new Worker<LibraryIngestJob>(ARTIFACT_QUEUES.libraryIngest, processLibraryIngest, {
+    connection,
+    concurrency: 2,
   }),
   // Feed hydration: concurrency 1 — lane provider di-pace (hindari hammer external API).
   new Worker<FeedHydrationJob>(FEED_QUEUES.feedHydration, processFeedHydration, {
