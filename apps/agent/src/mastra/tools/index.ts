@@ -1,3 +1,4 @@
+import { addReferenceToProject } from "./add-reference-to-project";
 import { askQuestions } from "./ask-questions";
 import { checkDocument } from "./check-document";
 import { createWorkspace } from "./create-workspace";
@@ -12,6 +13,7 @@ import { getWorkspaceCitation } from "./get-workspace-citation";
 import { linkToWorkspace } from "./link-to-workspace";
 import { listAnalyses } from "./list-analyses";
 import { listArtifacts } from "./list-artifacts";
+import { listProjectReferencesTool } from "./list-project-references";
 import { listWorkspaces } from "./list-workspaces";
 import { lookupDoi } from "./lookup-doi";
 import { profileDataset } from "./profile-dataset";
@@ -50,6 +52,8 @@ export const readTools = {
   read_document_section: readDocumentSection,
   // Pemeriksa integritas dokumen (menjalankan compile) — untuk pertanyaan "apa yang masih kurang".
   check_document: checkDocument,
+  // Bib proyek — satu-satunya sumber sah untuk `@key`.
+  list_project_references: listProjectReferencesTool,
   // Sumber Typst penuh — hanya untuk dokumen kosong / tulis-ulang menyeluruh.
   get_document_source: getDocumentSource,
 };
@@ -59,6 +63,8 @@ export const writeTools = {
   propose_artifact: proposeArtifact,
   // Usulkan suntingan Typst dokumen proyek (gated dry-run compile); user Terima/Tolak di halaman proyek.
   propose_document_edit: proposeDocumentEdit,
+  // Tambah sumber ke bib proyek; konfirmasi percakapan seperti write lain.
+  add_reference_to_project: addReferenceToProject,
   create_workspace: createWorkspace,
   rename_workspace: renameWorkspace,
   link_to_workspace: linkToWorkspace,
