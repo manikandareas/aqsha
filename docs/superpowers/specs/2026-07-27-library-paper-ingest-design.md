@@ -15,7 +15,7 @@ Perpustakaan mendapat klik kanan. Kartu memberi aksi item, latar halaman memberi
 ## Temuan yang menjadi dasar desain
 
 - Pipeline yang diminta sebagian besar **sudah ada**, tapi terkunci di scope proyek. `finalizeUpload` (`artifact.service.ts:455`) mewajibkan `workspaceId` dan meng-assert kepemilikan workspace, padahal Perpustakaan akun-level.
-- `artifacts.workspace_id` sudah nullable dan endpoint `/artifacts/:id`, `/artifacts/:id/render-payload`, `/artifacts/upload-url` (`apps/api/src/routes/artifacts.ts:140,148,69`) sudah di-scope owner, bukan workspace. Entitas dan API-nya sudah siap akun-level.
+- `artifacts.workspace_id` sudah nullable dan endpoint baca `/artifacts/:id` serta `/artifacts/:id/render-payload` (`apps/api/src/routes/artifacts.ts:140,148`) sudah di-scope owner, bukan workspace. Presign `/artifacts/upload-url` (`:69`) masih mewajibkan `workspaceId` semata-mata untuk assert kepemilikan — target penyimpanannya sendiri sudah owner-scoped (`StorageService.generateUploadTarget(ownerUserId)`), jadi yang perlu dilonggarkan hanya assert-nya.
 - Reader sudah diport penuh ke `apps/svelte` (`ArtifactReaderPageShell`, `ArtifactDetailView`, `PdfArtifactViewer`, `ArtifactRenderPanels`, `ArtifactDetailSidebar`), dan `ArtifactDetailView.svelte:69` sudah menurunkan sendiri `workspaceId` dari artifact-nya. Yang belum ada hanya rutenya.
 - Primitif context menu sudah ada di `@aqsha/ui-svelte/components/context-menu` dan sudah dipakai di `AppSidebar.svelte:210`. Yang belum diport hanya isi menunya, dari `apps/web/features/workspaces/components/workspace-library-context-menus.tsx`.
 - Seluruh repo hanya punya **empat** titik yang membuat baris `citations`: `citation-crud.methods.ts:167` (manual), `:240` (DOI), `:343` (dari artifact), dan `citation-import.service.ts:461` (import file + commit sinkron provider). Jalur Explore, batch-save, dan provider bermuara ke sana.
@@ -136,7 +136,7 @@ Efeknya: melepas referensi dari proyek langsung mempersempit pencarian agen tanp
 ### Unggah dari Perpustakaan
 
 - Item **"Unggah PDF"** menjadi entri pertama di dropdown `+` `LibraryPage.svelte:245-269`, menjadi CTA utama di `CitationEmptyState`, dan grid menerima drag-and-drop seperti papan proyek.
-- Presign memakai `/artifacts/upload-url` yang sudah owner-scoped; finalize memakai `finalizeUpload` tanpa `workspaceId`, lalu `createFromArtifact` — sehingga gerbang ingest ikut jalan sendiri.
+- Presign memakai `/artifacts/upload-url` dengan `workspaceId` yang dijadikan opsional; finalize memakai `finalizeUpload` tanpa `workspaceId`, lalu `createFromArtifact` — sehingga gerbang ingest ikut jalan sendiri.
 - `createFromArtifact` (`citation-crud.methods.ts:255`) diperluas untuk itu: `workspaceId` menjadi opsional (assert workspace hanya bila ada), dan prasyarat "artifact wajib sudah punya metadata paper di workspace ini" dilonggarkan. Saat metadata belum ada — dan pada unggahan baru memang belum — judul artifact dipakai sebagai placeholder alih-alih melempar `citation_artifact_no_metadata`. Melonggarkan method ini lebih baik daripada menambah titik insert kelima yang harus diingat untuk disambungkan ke gerbang.
 - Progress memakai pola toast antrean unggah yang sudah ada.
 
@@ -166,7 +166,7 @@ Ikon status metadata di kanan bawah tetap. Penanda cakupan teks (teks penuh / ab
 
 - **PDF hasil pindaian** tanpa lapisan teks menghasilkan ekstraksi kosong → turun ke `abstract`, atau `none` bila abstraknya pun tak ada. Bukan kegagalan. OCR di luar ruang lingkup.
 - **Embedding disabled**: worker sudah `assertEmbeddingEnabled()` saat boot sehingga di produksi mustahil. Di dev tanpa key, item tetap `ready` dengan log peringatan — kondisi lingkungan, bukan kegagalan item.
-- **Soft delete dan merge duplikat**: filter `c.deleted_at IS NULL` membuat chunk milik sitasi terhapus otomatis hilang dari pencarian proyek, termasuk anggota yang kalah saat merge. Penghapusan permanen memanggil `RagService.deleteByArtifact`; menghapus item Perpustakaan ikut men-soft-delete artifact referensinya.
+- **Soft delete dan merge duplikat**: filter `c.deleted_at IS NULL` membuat chunk milik sitasi terhapus hilang dari pencarian proyek, termasuk anggota yang kalah saat merge. Yang perlu ditambahkan: menghapus item Perpustakaan ikut men-soft-delete artifact referensinya, sehingga chunk-nya juga hilang dari pencarian ber-scope thread — filter `artifacts.status = 'active'` yang sudah ada di `searchSimilar` dan `searchLexical` yang mengurusnya. Penghapusan permanen tidak butuh pekerjaan baru: `purgeArtifactStorage` sudah membersihkan embedding (`artifact.service.ts:1716`).
 - **Biaya**: tidak ada debit kuota baru. Yang ditambahkan pembatasan laju unduhan PDF per-owner di gerbang worker — rumah yang tepat untuk TODO di `papers/download.ts:21`.
 - **Backfill** perpustakaan lama dijalankan sebagai perintah terpisah dengan batch kecil; `jobId` stabil membuatnya aman diulang.
 - **Log** terstruktur per langkah, dan pelaporan Sentry hanya pada kegagalan terminal, mengikuti pola worker yang sudah ada di `apps/api/src/workers/index.ts:78`.
