@@ -93,7 +93,8 @@ Tidak ada baris status permanen dan tidak ada pill workspace di composer.
 - Nomor mengikuti urutan dokumen (halaman, lalu posisi vertikal), bukan urutan pembuatan.
 - Pin selalu terlihat. Mode anotasi tetap hanya mengatur pembuatan anotasi baru.
 - Status terbaca dari bentuk: `open` memakai lingkaran bergaris dengan sorotan lemon lembut; `sent` memakai lingkaran terisi dengan sorotan lemon pekat; anotasi yang chip-nya masih aktif di composer mendapat ring mint; `resolved` dan `dismissed` tidak dirender.
-- Hover menampilkan tooltip berisi catatan dan status. Klik membuka popover berisi kutipan blok, catatan penuh, dan tiga aksi: jadikan/lepas konteks, minta Astra mengerjakannya (masuk konteks lalu langsung kirim), dan hapus.
+- Hover menampilkan tooltip berisi catatan dan status. Klik membuka popover berisi kutipan blok, catatan penuh, dan tiga aksi: jadikan/lepas konteks, minta Astra mengerjakannya, dan hapus.
+- "Minta Astra" memasang anotasi sebagai konteks, mengisi composer dengan catatannya, lalu berpindah ke panel Chat — **tanpa mengirim otomatis**. Prefill memakai jalur `setComposerDraft` yang sudah dipakai aksi susun ulang proposal; mengirim otomatis akan menuntut kanal kirim lintas komponen yang belum ada dan membuat satu klik popover langsung membebani kuota.
 - Popover memakai aturan penempatan `AnnotationModeLayer`: membalik ke atas bila mepet batas bawah dan lebarnya dijepit ke lebar stage, sehingga tetap muat di tab Preview layar sempit.
 - Pin yang berdekatan digeser vertikal secukupnya agar tidak saling menumpuk.
 - Chip anotasi di composer memakai nomor yang sama (`✎ ❶ Metode…`) sehingga kaitan chip dan pin tidak perlu ditebak.
