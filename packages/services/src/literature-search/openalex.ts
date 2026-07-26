@@ -1,39 +1,22 @@
-import { normalizeDoi } from "../papers/identifiers";
 import { contactEmail, fetchWithRetry, userAgent } from "../papers/http";
-import { reconstructOpenAlexAbstract } from "../papers/providers";
-import { collapse, firstNonEmpty, numberOrUndefined, uniqueCompact } from "../lib/text";
-import { canonicalPaperKey } from "../explore/model";
+import { collapse } from "../lib/text";
+import {
+  LITERATURE_WORK_SELECT,
+  mapOpenAlexWork,
+  type LiteraturePaper,
+  type OpenAlexWorkPayload,
+} from "../papers/work";
 import { toOpenAlexFilter } from "./catalog";
 import type {
   LiteratureAutocompleteItem,
   LiteratureEntityKind,
   LiteratureFilterClause,
-  LiteraturePaper,
   LiteratureSortId,
 } from "./types";
 
-const OPENALEX_WORKS = "https://api.openalex.org/works";
+export { LITERATURE_WORK_SELECT, mapOpenAlexWork, type OpenAlexWorkPayload };
 
-export const LITERATURE_WORK_SELECT = [
-  "id",
-  "ids",
-  "display_name",
-  "title",
-  "doi",
-  "publication_year",
-  "publication_date",
-  "cited_by_count",
-  "type",
-  "language",
-  "is_retracted",
-  "abstract_inverted_index",
-  "open_access",
-  "best_oa_location",
-  "primary_location",
-  "authorships",
-  "primary_topic",
-  "topics",
-].join(",");
+const OPENALEX_WORKS = "https://api.openalex.org/works";
 
 const SORT_TO_OPENALEX: Record<LiteratureSortId, string> = {
   relevance: "relevance_score:desc",
@@ -43,47 +26,6 @@ const SORT_TO_OPENALEX: Record<LiteratureSortId, string> = {
   fwci_desc: "fwci:desc",
   authors_desc: "authors_count:desc",
   references_desc: "referenced_works_count:desc",
-};
-
-type OpenAlexLocation = {
-  landing_page_url?: string | null;
-  pdf_url?: string | null;
-  is_oa?: boolean | null;
-  source?: { display_name?: string | null } | null;
-};
-
-type OpenAlexTopic = {
-  display_name?: string | null;
-  field?: { display_name?: string | null } | null;
-  subfield?: { display_name?: string | null } | null;
-};
-
-export type OpenAlexWorkPayload = {
-  id?: string;
-  doi?: string | null;
-  title?: string | null;
-  display_name?: string | null;
-  publication_year?: number | null;
-  publication_date?: string | null;
-  cited_by_count?: number | null;
-  type?: string | null;
-  language?: string | null;
-  is_retracted?: boolean | null;
-  abstract_inverted_index?: Record<string, number[]> | null;
-  primary_location?: OpenAlexLocation | null;
-  best_oa_location?: OpenAlexLocation | null;
-  open_access?: {
-    is_oa?: boolean | null;
-    oa_status?: string | null;
-    oa_url?: string | null;
-  } | null;
-  authorships?: Array<{
-    author?: { display_name?: string | null } | null;
-    raw_author_name?: string | null;
-  }> | null;
-  primary_topic?: OpenAlexTopic | null;
-  topics?: OpenAlexTopic[] | null;
-  ids?: { openalex?: string | null; doi?: string | null } | null;
 };
 
 export type LiteratureWorksFetchResult = {
@@ -111,64 +53,6 @@ export function buildLiteratureWorksUrl(args: {
   url.searchParams.set("cursor", args.cursor ?? "*");
   url.searchParams.set("select", LITERATURE_WORK_SELECT);
   return url;
-}
-
-export function mapOpenAlexWork(work: OpenAlexWorkPayload): LiteraturePaper | null {
-  const title = collapse(work.display_name ?? work.title ?? "");
-  if (!title) return null;
-
-  const openalexId = work.ids?.openalex ?? work.id ?? null;
-  const doi = normalizeDoi(work.ids?.doi ?? work.doi ?? "") || null;
-  const location = work.best_oa_location ?? work.primary_location ?? null;
-  const pdfUrl = firstNonEmpty(work.best_oa_location?.pdf_url, location?.pdf_url) || null;
-  const url =
-    firstNonEmpty(
-      work.open_access?.oa_url,
-      location?.landing_page_url,
-      doi ? `https://doi.org/${doi}` : null,
-      openalexId,
-    ) || null;
-
-  const abstract = reconstructOpenAlexAbstract(work.abstract_inverted_index);
-  const topics = uniqueCompact([
-    work.primary_topic?.display_name,
-    work.primary_topic?.subfield?.display_name,
-    work.primary_topic?.field?.display_name,
-    ...(work.topics ?? []).map((topic) => topic.display_name),
-  ]).slice(0, 5);
-
-  const key = canonicalPaperKey({
-    doi: doi ?? undefined,
-    url: url ?? undefined,
-    locator: openalexId ?? undefined,
-    title,
-  });
-
-  return {
-    key,
-    title,
-    snippet: abstract ? abstract.slice(0, 1200) : topics.length > 0 ? topics.join(", ") : null,
-    doi,
-    url,
-    pdfUrl,
-    hasPdf: Boolean(pdfUrl),
-    authors: (work.authorships ?? [])
-      .map((authorship) =>
-        collapse(authorship.author?.display_name ?? authorship.raw_author_name ?? ""),
-      )
-      .filter(Boolean)
-      .slice(0, 8),
-    year: numberOrUndefined(work.publication_year) ?? null,
-    publicationDate: work.publication_date ?? null,
-    venue: collapse(location?.source?.display_name ?? "") || null,
-    citedByCount: numberOrUndefined(work.cited_by_count) ?? null,
-    isOpenAccess: Boolean(work.open_access?.is_oa),
-    oaStatus: work.open_access?.oa_status ?? null,
-    workType: work.type ?? null,
-    language: work.language ?? null,
-    isRetracted: Boolean(work.is_retracted),
-    topics,
-  };
 }
 
 export async function fetchLiteratureWorks(args: {

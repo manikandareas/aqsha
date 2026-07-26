@@ -1,3 +1,7 @@
+import type { LiteraturePaper } from "../papers/work";
+
+export type { LiteraturePaper };
+
 export const LITERATURE_SORT_IDS = [
   "relevance",
   "publication_date_desc",
@@ -139,27 +143,6 @@ export type PublicLiteratureCatalog = {
   categories: LiteratureCategoryDefinition[];
   filters: LiteratureFilterDefinition[];
   sorts: Array<{ id: LiteratureSortId; label: string }>;
-};
-
-export type LiteraturePaper = {
-  key: string;
-  title: string;
-  snippet: string | null;
-  doi: string | null;
-  url: string | null;
-  pdfUrl: string | null;
-  hasPdf: boolean;
-  authors: string[];
-  year: number | null;
-  publicationDate: string | null;
-  venue: string | null;
-  citedByCount: number | null;
-  isOpenAccess: boolean;
-  oaStatus: string | null;
-  workType: string | null;
-  language: string | null;
-  isRetracted: boolean;
-  topics: string[];
 };
 
 export type LiteratureSearchPage = {

@@ -219,13 +219,21 @@ export {
   type LiteratureFilterId,
   type LiteratureFilterKind,
   type LiteratureFilterValue,
-  type LiteraturePaper,
   type LiteratureSearchInput,
   type LiteratureSearchPage,
   type LiteratureSortId,
   type NormalizedLiteratureSearch,
   type PublicLiteratureCatalog,
 } from "./literature-search/types";
+export {
+  explorePaperToLiteraturePaper,
+  type ExplorePaperCacheRow,
+  LITERATURE_WORK_SELECT,
+  type LiteraturePaper,
+  literaturePaperToExplorePaper,
+  mapOpenAlexWork,
+  type OpenAlexWorkPayload,
+} from "./papers/work";
 export {
   type DiscoveryItemRef,
   type DiscoveryResolvedRef,
