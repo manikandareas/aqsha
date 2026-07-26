@@ -62,6 +62,16 @@
 		openId = openId === id ? null : id;
 		if (openId) onFocus(id);
 	}
+
+	/**
+	 * Tutup popover lalu jalankan aksinya. Id disalin lebih dulu karena `openPin` diturunkan dari
+	 * `openId`: menutup popover duluan membuatnya `null`, dan pembacaan `openPin.id` sesudah itu
+	 * melempar sehingga aksinya tak pernah berjalan.
+	 */
+	function closeThen(id: string, run: (id: string) => void): void {
+		openId = null;
+		run(id);
+	}
 </script>
 
 {#each pins as pin (pin.id)}
@@ -139,10 +149,7 @@
 					type="button"
 					size="sm"
 					variant="outline"
-					onclick={() => {
-						openId = null;
-						onDismiss(openPin.id);
-					}}
+					onclick={() => closeThen(openPin.id, onDismiss)}
 				>
 					<Icon icon={Trash2Icon} class="size-3.5" /> Hapus
 				</Button>
@@ -157,21 +164,11 @@
 					type="button"
 					size="sm"
 					variant="ghost"
-					onclick={() => {
-						openId = null;
-						onDismiss(openPin.id);
-					}}
+					onclick={() => closeThen(openPin.id, onDismiss)}
 				>
 					<Icon icon={Trash2Icon} class="size-3.5" /> Hapus
 				</Button>
-				<Button
-					type="button"
-					size="sm"
-					onclick={() => {
-						openId = null;
-						onAsk(openPin.id);
-					}}
-				>
+				<Button type="button" size="sm" onclick={() => closeThen(openPin.id, onAsk)}>
 					<Icon icon={SparklesIcon} class="size-3.5" /> Minta Astra
 				</Button>
 			</div>

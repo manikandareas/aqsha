@@ -504,7 +504,13 @@
 					onToggleAnnotationContext={annotationBridge.toggleContext}
 					onAskAnnotation={annotationBridge.ask}
 					onDismissAnnotation={(id: string) => {
-						void dismissAnnotations.mutateAsync({ ids: [id] });
+						dismissAnnotations.mutate(
+							{ ids: [id] },
+							{
+								onError: (err) =>
+									toast.error(readableApiErrorMessage(err, 'Gagal menghapus anotasi.'))
+							}
+						);
 					}}
 					onActiveHeading={(index: number) => (activeTocIndex = index)}
 				/>
