@@ -14,6 +14,7 @@ import {
 import { TypstCompileService } from "./compile.service";
 import { applyHunkSelection, computeProposalHunks, type ProposalHunk } from "./hunks";
 import { resolveMainTypFilename } from "./main-filename";
+import { applyOutlineOperations, type OutlineOperation } from "./outline";
 import { composeProjectBib } from "./project-bib";
 import type { TypstDiagnostic } from "./types";
 
@@ -267,6 +268,47 @@ export const DocumentProposalService = {
       });
     }
     return { ok: true, proposalId, summary: input.summary };
+  },
+
+  /**
+   * Usulan struktur bab. Operasi diterjemahkan menjadi sumber usulan lalu masuk jalur `propose`
+   * yang sama seperti suntingan isi, sehingga validasi compile, batas satu pending per proyek,
+   * dan reviewer-nya identik.
+   */
+  async proposeOutline(
+    db: Db,
+    input: {
+      ownerUserId: string;
+      workspaceId: string;
+      threadId: string | null;
+      operations: OutlineOperation[];
+      summary: string;
+      resubmitInstruction: string;
+    },
+  ): Promise<ProposeDocumentEditResult> {
+    const doc = await WorkspaceDocumentService.getDocument(db, {
+      ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId,
+    });
+    let proposedSource: string;
+    try {
+      proposedSource = applyOutlineOperations(doc?.source ?? "", input.operations);
+    } catch (err) {
+      return {
+        ok: false,
+        reason: "edit_mismatch",
+        message: err instanceof Error ? err.message : "Operasi kerangka tidak dapat diterapkan",
+      };
+    }
+    return this.propose(db, {
+      ownerUserId: input.ownerUserId,
+      workspaceId: input.workspaceId,
+      threadId: input.threadId,
+      fullSource: proposedSource,
+      summary: input.summary,
+      resubmitInstruction: input.resubmitInstruction,
+      respondsToAnnotationIds: [],
+    });
   },
 
   /**

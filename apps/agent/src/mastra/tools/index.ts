@@ -21,6 +21,7 @@ import { runAnalysis } from "./run-analysis";
 import { runPythonAnalysis } from "./run-python-analysis";
 import { proposeArtifact } from "./propose-artifact";
 import { proposeDocumentEdit } from "./propose-document-edit";
+import { proposeOutline } from "./propose-outline";
 import { readDocumentSection } from "./read-document-section";
 import { readUrl } from "./read-url";
 import { renameWorkspace } from "./rename-workspace";
@@ -63,6 +64,8 @@ export const writeTools = {
   propose_artifact: proposeArtifact,
   // Usulkan suntingan Typst dokumen proyek (gated dry-run compile); user Terima/Tolak di halaman proyek.
   propose_document_edit: proposeDocumentEdit,
+  // Usul struktur bab; bermuara ke reviewer proposal yang sama dengan suntingan isi.
+  propose_outline: proposeOutline,
   // Tambah sumber ke bib proyek; konfirmasi percakapan seperti write lain.
   add_reference_to_project: addReferenceToProject,
   create_workspace: createWorkspace,
