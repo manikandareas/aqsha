@@ -81,6 +81,7 @@ import {
   NotebookIcon as HugeNotebookIcon,
   PaintBoardIcon,
   PanelLeftIcon as HugePanelLeftIcon,
+  PanelRightIcon as HugePanelRightIcon,
   PencilEdit01Icon,
   PenTool01Icon,
   Pin02Icon,
@@ -227,6 +228,7 @@ export const NotebookIcon = createIcon(HugeNotebookIcon);
 export const PaletteIcon = createIcon(PaintBoardIcon);
 export const PaperclipIcon = createIcon(Attachment01Icon);
 export const PanelLeftIcon = createIcon(HugePanelLeftIcon);
+export const PanelRightIcon = createIcon(HugePanelRightIcon);
 export const PenLineIcon = createIcon(PenTool01Icon);
 export const PencilIcon = createIcon(PencilEdit01Icon);
 export const PinIcon = createIcon(Pin02Icon);

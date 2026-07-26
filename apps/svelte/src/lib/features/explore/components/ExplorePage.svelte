@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 	import { SvelteURL } from 'svelte/reactivity';
 	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Icon, ChevronRightIcon } from '$lib/icons';
+	import { Icon, ChevronRightIcon, PanelRightIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { getAuthState } from '$lib/auth';
 	import { readableApiErrorMessage } from '$lib/errors';
@@ -222,6 +222,29 @@
 								>
 							{/if}
 						</nav>
+					{/snippet}
+					{#snippet actions()}
+						<!-- Mirrors the nav-rail trigger on the left of this same bar. -->
+						<button
+							type="button"
+							onclick={toggleFilterPanel}
+							aria-pressed={filterPanelOpen}
+							aria-label={filterPanelOpen ? 'Tutup panel filter' : 'Buka panel filter'}
+							class={cn(
+								'relative flex size-7 shrink-0 items-center justify-center rounded-full transition-colors',
+								filterPanelOpen
+									? 'bg-muted text-foreground'
+									: 'text-muted-foreground hover:bg-muted hover:text-foreground'
+							)}
+						>
+							<Icon icon={PanelRightIcon} class="size-3.5" />
+							{#if applied.filters.length > 0}
+								<span
+									aria-hidden="true"
+									class="absolute top-1 right-1 size-1.5 rounded-full bg-primary"
+								></span>
+							{/if}
+						</button>
 					{/snippet}
 				</AppPageHeader>
 
