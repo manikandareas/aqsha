@@ -1,8 +1,8 @@
-import type { AskQuestion } from '../ask-questions';
-import { normalizeAskQuestions } from '../ask-questions';
-import { formatDeepAnalyzeSummary } from '../deep-viz';
-import { toCards } from './source-cards';
-import { statsDetailFromResult, statsRunDetailFromArgs } from './stats-run-detail';
+import type { AskQuestion } from '../ask-questions.ts';
+import { normalizeAskQuestions } from '../ask-questions.ts';
+import { formatDeepAnalyzeSummary } from '../deep-viz.ts';
+import { toCards } from './source-cards.ts';
+import { statsDetailFromResult, statsRunDetailFromArgs } from './stats-run-detail.ts';
 import type {
 	ArtifactCardModel,
 	DocumentProposalCardModel,
@@ -13,7 +13,7 @@ import type {
 	ToolRow,
 	ToolRowModel,
 	ToolStatus
-} from './types';
+} from './types.ts';
 
 /**
  * Adapter chunk Mastra (`@mastra/client-js` `processDataStream` onChunk) → `TimelineMessage[]`

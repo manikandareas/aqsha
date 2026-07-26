@@ -2,7 +2,7 @@
 // (1) `search_*` tool results streaming/rehydrated (normal & deep live), and (2) `research_sources`
 // rows from the DB (numbered `[n]` deep panel). Pure: no fetch, no DB — only maps to the neutral
 // presentation contract.
-import type { SourceCardData } from './types';
+import type { SourceCardData } from './types.ts';
 
 export type ResearchSourceLike = {
 	id: string;
