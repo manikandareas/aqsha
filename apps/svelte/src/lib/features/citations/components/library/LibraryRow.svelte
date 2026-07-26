@@ -16,6 +16,7 @@
 		MoreHorizontalIcon,
 		type IconSvgElement
 	} from '$lib/icons';
+	import { ingestBadge } from '../../library-ingest-view';
 	import {
 		CITATION_STATUS_LABELS,
 		formatCitationAuthor,
@@ -81,6 +82,12 @@
 	const authorsLine = $derived(formatAuthorsLine(item.authors));
 	const status = $derived(STATUS_ICON[item.metadataStatus]);
 	const externalHref = $derived(item.doi ? `https://doi.org/${item.doi}` : (item.url ?? null));
+	const badge = $derived(ingestBadge(item));
+	const badgeClass: Record<'muted' | 'progress' | 'danger', string> = {
+		muted: 'bg-white/15 text-white/75',
+		progress: 'bg-white/25 text-white animate-pulse',
+		danger: 'bg-destructive/25 text-white'
+	};
 
 	function toneIndex(id: string): number {
 		let hash = 0;
@@ -217,8 +224,18 @@
 							</span>
 						</span>
 
+						{#if badge}
+							<span
+								class={cn(
+									'ml-auto inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold',
+									badgeClass[badge.tone]
+								)}
+							>
+								{badge.label}
+							</span>
+						{/if}
 						<span
-							class={cn('ml-auto inline-flex size-4 shrink-0', status.class)}
+							class={cn('inline-flex size-4 shrink-0', !badge && 'ml-auto', status.class)}
 							title={CITATION_STATUS_LABELS[item.metadataStatus]}
 							aria-label={`Status metadata: ${CITATION_STATUS_LABELS[item.metadataStatus]}`}
 						>

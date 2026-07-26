@@ -17,6 +17,7 @@ import {
 	exportFileName,
 	resolveExportContent
 } from './export-model';
+import { hasPendingIngest } from './library-ingest-view';
 import type {
 	BibliographySort,
 	BulkSearchSaveResult,
@@ -100,7 +101,15 @@ export function useCitationsList(
 			}
 			return unwrap(await api.citations.get({ query })) as CitationListResponse;
 		},
-		getNextPageParam: (last: CitationListResponse) => last.nextCursor
+		getNextPageParam: (last: CitationListResponse) => last.nextCursor,
+		// Post-processing selesai dalam hitungan detik; polling ringan lebih murah
+		// daripada kanal realtime baru, dan berhenti sendiri saat tak ada yang antre.
+		refetchInterval: (query: {
+			state: { data?: { pages: CitationListResponse[] } };
+		}): number | false => {
+			const items = query.state.data?.pages.flatMap((p) => p.items) ?? [];
+			return hasPendingIngest(items) ? 4000 : false;
+		}
 	}));
 }
 

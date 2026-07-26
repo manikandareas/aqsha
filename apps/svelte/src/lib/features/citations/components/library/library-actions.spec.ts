@@ -28,4 +28,13 @@ describe('scoped library component contracts', () => {
 	it('backdrop trigger wraps the grid, not the document', () => {
 		expect(read('../../pages/LibraryPage.svelte')).toContain('LibraryBackdropContextMenu');
 	});
+
+	it('card renders the ingest badge from the pure model', () => {
+		expect(read('./LibraryRow.svelte')).toContain('ingestBadge');
+	});
+
+	it('list polls only while ingest work remains', () => {
+		expect(read('../../api.ts')).toContain('hasPendingIngest');
+		expect(read('../../api.ts')).toContain('refetchInterval');
+	});
 });
