@@ -41,6 +41,7 @@
 	import AddToProjectDialog from '../components/library/AddToProjectDialog.svelte';
 	import LibraryBulkBar from '../components/library/LibraryBulkBar.svelte';
 	import LibraryListSkeleton from '../components/library/LibraryListSkeleton.svelte';
+	import LibraryBackdropContextMenu from '../components/library/LibraryBackdropContextMenu.svelte';
 	import LibraryRow from '../components/library/LibraryRow.svelte';
 	import {
 		useBulkDeleteCitations,
@@ -115,6 +116,7 @@
 	let deleteTarget = $state<CitationListItem | null>(null);
 	let confirmBulkDelete = $state(false);
 	let searchExpanded = $state(false);
+	let doiPrefill = $state<string | null>(null);
 
 	let selectionMode = $state(false);
 	const selectedIds = new SvelteSet<string>();
@@ -129,6 +131,13 @@
 
 	function pickPdf() {
 		fileInputEl?.click();
+	}
+
+	/** Reader kanonik; query `project` hanya menandai asal navigasi. */
+	function readerHref(item: CitationListItem): string | null {
+		if (!item.artifactId) return null;
+		const base = resolve('/app/(product)/artifacts/[artifactId]', { artifactId: item.artifactId });
+		return workspaceId ? `${base}?project=${encodeURIComponent(workspaceId)}` : base;
 	}
 
 	function uploadFiles(files: File[]) {
@@ -470,24 +479,37 @@
 						Tidak ada referensi yang cocok dengan filter.
 					</p>
 				{:else}
-					<ul
-						class="grid grid-cols-1 gap-4 px-5 pt-4 pb-8 @md:grid-cols-2 @2xl:gap-5 @2xl:px-6 @3xl:grid-cols-3 @5xl:grid-cols-4 @[84rem]:grid-cols-5"
+					<LibraryBackdropContextMenu
+						onUploadPdf={pickPdf}
+						onAddByDoi={(doi) => {
+							doiPrefill = doi;
+							dialog = 'doi';
+						}}
+						onAddManual={() => (dialog = 'manual')}
+						onImportFile={() => (dialog = 'import')}
+						onSelectMany={() => (selectionMode = true)}
 					>
-						{#each items as item (item.id)}
-							<LibraryRow
-								{item}
-								{selectionMode}
-								selected={selectedIds.has(item.id)}
-								onToggleSelect={() =>
-									selectedIds.has(item.id) ? selectedIds.delete(item.id) : selectedIds.add(item.id)}
-								onOpen={() => navigate({ cite: item.id })}
-								onCopy={() => copy.mutate(item.id)}
-								membershipAction={membershipActionFor(item)}
-								onEdit={() => (editTargetId = item.id)}
-								onDelete={() => (deleteTarget = item)}
-							/>
-						{/each}
-					</ul>
+						<ul
+							class="grid grid-cols-1 gap-4 px-5 pt-4 pb-8 @md:grid-cols-2 @2xl:gap-5 @2xl:px-6 @3xl:grid-cols-3 @5xl:grid-cols-4 @[84rem]:grid-cols-5"
+						>
+							{#each items as item (item.id)}
+								<LibraryRow
+									{item}
+									{selectionMode}
+									selected={selectedIds.has(item.id)}
+									onToggleSelect={() =>
+										selectedIds.has(item.id) ? selectedIds.delete(item.id) : selectedIds.add(item.id)}
+									onOpen={() => navigate({ cite: item.id })}
+									onCopy={() => copy.mutate(item.id)}
+									membershipAction={membershipActionFor(item)}
+									onEdit={() => (editTargetId = item.id)}
+									onDelete={() => (deleteTarget = item)}
+									readerHref={readerHref(item)}
+									onSelectMany={() => (selectionMode = true)}
+								/>
+							{/each}
+						</ul>
+					</LibraryBackdropContextMenu>
 					{#if selectionMode && selectedIds.size > 0}
 						<LibraryBulkBar
 							ids={[...selectedIds]}
@@ -534,10 +556,16 @@
 
 <CitationDoiDialog
 	open={dialog === 'doi'}
-	onOpenChange={(open) => (dialog = open ? 'doi' : null)}
+	prefill={doiPrefill}
+	onOpenChange={(open) => {
+		dialog = open ? 'doi' : null;
+		// Prefill hanya berlaku untuk satu kali buka; pembukaan berikutnya mulai bersih.
+		if (!open) doiPrefill = null;
+	}}
 	onSubmit={async (value) => {
 		await createCitation.mutateAsync({ doi: value.doi, allowDuplicate: value.allowDuplicate });
 		dialog = null;
+		doiPrefill = null;
 	}}
 />
 <CitationFormDialog

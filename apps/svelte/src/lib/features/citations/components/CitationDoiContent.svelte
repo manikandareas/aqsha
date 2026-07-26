@@ -2,17 +2,23 @@
 	import * as Dialog from '@aqsha/ui-svelte/components/dialog';
 	import { Button } from '@aqsha/ui-svelte/components/button';
 	import { Input } from '@aqsha/ui-svelte/components/input';
+	import { untrack } from 'svelte';
 	import { apiErrorCode, readableApiErrorMessage } from '$lib/errors';
 
 	let {
 		onOpenChange,
-		onSubmit
+		onSubmit,
+		prefill = null
 	}: {
 		onOpenChange: (open: boolean) => void;
 		onSubmit: (value: { doi: string; allowDuplicate?: boolean }) => Promise<unknown>;
+		/** DOI yang sudah terbaca dari clipboard; pengguna tetap bisa menyuntingnya. */
+		prefill?: string | null;
 	} = $props();
 
-	let doi = $state('');
+	// Sengaja hanya nilai awal: konten dialog di-mount ulang setiap kali dibuka, dan
+	// sesudahnya input adalah milik pengguna — prefill tak boleh menimpa suntingannya.
+	let doi = $state(untrack(() => prefill) ?? '');
 	let pending = $state(false);
 	let error = $state<string | null>(null);
 	let duplicateBlocked = $state(false);
