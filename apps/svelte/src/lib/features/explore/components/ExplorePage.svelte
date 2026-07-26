@@ -9,8 +9,8 @@
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { getAuthState } from '$lib/auth';
 	import { readableApiErrorMessage } from '$lib/errors';
-	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
+	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
 	import { DeferredQueryRegion, type DeferredQueryResult } from '$lib/query';
 	import { FEED_TOPIC_LABELS, type FeedTopic } from '$lib/features/discovery/types';
 	import { useLiteratureSearch } from '$lib/features/discovery/api';
@@ -31,8 +31,7 @@
 	import ExploreFeedSkeleton from './ExploreFeedSkeleton.svelte';
 	import LiteratureSearchBar from './LiteratureSearchBar.svelte';
 	import LiteratureSearchSuggestions from './LiteratureSearchSuggestions.svelte';
-	import LiteratureFilterDrawer from './LiteratureFilterDrawer.svelte';
-	import LiteratureFilterSheet from './LiteratureFilterSheet.svelte';
+	import LiteratureFilterPanel from './LiteratureFilterPanel.svelte';
 	import LiteratureResults from './LiteratureResults.svelte';
 	import LiteratureResultsSkeleton from './LiteratureResultsSkeleton.svelte';
 
@@ -40,10 +39,11 @@
 	 * Explore surface — paper-first literature search. A breadcrumb header plus a query bar sit over
 	 * a scrolling body; the query bar is always present, so empty `q` and non-empty `q` share the same
 	 * chrome. Empty `q` → curated feed (Jelajah) with a page-owned title and search suggestions;
-	 * non-empty `q` → direct OpenAlex literature search with a dense result list. Filters open in a
-	 * side sheet on desktop or a drawer on mobile. `q`/`sort`/`f`/`topic` live in the
-	 * URL via shallow `replaceState`, never a full navigation. `topic` only drives the curated feed
-	 * and is kept for legacy links/breadcrumb.
+	 * non-empty `q` → direct OpenAlex literature search with a dense result list. Filters live in a
+	 * right column that docks beside the results on wide viewports and drops to a bottom drawer
+	 * below the panel-inline breakpoint. `q`/`sort`/`f`/`topic` live in the URL via shallow
+	 * `replaceState`, never a full navigation. `topic` only drives the curated feed and is kept for
+	 * legacy links/breadcrumb.
 	 */
 	let { feedResult }: { feedResult: Promise<DeferredQueryResult> } = $props();
 
@@ -91,9 +91,7 @@
 		() => authReady() && literatureMode
 	);
 
-	let filterDrawerOpen = $state(false);
-	let filterSheetOpen = $state(false);
-	const isMobile = new IsMobile(1024);
+	let filterPanelOpen = $state(false);
 
 	function syncAppliedFromLocation(): void {
 		applied = readExploreUrl(new SvelteURL(window.location.href).searchParams);
@@ -138,8 +136,7 @@
 
 	function handleFilterApply(): void {
 		commitApplied(draft.snapshot());
-		filterDrawerOpen = false;
-		filterSheetOpen = false;
+		filterPanelOpen = false;
 	}
 
 	function handleFilterReset(): void {
@@ -150,8 +147,20 @@
 		draft.reset(applied);
 	}
 
+	// Closing the panel any way other than Apply (X, drawer dismiss, sidebar shortcut) rolls the
+	// staged draft back, so an abandoned edit can never ride along on the next query submit.
+	function closeFilterPanel(): void {
+		if (filterPanelOpen) handleFilterDiscard();
+		filterPanelOpen = false;
+	}
+
+	function toggleFilterPanel(): void {
+		if (filterPanelOpen) closeFilterPanel();
+		else filterPanelOpen = true;
+	}
+
 	// Sort is a direct toolbar control, not gated by Apply — commit it against the currently applied
-	// filters so an unrelated, unapplied filter edit in the sheet or drawer is never silently activated.
+	// filters so an unrelated, unapplied filter edit in the panel is never silently activated.
 	function handleSortChange(sort: LiteratureSortId): void {
 		draft.setSort(sort);
 		commitApplied({ ...applied, sort });
@@ -164,16 +173,6 @@
 		commitApplied(draft.snapshot());
 	}
 
-	// Use a bottom drawer on touch layouts and a side sheet on wider screens so the results keep
-	// their full reading width without a persistent filter column.
-	function handleOpenFiltersInResults(): void {
-		if (isMobile.current) {
-			filterDrawerOpen = true;
-			return;
-		}
-		filterSheetOpen = true;
-	}
-
 	function handleLoadMore(): void {
 		void searchQuery.fetchNextPage();
 	}
@@ -181,128 +180,139 @@
 
 <svelte:window onpopstate={syncAppliedFromLocation} />
 
-<main class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
-	<div class="@container/explore min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-		<AppPageHeader class="border-b-0">
-			{#snippet title()}
-				<nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5">
-					<button
-						type="button"
-						onclick={() => setTopic(null)}
-						class={cn(
-							'inline-flex h-11 min-w-0 items-center truncate rounded-md px-1 text-base font-semibold transition-colors',
-							topicLabel ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
-						)}
-						aria-current={topicLabel ? undefined : 'page'}
-					>
-						Jelajahi
-					</button>
-					{#if topicLabel}
-						<Icon icon={ChevronRightIcon} class="size-3.5 shrink-0 text-muted-foreground/60" />
-						<span
-							aria-current="page"
-							class="min-w-0 truncate text-base font-semibold text-foreground">{topicLabel}</span
+<!--
+	Bounded-height root. `DetailSplitLayout` and everything under it size from `flex-1`/`min-h-0`
+	with no fixed height, so without this `h-svh` ancestor the chain is content-driven and the
+	body scrolls instead of the results column.
+-->
+<div class="flex h-svh min-h-0 min-w-0 flex-col overflow-hidden bg-background">
+	<DetailSplitLayout
+		sideOpen={filterPanelOpen}
+		onSideOpenChange={(open) => {
+			if (!open) closeFilterPanel();
+		}}
+	>
+		{#snippet main()}
+			<div class="@container/explore min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+				<AppPageHeader class="border-b-0">
+					{#snippet title()}
+						<nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5">
+							<button
+								type="button"
+								onclick={() => setTopic(null)}
+								class={cn(
+									'inline-flex h-11 min-w-0 items-center truncate rounded-md px-1 text-base font-semibold transition-colors',
+									topicLabel ? 'text-muted-foreground hover:text-foreground' : 'text-foreground'
+								)}
+								aria-current={topicLabel ? undefined : 'page'}
+							>
+								Jelajahi
+							</button>
+							{#if topicLabel}
+								<Icon icon={ChevronRightIcon} class="size-3.5 shrink-0 text-muted-foreground/60" />
+								<span
+									aria-current="page"
+									class="min-w-0 truncate text-base font-semibold text-foreground"
+									>{topicLabel}</span
+								>
+							{/if}
+						</nav>
+					{/snippet}
+				</AppPageHeader>
+
+				<div class={cn(EXPLORE_CONTENT_CLASS, 'py-3 sm:py-4')}>
+					<header>
+						<h1
+							class="font-heading text-balance text-[28px] leading-tight font-bold text-foreground sm:text-3xl md:text-4xl"
 						>
-					{/if}
-				</nav>
-			{/snippet}
-		</AppPageHeader>
+							Cari literatur
+							<span class="explore-search-emoji ml-2 inline-block" aria-hidden="true">🔎</span>
+						</h1>
+					</header>
+				</div>
 
-		<div class={cn(EXPLORE_CONTENT_CLASS, 'py-3 sm:py-4')}>
-			<header>
-				<h1
-					class="font-heading text-balance text-[28px] leading-tight font-bold text-foreground sm:text-3xl md:text-4xl"
-				>
-					Cari literatur
-					<span class="explore-search-emoji ml-2 inline-block" aria-hidden="true">🔎</span>
-				</h1>
-			</header>
-		</div>
-
-		<div class={cn(EXPLORE_CONTENT_CLASS, 'py-2 sm:py-3')}>
-			<div class="w-full space-y-6 sm:space-y-8">
-				<LiteratureSearchBar
-					compact
-					value={draft.q}
-					onValueChange={handleQueryChange}
-					onSubmit={handleSubmitQuery}
-					onOpenFilters={handleOpenFiltersInResults}
-				/>
-				{#if !literatureMode}
-					<LiteratureSearchSuggestions onSelect={handleSuggestionSelect} />
-				{/if}
-			</div>
-		</div>
-
-		<!-- Bottom room for the floating batch bar, which wraps to two lines on phone widths. -->
-		<div class={cn(EXPLORE_CONTENT_CLASS, 'pb-28 sm:pb-24')}>
-			{#if literatureMode}
-				<section class={EXPLORE_SECTION_CLASS}>
-					<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
-						{#snippet pending()}
-							<LiteratureResultsSkeleton />
-						{/snippet}
-						{#snippet failed(error, retry)}
-							<div class={EXPLORE_ERROR_CLASS}>
-								<p class="text-label font-medium text-destructive">
-									{readableApiErrorMessage(error, 'Hasil belum dapat dimuat.')}
-								</p>
-								<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
-									Coba lagi
-								</Button>
-							</div>
-						{/snippet}
-						<LiteratureResults
-							query={searchQuery}
-							{applied}
-							onSortChange={handleSortChange}
-							onClearFilters={handleClearFilters}
-							onLoadMore={handleLoadMore}
+				<div class={cn(EXPLORE_CONTENT_CLASS, 'py-2 sm:py-3')}>
+					<div class="w-full space-y-6 sm:space-y-8">
+						<LiteratureSearchBar
+							compact
+							value={draft.q}
+							filtersOpen={filterPanelOpen}
+							activeFilterCount={applied.filters.length}
+							onValueChange={handleQueryChange}
+							onSubmit={handleSubmitQuery}
+							onToggleFilters={toggleFilterPanel}
 						/>
-					</DeferredQueryRegion>
-				</section>
-			{:else}
-				<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
-					{#snippet pending()}
-						<section class={EXPLORE_SECTION_CLASS}><ExploreFeedSkeleton /></section>
-					{/snippet}
-					{#snippet failed(error, retry)}
-						<section class={EXPLORE_SECTION_CLASS}>
-							<div class={EXPLORE_ERROR_CLASS}>
-								<p class="text-label font-medium text-destructive">
-									{readableApiErrorMessage(error, 'Temuan belum dapat dimuat.')}
-								</p>
-								<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
-									Coba lagi
-								</Button>
-							</div>
-						</section>
-					{/snippet}
-					<ExploreFindings {topic} />
-				</DeferredQueryRegion>
-			{/if}
-		</div>
+						{#if !literatureMode}
+							<LiteratureSearchSuggestions onSelect={handleSuggestionSelect} />
+						{/if}
+					</div>
+				</div>
 
-		<LiteratureFilterDrawer
-			{catalog}
-			{draft}
-			onChange={handleFilterChange}
-			onApply={handleFilterApply}
-			onReset={handleFilterReset}
-			onDiscard={handleFilterDiscard}
-			bind:open={filterDrawerOpen}
-		/>
-		<LiteratureFilterSheet
-			{catalog}
-			{draft}
-			onChange={handleFilterChange}
-			onApply={handleFilterApply}
-			onReset={handleFilterReset}
-			onDiscard={handleFilterDiscard}
-			bind:open={filterSheetOpen}
-		/>
-	</div>
-</main>
+				<!-- Bottom room for the floating batch bar, which wraps to two lines on phone widths. -->
+				<div class={cn(EXPLORE_CONTENT_CLASS, 'pb-28 sm:pb-24')}>
+					{#if literatureMode}
+						<section class={EXPLORE_SECTION_CLASS}>
+							<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
+								{#snippet pending()}
+									<LiteratureResultsSkeleton />
+								{/snippet}
+								{#snippet failed(error, retry)}
+									<div class={EXPLORE_ERROR_CLASS}>
+										<p class="text-label font-medium text-destructive">
+											{readableApiErrorMessage(error, 'Hasil belum dapat dimuat.')}
+										</p>
+										<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
+											Coba lagi
+										</Button>
+									</div>
+								{/snippet}
+								<LiteratureResults
+									query={searchQuery}
+									{applied}
+									onSortChange={handleSortChange}
+									onClearFilters={handleClearFilters}
+									onLoadMore={handleLoadMore}
+								/>
+							</DeferredQueryRegion>
+						</section>
+					{:else}
+						<DeferredQueryRegion result={feedResult} dependency="app:explore-feed">
+							{#snippet pending()}
+								<section class={EXPLORE_SECTION_CLASS}><ExploreFeedSkeleton /></section>
+							{/snippet}
+							{#snippet failed(error, retry)}
+								<section class={EXPLORE_SECTION_CLASS}>
+									<div class={EXPLORE_ERROR_CLASS}>
+										<p class="text-label font-medium text-destructive">
+											{readableApiErrorMessage(error, 'Temuan belum dapat dimuat.')}
+										</p>
+										<Button type="button" variant="outline" size="sm" class="mt-3" onclick={retry}>
+											Coba lagi
+										</Button>
+									</div>
+								</section>
+							{/snippet}
+							<ExploreFindings {topic} />
+						</DeferredQueryRegion>
+					{/if}
+				</div>
+			</div>
+		{/snippet}
+
+		{#snippet side()}
+			<LiteratureFilterPanel
+				open={filterPanelOpen}
+				{catalog}
+				{draft}
+				activeCount={applied.filters.length}
+				onChange={handleFilterChange}
+				onApply={handleFilterApply}
+				onReset={handleFilterReset}
+				onClose={closeFilterPanel}
+			/>
+		{/snippet}
+	</DetailSplitLayout>
+</div>
 
 <style>
 	.explore-search-emoji {

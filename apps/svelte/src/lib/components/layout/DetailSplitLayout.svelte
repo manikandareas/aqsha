@@ -48,6 +48,7 @@
 <Sidebar.Provider
 	open={sideOpen}
 	onOpenChange={onSideOpenChange}
+	persist={false}
 	class="flex min-h-0 min-h-svh flex-1 flex-col overflow-hidden bg-background"
 >
 	<div
