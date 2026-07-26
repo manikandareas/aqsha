@@ -7,11 +7,8 @@ import {
   ArchiveIcon,
   BookOpenIcon,
   CheckCircleIcon,
-  FileExportedIcon,
-  FileSearchIcon,
-  FlagIcon,
-  HistoryIcon,
   PenIcon,
+  QuoteIcon,
   SearchIcon,
   SparklesIcon,
 } from "@/components/icons";
@@ -29,14 +26,11 @@ type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 const STEP_ICONS: Record<CompareStepIconKey, IconComponent> = {
   search: SearchIcon,
-  "file-search": FileSearchIcon,
   archive: ArchiveIcon,
   "book-open": BookOpenIcon,
   "check-circle": CheckCircleIcon,
-  flag: FlagIcon,
-  history: HistoryIcon,
   pen: PenIcon,
-  "file-exported": FileExportedIcon,
+  quote: QuoteIcon,
 };
 
 const inView = { ...IN_VIEW_ONCE, amount: 0.25 as const };
@@ -46,7 +40,7 @@ function ToolChip({
   variant,
 }: {
   name: string;
-  variant: "competitor" | "aqsha";
+  variant: "fragmented" | "aqsha";
 }) {
   return (
     <span
@@ -103,18 +97,18 @@ function CompareRowView({ row, index }: { row: CompareRow; index: number }) {
         </p>
       </div>
 
-      {/* Tool lain */}
+      {/* Alur terpencar */}
       <div className="relative lg:border-l lg:border-dashed lg:border-foreground/25 lg:px-8 lg:py-12">
         <div className="mb-4 lg:mb-0">
-          <ToolChip name={row.competitor} variant="competitor" />
+          <ToolChip name={row.fragmented.label} variant="fragmented" />
         </div>
-        <div className="rounded-lg rounded-tl-sm border-2 border-border bg-background px-5 py-4 lg:mt-2">
+        <div className="rounded-lg border-2 border-border bg-background px-5 py-4 lg:mt-2">
           <p className="text-sm leading-snug text-foreground/75">
-            &ldquo;{row.competitorReply}&rdquo;
+            {row.fragmented.detail}
           </p>
         </div>
         <p className="font-hand mt-3 pl-2 text-lg leading-tight text-muted-foreground">
-          ↑ {row.competitorNote}
+          ↑ {row.fragmented.note}
         </p>
       </div>
 
@@ -127,11 +121,11 @@ function CompareRowView({ row, index }: { row: CompareRow; index: number }) {
       <div className="relative lg:border-l lg:border-dashed lg:border-foreground/25 lg:px-8 lg:py-12">
         <VsBadge className="hidden lg:absolute lg:-left-5 lg:top-1/2 lg:flex lg:-translate-y-1/2" />
         <div className="mb-4 lg:mb-0">
-          <ToolChip name="Aqsha" variant="aqsha" />
+          <ToolChip name={row.aqsha.label} variant="aqsha" />
         </div>
         <div className="rounded-lg border-2 bg-background p-5 [border-color:var(--mint-soft-border)] lg:mt-2">
           <ul className="space-y-2.5">
-            {row.steps.map((step, stepIndex) => {
+            {row.aqsha.steps.map((step, stepIndex) => {
               const Icon = STEP_ICONS[step.icon];
               return (
                 <m.li
@@ -157,7 +151,7 @@ function CompareRowView({ row, index }: { row: CompareRow; index: number }) {
             })}
           </ul>
           <p className="mt-4 border-t border-border/70 pt-4 text-sm font-medium leading-snug text-foreground">
-            {row.result}
+            {row.aqsha.result}
           </p>
         </div>
       </div>
@@ -166,10 +160,7 @@ function CompareRowView({ row, index }: { row: CompareRow; index: number }) {
 }
 
 /**
- * WhyAqshaSection — perbandingan "minta hal yang sama, lihat bedanya":
- * tiga permintaan riset nyata, jawaban generik tool lain vs langkah-langkah
- * yang Aqsha benar-benar jalankan. Kompak, satu pola per baris, tanpa strip
- * statistik atau kutipan panjang.
+ * WhyAqshaSection — perbandingan dua workflow riset dan penulisan.
  */
 export function WhyAqshaSection() {
   const reduce = useReducedMotion();
@@ -188,15 +179,17 @@ export function WhyAqshaSection() {
             transition={{ duration: 0.6, ease: EASE_OUT }}
           >
             <h2 className="font-heading max-w-[min(100%,40rem)] text-balance text-[2.5rem] font-medium leading-[1.08] tracking-normal text-foreground sm:text-[2.75rem] sm:leading-[1.06] lg:text-[3.25rem] lg:leading-[1.05]">
-              Apa bedanya Aqsha?
+              Bukan lebih banyak tab.
+              <span className="block text-muted-foreground">
+                Lebih banyak benang yang tersambung.
+              </span>
               <Starburst
                 className="ml-3 inline-block size-7 -translate-y-2 rotate-12 sm:size-8"
                 delay={0.45}
               />
             </h2>
             <p className="mt-4 max-w-xl text-pretty text-base leading-snug text-muted-foreground sm:text-lg sm:leading-snug">
-              Kebanyakan AI cuma ngasih jawaban yang kedengeran benar. Aqsha
-              ngerjain langkahnya beneran — dan tiap langkah bisa kamu cek.
+              Aqsha memberi proyekmu satu tempat untuk bergerak dari bahan mentah menjadi draf yang bisa kamu review dengan tenang.
             </p>
           </m.div>
 
@@ -209,18 +202,6 @@ export function WhyAqshaSection() {
               className="border-t border-dashed border-foreground/25"
             />
           </div>
-
-          <m.p
-            className="mt-8 max-w-prose text-xs leading-relaxed text-muted-foreground sm:mt-10 sm:text-[13px]"
-            initial={reduce ? false : { opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={inView}
-            transition={{ delay: 0.1, duration: 0.5, ease: EASE_OUT }}
-          >
-            Data didapat dari hasil riset kami di komunitas Reddit (2025–2026)
-            — ratusan cerita pengguna yang keburu percaya referensi karangan AI.
-            Mereka udah kena, kamu nggak perlu.
-          </m.p>
         </div>
       </section>
     </MotionProvider>

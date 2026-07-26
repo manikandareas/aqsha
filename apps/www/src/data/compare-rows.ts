@@ -5,68 +5,88 @@
 
 export type CompareStepIconKey =
   | "search"
-  | "file-search"
   | "archive"
   | "book-open"
   | "check-circle"
-  | "flag"
-  | "history"
   | "pen"
-  | "file-exported";
+  | "quote";
 
 export type CompareRow = {
   prompt: string;
-  competitor: string;
-  competitorReply: string;
-  competitorNote: string;
-  steps: { icon: CompareStepIconKey; text: string }[];
-  result: string;
+  fragmented: {
+    label: "Alur terpencar";
+    detail: string;
+    note: string;
+  };
+  aqsha: {
+    label: "Di Aqsha";
+    steps: { icon: CompareStepIconKey; text: string }[];
+    result: string;
+  };
 };
 
 export const COMPARE_ROWS: readonly CompareRow[] = [
   {
-    prompt: "Cariin aku jurnal buat bab 2 skripsiku tentang stunting",
-    competitor: "ChatGPT",
-    competitorReply:
-      "Tentu! Berikut 10 jurnal yang relevan: “Determinan Stunting di Indonesia” (2021), “Analisis Faktor Gizi Balita” (2019)…",
-    competitorNote: "judulnya meyakinkan — sebagian nggak pernah ada",
-    steps: [
-      { icon: "search", text: "Nyari di OpenAlex, arXiv, dan Crossref" },
-      { icon: "file-search", text: "Ngecek tiap judul dan DOI ke paper aslinya" },
-      { icon: "archive", text: "Nyimpen PDF dan metadata ke workspace-mu" },
-    ],
-    result:
-      "Beres. 10 paper masuk workspace — semuanya beneran ada dan siap dikutip.",
+    prompt: "Mulai menulis karya tulis baru",
+    fragmented: {
+      label: "Alur terpencar",
+      detail:
+        "Topik, catatan, dokumen, dan percakapan AI dimulai di tempat yang berbeda.",
+      note: "konteksnya mudah putus di tengah jalan",
+    },
+    aqsha: {
+      label: "Di Aqsha",
+      steps: [
+        { icon: "pen", text: "Buat proyek sesuai jenis karya tulis" },
+        {
+          icon: "archive",
+          text: "Simpan topik, tenggat, dan bahan pendukung di satu rumah",
+        },
+        { icon: "book-open", text: "Mulai dari dokumen dan outline yang sama" },
+      ],
+      result:
+        "Kamu mulai dari karya yang ingin diselesaikan, bukan dari tab kosong.",
+    },
   },
   {
-    prompt: "Cek kutipan di draf ini masih nyambung sama sumbernya nggak",
-    competitor: "Perplexity",
-    competitorReply:
-      "Kutipan Anda tampak sudah sesuai dengan sumber yang dirujuk.",
-    competitorNote: "padahal paper aslinya nggak pernah dibuka",
-    steps: [
-      { icon: "book-open", text: "Buka isi asli tiap paper yang kamu kutip" },
-      { icon: "check-circle", text: "Cocokin kalimatmu ke bagian yang dirujuk" },
-      { icon: "flag", text: "Nandain kutipan yang meragukan" },
-    ],
-    result:
-      "12 kutipan aman, 2 diflag — lengkap sama letak halamannya biar kamu cek sendiri.",
+    prompt: "Menemukan sumber untuk bab berikutnya",
+    fragmented: {
+      label: "Alur terpencar",
+      detail:
+        "Paper tersimpan di banyak tab, metadata di satu tempat, dan daftar pustaka di tempat lain.",
+      note: "sumber sulit kembali ke draf yang membutuhkannya",
+    },
+    aqsha: {
+      label: "Di Aqsha",
+      steps: [
+        { icon: "search", text: "Jelajahi literatur secara paper-first" },
+        { icon: "archive", text: "Simpan sitasi ke perpustakaan akun" },
+        { icon: "quote", text: "Tautkan referensi ke proyek aktif" },
+      ],
+      result:
+        "Sumber tetap dekat dengan proyek dan draf tempat ia akan dipakai.",
+    },
   },
   {
-    prompt: "Tulisan jujurku dicap buatan AI — gimana cara buktiinnya?",
-    competitor: "ChatGPT",
-    competitorReply:
-      "Maaf, saya tidak dapat memverifikasi siapa yang menulis teks tersebut.",
-    competitorNote: "nggak ada jejak, nggak ada yang bisa dibuktiin",
-    steps: [
-      { icon: "history", text: "Ngerekam tiap langkah nulismu dari awal" },
-      {
-        icon: "pen",
-        text: "Nyatet kapan kamu nulis, kapan pakai AI, kapan nyitasi",
-      },
-      { icon: "file-exported", text: "Nyiapin jejak proses buat ditunjukkin" },
-    ],
-    result:
-      "Kamu pegang bukti proses dari draf pertama sampai final — bukan cuma hasil akhir.",
+    prompt: "Meminta bantuan untuk memperbaiki bagian draf",
+    fragmented: {
+      label: "Alur terpencar",
+      detail:
+        "Saran AI datang sebagai teks baru tanpa hubungan yang jelas dengan dokumen yang sedang kamu kerjakan.",
+      note: "perubahan penting mudah masuk tanpa sempat ditinjau",
+    },
+    aqsha: {
+      label: "Di Aqsha",
+      steps: [
+        { icon: "book-open", text: "Tandai bagian yang perlu dibantu" },
+        {
+          icon: "pen",
+          text: "Astra menyusun proposal perubahan dalam konteks proyek",
+        },
+        { icon: "check-circle", text: "Review dan terima hunk yang kamu setujui" },
+      ],
+      result:
+        "Astra membantu menggerakkan draf, sementara keputusan akhirnya tetap di tanganmu.",
+    },
   },
 ];
