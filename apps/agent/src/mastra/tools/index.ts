@@ -4,6 +4,7 @@ import { deleteArtifact } from "./delete-artifact";
 import { exportAnalysisResults } from "./export-analysis-results";
 import { formatReferences } from "./format-references";
 import { getArtifact } from "./get-artifact";
+import { getDocumentOutline } from "./get-document-outline";
 import { getDocumentSource } from "./get-document-source";
 import { getRenderPayload } from "./get-render-payload";
 import { getWorkspaceCitation } from "./get-workspace-citation";
@@ -17,6 +18,7 @@ import { runAnalysis } from "./run-analysis";
 import { runPythonAnalysis } from "./run-python-analysis";
 import { proposeArtifact } from "./propose-artifact";
 import { proposeDocumentEdit } from "./propose-document-edit";
+import { readDocumentSection } from "./read-document-section";
 import { readUrl } from "./read-url";
 import { renameWorkspace } from "./rename-workspace";
 import { requestDocumentEdit } from "./request-document-edit";
@@ -42,7 +44,10 @@ export const readTools = {
   get_workspace_citation: getWorkspaceCitation,
   // Sinyal picu AI editor native (Fase 3.5) — TANPA write DB; penyuntingan + billing dijaga route.
   request_document_edit: requestDocumentEdit,
-  // Baca sumber Typst dokumen proyek + anotasi terbuka; wajib sebelum propose_document_edit.
+  // Peta bab proyek (murah) + baca satu bab; jalur orientasi & anchor sebelum propose_document_edit.
+  get_document_outline: getDocumentOutline,
+  read_document_section: readDocumentSection,
+  // Sumber Typst penuh — hanya untuk dokumen kosong / tulis-ulang menyeluruh.
   get_document_source: getDocumentSource,
 };
 
