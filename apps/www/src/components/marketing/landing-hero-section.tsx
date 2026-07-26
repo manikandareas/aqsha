@@ -6,14 +6,8 @@ import { m, useReducedMotion } from "motion/react";
 import { ArrowDownIcon } from "@/components/icons";
 import { HeroDoodles } from "@/components/marketing/hero-doodles";
 import { MagneticButton } from "@/components/marketing/magnetic-button";
-import { ProductPreviewPlaceholder } from "@/components/marketing/product-preview-placeholder";
 import { Button } from "@/components/ui/button";
-import {
-  FEATURE_KEYS,
-  FEATURES,
-  featureHash,
-  type FeatureKey,
-} from "@/data/features";
+import { FEATURES, featureHash } from "@/data/features";
 import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { EASE_OUT, FRAME_SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -38,57 +32,139 @@ const buttonItem = (reduce: boolean | null) =>
       };
 
 /**
- * Collage-only layout for the hero frame stack. Identity (preview, title, href)
- * comes from `data/features.ts`.
+ * Two device frames instead of a four-window collage: a browser window with the
+ * phone leaning against its lower-right corner. Identity (title, hash target)
+ * still comes from `data/features.ts`; everything else here is collage layout.
+ *
+ * `media` is a still for now — swapping it for the hero loop later only means
+ * pointing `HeroFrameMedia` at a `<video>` source; the geometry stays put.
  */
-const HERO_FRAME_LAYOUT: Record<
-  FeatureKey,
+const HERO_FRAMES = [
   {
-    dotClass: string;
-    aspectClass: string;
-    positionClass: string;
-    rotate: number;
-    zBase: number;
-  }
-> = {
-  projects: {
-    dotClass: "bg-mint",
-    aspectClass: "aspect-[4/3]",
-    positionClass: "left-[-4%] bottom-0 w-[40%] sm:left-[1%] sm:w-[27%]",
-    rotate: -2,
-    zBase: 20,
-  },
-  document: {
-    dotClass: "bg-lavender",
-    aspectClass: "aspect-[16/11]",
-    positionClass:
-      "left-[34%] bottom-[6%] w-[50%] sm:left-[21.5%] sm:bottom-[8%] sm:w-[36%]",
-    rotate: 0.8,
+    key: "desktop",
+    chrome: "desktop",
+    feature: FEATURES.document,
+    label: "aqshara.com/app",
+    chipLabel: "Lihat fitur",
+    media: "/landing/hero-poster.webp",
+    mediaClass: "object-center",
+    aspectClass: "aspect-[16/10]",
+    positionClass: "bottom-0 left-[4%] w-[76%] sm:left-[8%] sm:w-[70%]",
+    rotate: -1.2,
     zBase: 10,
   },
-  references: {
-    dotClass: "bg-coral",
-    aspectClass: "aspect-[4/3]",
-    positionClass:
-      "left-[68%] bottom-[2%] w-[42%] sm:left-[46.5%] sm:bottom-[2%] sm:w-[32%]",
-    rotate: 1.6,
-    zBase: 30,
-  },
-  astra: {
-    dotClass: "bg-lemon",
-    aspectClass: "aspect-[4/3]",
-    positionClass: "hidden sm:block sm:left-[73%] sm:bottom-0 sm:w-[27%]",
-    rotate: -1.6,
+  {
+    key: "mobile",
+    chrome: "phone",
+    feature: FEATURES.astra,
+    label: "Aqsha di HP",
+    chipLabel: "Lihat",
+    media: "/landing/workspace-view.webp",
+    mediaClass: "object-[50%_30%]",
+    aspectClass: "aspect-[9/19.5]",
+    positionClass: "bottom-[2%] left-[72%] w-[24%] sm:left-[70%] sm:w-[22%]",
+    rotate: 2.6,
     zBase: 20,
   },
-};
-
-const HERO_FRAMES = FEATURE_KEYS.map((key) => ({
-  ...FEATURES[key],
-  ...HERO_FRAME_LAYOUT[key],
-}));
+] as const;
 
 type HeroFrame = (typeof HERO_FRAMES)[number];
+
+/**
+ * SafariChrome — Safari-style toolbar for the desktop frame: traffic lights in
+ * the brand accents, muted back/forward chevrons, a centered address pill, and
+ * two placeholder controls on the right. Purely decorative — the link's
+ * `aria-label` carries the accessible name.
+ */
+function SafariChrome({ label }: { label: string }) {
+  return (
+    <span
+      aria-hidden
+      className="flex items-center gap-2 border-b-2 border-border bg-card px-2 py-1.5 sm:px-2.5 sm:py-2"
+    >
+      <span className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+        <span className="size-1.5 rounded-full bg-coral sm:size-2" />
+        <span className="size-1.5 rounded-full bg-lemon sm:size-2" />
+        <span className="size-1.5 rounded-full bg-mint sm:size-2" />
+      </span>
+
+      <span className="hidden shrink-0 items-center gap-1.5 text-muted-foreground/60 sm:flex">
+        <ChevronGlyph />
+        <ChevronGlyph className="rotate-180" />
+      </span>
+
+      <span className="mx-auto flex min-w-0 max-w-[68%] items-center gap-1 rounded-full border border-border bg-background px-2 py-[3px] sm:gap-1.5 sm:px-2.5">
+        <LockGlyph />
+        <span className="truncate text-[9px] font-medium leading-none text-muted-foreground sm:text-[11px]">
+          {label}
+        </span>
+      </span>
+
+      <span className="hidden shrink-0 items-center gap-1.5 sm:flex">
+        <span className="size-2 rounded-[3px] border border-muted-foreground/45" />
+        <span className="size-2 rounded-[3px] border border-muted-foreground/45" />
+      </span>
+    </span>
+  );
+}
+
+function ChevronGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      fill="none"
+      className={cn("size-2.5", className)}
+      aria-hidden
+    >
+      <path
+        d="M7.5 2.5 L3.5 6 L7.5 9.5"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LockGlyph() {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      fill="none"
+      className="size-2 shrink-0 text-muted-foreground/70 sm:size-2.5"
+      aria-hidden
+    >
+      <path
+        d="M4 5.2V3.9a2 2 0 0 1 4 0v1.3"
+        stroke="currentColor"
+        strokeWidth={1.3}
+        strokeLinecap="round"
+      />
+      <rect x="2.6" y="5.2" width="6.8" height="4.9" rx="1.4" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * HeroFrameMedia — decorative fill for a device screen. `paper-grain` rides the
+ * screen element itself (as a child span it would collapse: the unlayered
+ * `.paper-grain` rule wins over Tailwind's `absolute`).
+ */
+function HeroFrameMedia({ frame }: { frame: HeroFrame }) {
+  return (
+    <img
+      src={frame.media}
+      alt=""
+      aria-hidden
+      decoding="async"
+      className={cn(
+        "absolute inset-0 h-full w-full object-cover",
+        frame.mediaClass,
+      )}
+    />
+  );
+}
 
 /**
  * HeroFrameCard — one window in the stack. Hover / keyboard focus lifts it
@@ -132,10 +208,12 @@ function HeroFrameCard({
       ? 35
       : frame.zBase;
 
+  const isPhone = frame.chrome === "phone";
+
   return (
     <m.a
-      href={featureHash(frame.id)}
-      aria-label={`Lihat fitur: ${frame.title}`}
+      href={featureHash(frame.feature.id)}
+      aria-label={`Lihat fitur: ${frame.feature.title}`}
       className={cn(
         "group absolute block outline-none",
         frame.positionClass,
@@ -166,35 +244,55 @@ function HeroFrameCard({
         {/* Static shadow layer, faded in — animating box-shadow itself janks. */}
         <m.span
           aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-xl [box-shadow:0_3px_0_0_var(--border),var(--shadow-soft-card)]"
+          className={cn(
+            "pointer-events-none absolute inset-0 [box-shadow:0_3px_0_0_var(--border),var(--shadow-soft-card)]",
+            isPhone ? "rounded-[1.9rem] sm:rounded-[2.2rem]" : "rounded-xl",
+          )}
           initial={false}
           animate={{ opacity: isActive ? 1 : 0 }}
           transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
         />
 
-        <span className="relative block overflow-hidden rounded-xl border-2 border-border bg-card group-focus-visible:border-ring group-focus-visible:ring-3 group-focus-visible:ring-ring/50">
-          {/* Window title bar */}
-          <span className="flex items-center gap-1.5 border-b-2 border-border bg-card px-2.5 py-1.5 sm:gap-2 sm:px-3 sm:py-2">
-            <span
-              aria-hidden
-              className={cn("size-2 shrink-0 rounded-full", frame.dotClass)}
-            />
-            <span className="truncate text-[11px] font-bold leading-none text-foreground sm:text-xs">
-              {frame.label}
-            </span>
-          </span>
+        <span
+          className={cn(
+            "relative block overflow-hidden border-2 border-border bg-card group-focus-visible:border-ring group-focus-visible:ring-3 group-focus-visible:ring-ring/50",
+            isPhone
+              ? "rounded-[1.9rem] p-1 sm:rounded-[2.2rem] sm:p-1.5"
+              : "rounded-xl",
+          )}
+        >
+          {/* Browser chrome; the phone wears a bezel instead of a toolbar. */}
+          {isPhone ? null : <SafariChrome label={frame.label} />}
 
-          <span className={cn("relative block", frame.aspectClass)}>
-            <ProductPreviewPlaceholder preview={frame.preview} />
-            <span aria-hidden className="paper-grain absolute inset-0" />
+          <span
+            className={cn(
+              "paper-grain relative block overflow-hidden",
+              frame.aspectClass,
+              isPhone && "rounded-[1.5rem] sm:rounded-[1.7rem]",
+            )}
+          >
+            <HeroFrameMedia frame={frame} />
+
+            {/* Dynamic island, sized in % so it scales with the frame width. */}
+            {isPhone ? (
+              <span
+                aria-hidden
+                className="absolute left-1/2 top-[1.6%] z-1 h-[3.2%] w-[36%] -translate-x-1/2 rounded-full bg-foreground"
+              />
+            ) : null}
 
             {/* Hover/focus CTA — asymmetric timing: enter 180ms, exit faster. */}
             <span
               aria-hidden
-              className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
+              className="pointer-events-none absolute inset-x-0 bottom-3 z-1 flex justify-center"
             >
               <m.span
-                className="lip-static inline-flex items-center gap-1 rounded-full border-2 border-border bg-background px-3 py-1 text-xs font-bold text-foreground"
+                className={cn(
+                  "lip-static inline-flex items-center gap-1 rounded-full border-2 border-border bg-background font-bold text-foreground",
+                  isPhone
+                    ? "px-2 py-0.5 text-[10px]"
+                    : "px-3 py-1 text-xs",
+                )}
                 initial={false}
                 animate={
                   isActive
@@ -206,8 +304,8 @@ function HeroFrameCard({
                   ease: [0.23, 1, 0.32, 1],
                 }}
               >
-                Lihat fitur
-                <ArrowDownIcon size={14} />
+                {frame.chipLabel}
+                <ArrowDownIcon size={isPhone ? 11 : 14} />
               </m.span>
             </span>
           </span>
@@ -220,9 +318,9 @@ function HeroFrameCard({
 /**
  * LandingHeroSection — centered editorial hero on bg-background: faint
  * blueprint grid, pencil doodles in the margins, a static waitlist badge,
- * big centered heading, two design-system CTAs, and an overlapping stack of
- * feature frames clipped by the hero's bottom edge (each one a shortcut into
- * its feature block).
+ * big centered heading, two design-system CTAs, and two device frames below —
+ * a browser window with the phone leaning on its lower-right corner, each a
+ * shortcut into the feature block it stands for.
  */
 export function LandingHeroSection() {
   const reduce = useReducedMotion();
@@ -248,7 +346,9 @@ export function LandingHeroSection() {
           utuh dan marquee di bawahnya ikut mengintip, tapi konten tetap
           seimbang di tengah; desktop tetap full viewport. */}
       <div className="relative z-20 mx-auto flex min-h-[88svh] w-full max-w-7xl flex-col sm:min-h-svh">
-        <div className="flex flex-1 flex-col items-center justify-center px-4 pb-8 pt-24 text-center sm:px-6 sm:pb-10 sm:pt-40">
+        {/* Mobile keeps a deliberate gap under the fixed header — pt-32 clears
+            the 64px bar with room to breathe; desktop keeps its taller pt-40. */}
+        <div className="flex flex-1 flex-col items-center justify-center px-4 pb-8 pt-32 text-center sm:px-6 sm:pb-10 sm:pt-40">
           <m.a
             href={WAITLIST_PATH}
             className="lip-static mb-6 inline-flex max-w-full items-center gap-2 rounded-full border-2 border-border bg-card py-1 pl-1.5 pr-3.5 text-sm text-foreground transition-colors hover:bg-muted"
@@ -303,11 +403,11 @@ export function LandingHeroSection() {
           </m.div>
         </div>
 
-        {/* Frame stack — fully visible above the hero's bottom edge. The
+        {/* Device stack — fully visible above the hero's bottom edge. The
             container's aspect tracks the tallest frame (widths are % of the
             container, so heights scale with it); bottom margin leaves room
             for the tilted corners and the hover shadow. */}
-        <div className="relative mx-auto mb-6 aspect-[7/3] w-full max-w-7xl sm:mb-8 sm:aspect-[3/1]">
+        <div className="relative mx-auto mb-6 aspect-[7/4] w-full max-w-7xl sm:mb-8 sm:aspect-[2/1]">
           {HERO_FRAMES.map((frame, index) => (
             <HeroFrameCard
               key={frame.key}
