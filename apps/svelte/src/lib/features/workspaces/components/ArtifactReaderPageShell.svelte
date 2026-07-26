@@ -9,11 +9,13 @@
 	 * via `useArtifactDetailData(() => artifactId, () => workspaceId)`, and passes the data DOWN to `ArtifactDetailView`
 	 * (variant="page"). Astra chat was removed here — research chat lives inside a project now.
 	 */
-	let { workspaceId, artifactId }: { workspaceId: string; artifactId: string } = $props();
+	// `workspaceId` null untuk paper perpustakaan level akun: nama proyek tak dimuat,
+	// tetapi artifact-nya tetap terbaca.
+	let { workspaceId, artifactId }: { workspaceId: string | null; artifactId: string } = $props();
 
 	const data = useArtifactDetailData(
 		() => artifactId,
-		() => workspaceId
+		() => workspaceId ?? ''
 	);
 
 	// Tab title: the loaded artifact title (nested one level under the composite), else "Workspaces".
@@ -24,6 +26,6 @@
 
 <main class="flex h-svh min-h-0 flex-col overflow-hidden bg-background">
 	<div class="min-h-0 flex-1 overflow-y-auto">
-		<ArtifactDetailView {data} {artifactId} {workspaceId} variant="page" />
+		<ArtifactDetailView {data} {artifactId} workspaceId={workspaceId ?? undefined} variant="page" />
 	</div>
 </main>

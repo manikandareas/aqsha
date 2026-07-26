@@ -269,14 +269,13 @@
 						{citation.tags.length > 0 ? citation.tags.join(', ') : '—'}
 					</dd>
 				</div>
-				{#if citation.artifactId && workspaceId}
+				{#if citation.artifactId}
 					<div class="grid grid-cols-[6rem_1fr] items-baseline gap-2">
-						<dt class="text-[12px] font-semibold text-muted-foreground">Artifact</dt>
+						<dt class="text-[12px] font-semibold text-muted-foreground">Paper</dt>
 						<dd class="min-w-0 font-medium text-foreground">
 							<span class="flex flex-wrap items-center gap-2">
 								<a
-									href={resolve('/app/(product)/projects/[projectId]/artifacts/[artifactId]', {
-										projectId: workspaceId,
+									href={resolve('/app/(product)/artifacts/[artifactId]', {
 										artifactId: citation.artifactId
 									})}
 									class="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
