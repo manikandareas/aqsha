@@ -5,7 +5,7 @@ import { animate, useInView, useReducedMotion } from "motion/react";
 
 import { MotionProvider } from "@/components/motion-provider";
 
-const LITERATURE_COUNT = 322_000_000;
+const LITERATURE_COUNT = 322_192_000;
 const countFormatter = new Intl.NumberFormat("id-ID");
 
 const UNIVERSITY_MARKS = [

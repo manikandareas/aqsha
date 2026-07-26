@@ -7,6 +7,7 @@ import {
   ArchiveIcon,
   BookOpenIcon,
   CheckCircleIcon,
+  FileSearchIcon,
   PenIcon,
   QuoteIcon,
   SearchIcon,
@@ -26,6 +27,7 @@ type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 const STEP_ICONS: Record<CompareStepIconKey, IconComponent> = {
   search: SearchIcon,
+  "file-search": FileSearchIcon,
   archive: ArchiveIcon,
   "book-open": BookOpenIcon,
   "check-circle": CheckCircleIcon,
@@ -179,17 +181,14 @@ export function WhyAqshaSection() {
             transition={{ duration: 0.6, ease: EASE_OUT }}
           >
             <h2 className="font-heading max-w-[min(100%,40rem)] text-balance text-[2.5rem] font-medium leading-[1.08] tracking-normal text-foreground sm:text-[2.75rem] sm:leading-[1.06] lg:text-[3.25rem] lg:leading-[1.05]">
-              Bukan lebih banyak tab.
-              <span className="block text-muted-foreground">
-                Lebih banyak benang yang tersambung.
-              </span>
+              Apa bedanya Aqsha?
               <Starburst
                 className="ml-3 inline-block size-7 -translate-y-2 rotate-12 sm:size-8"
                 delay={0.45}
               />
             </h2>
             <p className="mt-4 max-w-xl text-pretty text-base leading-snug text-muted-foreground sm:text-lg sm:leading-snug">
-              Aqsha memberi proyekmu satu tempat untuk bergerak dari bahan mentah menjadi draf yang bisa kamu review dengan tenang.
+              Aqsha dibangun dari kebutuhan mahasiswa dan peneliti Indonesia: mencari literatur, menyusun draf, dan merevisi skripsi, tesis, disertasi, paper, proposal, atau makalah tanpa pindah-pindah tempat.
             </p>
           </m.div>
 

@@ -5,6 +5,7 @@
 
 export type CompareStepIconKey =
   | "search"
+  | "file-search"
   | "archive"
   | "book-open"
   | "check-circle"
@@ -14,12 +15,12 @@ export type CompareStepIconKey =
 export type CompareRow = {
   prompt: string;
   fragmented: {
-    label: "Alur terpencar";
+    label: string;
     detail: string;
     note: string;
   };
   aqsha: {
-    label: "Di Aqsha";
+    label: string;
     steps: { icon: CompareStepIconKey; text: string }[];
     result: string;
   };
@@ -27,66 +28,72 @@ export type CompareRow = {
 
 export const COMPARE_ROWS: readonly CompareRow[] = [
   {
-    prompt: "Mulai menulis karya tulis baru",
+    prompt: "Cariin aku jurnal buat bab 2 skripsiku tentang stunting",
     fragmented: {
-      label: "Alur terpencar",
+      label: "ChatGPT",
       detail:
-        "Topik, catatan, dokumen, dan percakapan AI dimulai di tempat yang berbeda.",
-      note: "konteksnya mudah putus di tengah jalan",
+        "Tentu! Berikut 10 jurnal yang relevan: ‘Determinan Stunting di Indonesia’ (2021), ‘Analisis Faktor Gizi Balita’ (2019)…",
+      note: "Judulnya meyakinkan — setelah dicek, ternyata tidak ada."
     },
     aqsha: {
-      label: "Di Aqsha",
+      label: "Aqsha",
       steps: [
-        { icon: "pen", text: "Buat proyek sesuai jenis karya tulis" },
+        { icon: "search", text: "Mencari jurnal yang relevan dengan topikmu" },
+        { icon: "file-search", text: "Ngecek tiap judul dan DOI ke paper aslinya" },
         {
           icon: "archive",
-          text: "Simpan topik, tenggat, dan bahan pendukung di satu rumah",
+          text: "Nyimpen PDF dan metadata ke proyek skripsimu",
         },
-        { icon: "book-open", text: "Mulai dari dokumen dan outline yang sama" },
       ],
       result:
-        "Kamu mulai dari karya yang ingin diselesaikan, bukan dari tab kosong.",
+        "Beres. 10 paper masuk proyek—semuanya beneran ada dan siap dikutip.",
     },
   },
   {
-    prompt: "Menemukan sumber untuk bab berikutnya",
+    prompt: "Rewrite buat jadi lebih manusiawi, bukan AI slop.",
     fragmented: {
-      label: "Alur terpencar",
+      label: "ChatGPT",
       detail:
-        "Paper tersimpan di banyak tab, metadata di satu tempat, dan daftar pustaka di tempat lain.",
-      note: "sumber sulit kembali ke draf yang membutuhkannya",
+        "Penelitian ini sangat penting — sebuah langkah strategis untuk masyarakat yang lebih baik.",
+      note: "Manusiawi di permukaan, isinya tetap slop.",
     },
     aqsha: {
-      label: "Di Aqsha",
+      label: "Aqsha",
       steps: [
-        { icon: "search", text: "Jelajahi literatur secara paper-first" },
-        { icon: "archive", text: "Simpan sitasi ke perpustakaan akun" },
-        { icon: "quote", text: "Tautkan referensi ke proyek aktif" },
-      ],
-      result:
-        "Sumber tetap dekat dengan proyek dan draf tempat ia akan dipakai.",
-    },
-  },
-  {
-    prompt: "Meminta bantuan untuk memperbaiki bagian draf",
-    fragmented: {
-      label: "Alur terpencar",
-      detail:
-        "Saran AI datang sebagai teks baru tanpa hubungan yang jelas dengan dokumen yang sedang kamu kerjakan.",
-      note: "perubahan penting mudah masuk tanpa sempat ditinjau",
-    },
-    aqsha: {
-      label: "Di Aqsha",
-      steps: [
-        { icon: "book-open", text: "Tandai bagian yang perlu dibantu" },
         {
-          icon: "pen",
-          text: "Astra menyusun proposal perubahan dalam konteks proyek",
+          icon: "book-open",
+          text: "Aqsha dilatih untuk berpikir dan menulis akademik",
         },
-        { icon: "check-circle", text: "Review dan terima hunk yang kamu setujui" },
+        {
+          icon: "archive",
+          text: "Memakai topik, sumber, dan draf dari proyekmu",
+        },
+        { icon: "pen", text: "Mengusulkan rewrite yang bisa kamu review" },
       ],
       result:
-        "Astra membantu menggerakkan draf, sementara keputusan akhirnya tetap di tanganmu.",
+        "Lebih manusiawi, lebih tajam, dan tetap terasa seperti kamu yang menulis.",
+    },
+  },
+  {
+    prompt:
+      "Referensiku sudah ada di Mendeley dan Zotero. Biar langsung nyambung ke skripsi gimana?",
+    fragmented: {
+      label: "Mendeley / Zotero",
+      detail:
+        "Referensi tersimpan rapi di library, tetapi masih terpisah dari proyek dan draf yang sedang kamu tulis.",
+      note: "Library rapi, konteks proyek masih terpisah.",
+    },
+    aqsha: {
+      label: "Aqsha",
+      steps: [
+        { icon: "archive", text: "Impor sitasi dari Mendeley atau Zotero" },
+        {
+          icon: "book-open",
+          text: "Kelola referensi di Citation Manager Aqsha",
+        },
+        { icon: "quote", text: "Sitasi jadi cepat dan tepat" },
+      ],
+      result: "Sitasi tetap terhubung ke proyek dan drafmu.",
     },
   },
 ];

@@ -16,7 +16,7 @@ test("landing uses a worldwide literature marquee rather than customer social pr
   expect(indexSource).toContain('<AudienceMarqueeSection client:visible />');
   expect(indexSource).not.toContain("UniversityMarqueeSection");
   expect(indexSource).not.toContain("TestimonialSection");
-  expect(marqueeSource).toContain("LITERATURE_COUNT = 322_000_000");
+  expect(marqueeSource).toContain("LITERATURE_COUNT = 322_192_000");
   expect(marqueeSource).toContain("LiveLiteratureCount");
   expect(marqueeSource).toContain("marquee-track");
   expect(marqueeSource).toContain("langsung ke skripsimu");
