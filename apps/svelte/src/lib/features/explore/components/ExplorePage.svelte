@@ -11,10 +11,12 @@
 	import { readableApiErrorMessage } from '$lib/errors';
 	import AppPageHeader from '$lib/components/layout/AppPageHeader.svelte';
 	import DetailSplitLayout from '$lib/components/layout/DetailSplitLayout.svelte';
+	import { PanelInline } from '$lib/hooks/panel-inline.svelte';
 	import { DeferredQueryRegion, type DeferredQueryResult } from '$lib/query';
 	import { FEED_TOPIC_LABELS, type FeedTopic } from '$lib/features/discovery/types';
 	import { useLiteratureSearch } from '$lib/features/discovery/api';
 	import { applyExploreUrl, readExploreUrl } from '../explore-url-model';
+	import { writeFilterPanelCookie } from '../filter-panel-state';
 	import { useLiteratureCatalog } from '../api';
 	import {
 		LiteratureSearchDraft,
@@ -45,7 +47,14 @@
 	 * `replaceState`, never a full navigation. `topic` only drives the curated feed and is kept for
 	 * legacy links/breadcrumb.
 	 */
-	let { feedResult }: { feedResult: Promise<DeferredQueryResult> } = $props();
+	let {
+		feedResult,
+		initialFilterPanelOpen = false
+	}: {
+		feedResult: Promise<DeferredQueryResult>;
+		/** Restored from the `explore_filters_state` cookie by the page load. */
+		initialFilterPanelOpen?: boolean;
+	} = $props();
 
 	const EMPTY_CATALOG: {
 		categories: Array<{ id: LiteratureFilterCategoryId; label: string }>;
@@ -91,7 +100,17 @@
 		() => authReady() && literatureMode
 	);
 
-	let filterPanelOpen = $state(false);
+	// The stored preference describes the docked rail. `PanelInline` reports the real match as soon
+	// as it runs in the browser (its `true` is only an SSR fallback), so a narrow client starts
+	// closed rather than unfurling a bottom sheet over the page on load.
+	const panelInline = new PanelInline();
+	let filterPanelOpen = $state(untrack(() => initialFilterPanelOpen && panelInline.current));
+
+	function setFilterPanelOpen(next: boolean): void {
+		filterPanelOpen = next;
+		// Only persist the docked state — a drawer open is a momentary action, not a preference.
+		if (panelInline.current) writeFilterPanelCookie(next);
+	}
 
 	function syncAppliedFromLocation(): void {
 		applied = readExploreUrl(new SvelteURL(window.location.href).searchParams);
@@ -134,9 +153,10 @@
 		draft.filters = patch.filters;
 	}
 
+	// Applying does not close the docked rail — the results reflow beside it, so there is nothing to
+	// get out of the way of. The panel closes itself after Apply only in its drawer form.
 	function handleFilterApply(): void {
 		commitApplied(draft.snapshot());
-		filterPanelOpen = false;
 	}
 
 	function handleFilterReset(): void {
@@ -151,12 +171,12 @@
 	// staged draft back, so an abandoned edit can never ride along on the next query submit.
 	function closeFilterPanel(): void {
 		if (filterPanelOpen) handleFilterDiscard();
-		filterPanelOpen = false;
+		setFilterPanelOpen(false);
 	}
 
 	function toggleFilterPanel(): void {
 		if (filterPanelOpen) closeFilterPanel();
-		else filterPanelOpen = true;
+		else setFilterPanelOpen(true);
 	}
 
 	// Sort is a direct toolbar control, not gated by Apply — commit it against the currently applied

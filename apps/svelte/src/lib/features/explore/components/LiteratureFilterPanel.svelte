@@ -49,6 +49,13 @@
 	const panelInline = new PanelInline();
 	const inline = $derived(panelInline.current);
 
+	// A drawer covers the results it just filtered, so it steps aside once Apply lands. The docked
+	// rail has no such conflict and stays put.
+	function handleApply(): void {
+		onApply();
+		if (!inline) onClose();
+	}
+
 	// Keep the body mounted through the inline close transition so the column fades instead of
 	// blanking mid-slide.
 	let closing = $state(false);
@@ -91,7 +98,7 @@
 		</div>
 
 		<div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pt-1">
-			<LiteratureFilterEditor {catalog} {draft} {onChange} {onApply} {onReset} />
+			<LiteratureFilterEditor {catalog} {draft} {onChange} onApply={handleApply} {onReset} />
 		</div>
 	</div>
 {/snippet}

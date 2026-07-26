@@ -8,4 +8,7 @@
 
 <PageTitle title="Jelajahi" />
 
-<ExplorePage feedResult={data.exploreBootstrap.deferred.feed} />
+<ExplorePage
+	feedResult={data.exploreBootstrap.deferred.feed}
+	initialFilterPanelOpen={data.filterPanelOpen}
+/>
