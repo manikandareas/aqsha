@@ -29,14 +29,6 @@ function parseRefs(raw: string | undefined): DiscoveryItemRef[] | undefined {
  * Route feed/discovery (P4). Read path tipis: auth → validasi `t` → 1 FeedService call.
  * Tanpa rate-limit (read). Save/hide/interaction + search + reader di slice berikutnya.
  */
-const FEED_KIND = t.Union([
-  t.Literal("paper"),
-  t.Literal("news"),
-  t.Literal("claim"),
-  t.Literal("topic"),
-  t.Literal("idea"),
-]);
-
 export const feed = new Elysia({ prefix: "/feed" })
   .use(authMacro)
   // GET /feed — cursor-paginated For You/Top/Topics (infinite scroll).
@@ -48,7 +40,6 @@ export const feed = new Elysia({ prefix: "/feed" })
         cursor: query.cursor,
         limit: query.limit,
         mode: query.mode,
-        kinds: query.kinds,
         topic: query.topic,
       });
     },
@@ -60,7 +51,6 @@ export const feed = new Elysia({ prefix: "/feed" })
         mode: t.Optional(
           t.Union([t.Literal("foryou"), t.Literal("top"), t.Literal("topics")]),
         ),
-        kinds: t.Optional(t.Array(FEED_KIND)),
         topic: t.Optional(
           t.Union([
             t.Literal("sains_teknologi"),
@@ -80,7 +70,6 @@ export const feed = new Elysia({ prefix: "/feed" })
       const { db } = getDb();
       return FeedService.getFeed(db, ownerUserId, {
         limit: query.limit,
-        kinds: query.kinds,
         serendipity: query.serendipity,
       }).then((items) => ({ items }));
     },
@@ -88,7 +77,6 @@ export const feed = new Elysia({ prefix: "/feed" })
       auth: true,
       query: t.Object({
         limit: t.Optional(t.Numeric()),
-        kinds: t.Optional(t.Array(FEED_KIND)),
         serendipity: t.Optional(t.Boolean()),
       }),
     },

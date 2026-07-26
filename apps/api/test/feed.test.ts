@@ -1,4 +1,4 @@
-import { buildFeedItemRow, type FeedItemInput } from "@aqsha/services";
+import { buildFeedItemRow, type LiteraturePaper } from "@aqsha/services";
 import { createDb, FeedRepo, PaperCacheRepo } from "@aqsha/db";
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 
@@ -14,7 +14,7 @@ const itest = DATABASE_URL ? test : test.skip;
 // Prefix `feedtest_` di luar `user_itest_%`/`arttest_` agar cleanup test lain tak bentrok.
 const suffix = Math.floor(Math.random() * 1e9);
 const OWNER = `feedtest_${suffix}`;
-const DEDUPE = (s: string) => `feedtest_${suffix}:${s}`;
+const KEY = (s: string) => `feedtest_${suffix}:${s}`;
 
 const { app } = await import("../src/index");
 const tok = (owner: string) => `tok_${owner}`;
@@ -35,31 +35,36 @@ function readJson(res: Response): Promise<any> {
   return res.json();
 }
 
-const ITEM_A = DEDUPE("a");
-const ITEM_B = DEDUPE("b");
-const ITEM_C = DEDUPE("c");
-const ITEM_NEWS = DEDUPE("legacy-news");
-const ITEM_NEWS2 = DEDUPE("legacy-news-2");
+const ITEM_A = KEY("a");
+const ITEM_B = KEY("b");
+const ITEM_C = KEY("c");
 // Slash + colon di key (mirip `doi:10.x/y`) → regression guard transport: key WAJIB lewat
 // query param, bukan path segment (lihat papers route).
 const PAPER_KEY = `doi:10.${suffix}/feedtest`;
 let idA = "";
 let idB = "";
 let idC = "";
-let idNews = "";
-let idNews2 = "";
 
-function input(dedupeKey: string, over: Partial<FeedItemInput>): FeedItemInput {
+function input(key: string, over: Partial<LiteraturePaper>): LiteraturePaper {
   return {
-    kind: "paper",
-    title: "Item",
-    summary: "ringkasan",
-    url: "https://example.org",
-    provider: "openalex",
-    sourceLabel: "OpenAlex",
+    key,
+    title: "Paper uji",
+    snippet: null,
+    doi: null,
+    url: "https://example.org/x",
+    pdfUrl: null,
+    hasPdf: false,
+    authors: [],
+    year: null,
+    publicationDate: null,
+    venue: null,
+    citedByCount: null,
+    isOpenAccess: false,
+    oaStatus: null,
+    workType: null,
+    language: null,
+    isRetracted: false,
     topics: ["physics"],
-    trendScore: 1,
-    dedupeKey,
     ...over,
   };
 }
@@ -70,7 +75,7 @@ async function cleanup() {
   await client`delete from feed_interactions where owner_user_id = ${OWNER}`;
   await client`delete from saved_feed_items where owner_user_id = ${OWNER}`;
   await client`delete from hidden_feed_items where owner_user_id = ${OWNER}`;
-  await client`delete from feed_items where dedupe_key like ${`feedtest_${suffix}:%`}`;
+  await client`delete from feed_items where dedupe_key like ${`paper:feedtest_${suffix}:%`}`;
   await client`delete from explore_papers where key like ${`feedtest_${suffix}:%`}`;
   await client`delete from user_feed_interests where owner_user_id = ${OWNER}`;
   await client`delete from users where owner_user_id = ${OWNER}`;
@@ -83,36 +88,21 @@ beforeAll(async () => {
   const { db, client } = createDb(DATABASE_URL);
   await client`insert into users (owner_user_id, clerk_user_id, created_at, updated_at) values (${OWNER}, ${OWNER}, 1, 1)`;
   const now = Date.now();
-  const a = await FeedRepo.upsertByDedupeKey(db, buildFeedItemRow(input(ITEM_A, { title: "Alpha", publishedAt: now - 1000 }), now));
-  const b = await FeedRepo.upsertByDedupeKey(db, buildFeedItemRow(input(ITEM_B, { title: "Beta", publishedAt: now }), now));
+  const a = await FeedRepo.upsertByDedupeKey(
+    db,
+    buildFeedItemRow(input(ITEM_A, { title: "Alpha", publicationDate: "2025-01-01" }), now),
+  );
+  const b = await FeedRepo.upsertByDedupeKey(
+    db,
+    buildFeedItemRow(input(ITEM_B, { title: "Beta", publicationDate: "2025-06-01" }), now),
+  );
   const c = await FeedRepo.upsertByDedupeKey(
     db,
-    buildFeedItemRow(input(ITEM_C, { title: "Gamma", publishedAt: now - 500, topics: ["physics"] }), now),
+    buildFeedItemRow(input(ITEM_C, { title: "Gamma", publicationDate: "2025-03-01" }), now),
   );
   idA = a.id;
   idB = b.id;
   idC = c.id;
-  // Row legacy kind=news (lane GDELT sudah dicabut, tetap valid di tabel) — `publishedAt` paling
-  // segar di seluruh lane nonpaper supaya pasti masuk halaman balanced pertama; feed API tak boleh
-  // pernah menyajikannya meski begitu.
-  const newsItem = await FeedRepo.upsertByDedupeKey(
-    db,
-    buildFeedItemRow(
-      input(ITEM_NEWS, { kind: "news", title: "Delta (legacy news)", publishedAt: now + 10_000 }),
-      now,
-    ),
-  );
-  idNews = newsItem.id;
-  // Kedua row news ini agar getRelatedFeedItems(anchor=idNews) punya kandidat same-kind
-  // buat dibuktikan tetap tersaring (anchor legacy news → related HARUS kosong).
-  const newsItem2 = await FeedRepo.upsertByDedupeKey(
-    db,
-    buildFeedItemRow(
-      input(ITEM_NEWS2, { kind: "news", title: "Epsilon (legacy news 2)", publishedAt: now + 9_000 }),
-      now,
-    ),
-  );
-  idNews2 = newsItem2.id;
   await PaperCacheRepo.upsert(db, {
     key: PAPER_KEY,
     title: "Cached Paper",
@@ -140,17 +130,9 @@ describe("api feed routes", () => {
     const r = await req("GET", "/feed?mode=foryou&limit=40", tok(OWNER));
     expect(r.status).toBe(200);
     const body = await readJson(r);
-    const ids = body.items.map((i: { _id: string }) => i._id);
+    const ids = body.items.map((i: { feedItemId: string }) => i.feedItemId);
     expect(ids).toContain(idA);
     expect(ids).toContain(idB);
-  });
-
-  itest("GET /feed tidak pernah menyajikan item kind=news (row legacy tetap di tabel)", async () => {
-    // idNews sengaja paling segar di seluruh lane nonpaper → tanpa filter akan menang balanced page.
-    const r = await req("GET", "/feed?mode=foryou&limit=40", tok(OWNER));
-    expect(r.status).toBe(200);
-    const ids = (await readJson(r)).items.map((i: { _id: string }) => i._id);
-    expect(ids).not.toContain(idNews);
   });
 
   itest("GET /feed/:id ada → 200, tak ada → 404", async () => {
@@ -158,19 +140,6 @@ describe("api feed routes", () => {
     expect(ok.status).toBe(200);
     const missing = await req("GET", "/feed/00000000-0000-0000-0000-000000000000", tok(OWNER));
     expect(missing.status).toBe(404);
-  });
-
-  itest("GET /feed/:id untuk row legacy kind=news → 404 (sama seperti id tak ada)", async () => {
-    const r = await req("GET", `/feed/${idNews}`, tok(OWNER));
-    expect(r.status).toBe(404);
-  });
-
-  itest("GET /feed/:id/related anchor legacy news → kosong (tak surface row news lain)", async () => {
-    const r = await req("GET", `/feed/${idNews}/related`, tok(OWNER));
-    expect(r.status).toBe(200);
-    const ids = (await readJson(r)).items.map((i: { _id: string }) => i._id);
-    expect(ids).toEqual([]);
-    expect(ids).not.toContain(idNews2);
   });
 
   itest("POST /feed/discovery/hide → item hilang dari /feed", async () => {
@@ -181,7 +150,7 @@ describe("api feed routes", () => {
     expect(await readJson(h)).toEqual({ ok: true });
 
     const r = await req("GET", "/feed?mode=foryou&limit=40", tok(OWNER));
-    const ids = (await readJson(r)).items.map((i: { _id: string }) => i._id);
+    const ids = (await readJson(r)).items.map((i: { feedItemId: string }) => i.feedItemId);
     expect(ids).not.toContain(idA);
     expect(ids).toContain(idB);
   });
@@ -206,15 +175,14 @@ describe("api feed routes", () => {
     expect(await readJson(s)).toEqual({ saved: false });
   });
 
-  itest("GET /feed/:id/related → same-kind, exclude self + hidden + news", async () => {
-    // idA di-hide di test sebelumnya → related(idB) hanya berisi idC (paper, tak hidden).
+  itest("GET /feed/:id/related → exclude self + hidden", async () => {
+    // idA di-hide di test sebelumnya → related(idB) memuat idC tapi bukan idA.
     const r = await req("GET", `/feed/${idB}/related`, tok(OWNER));
     expect(r.status).toBe(200);
-    const ids = (await readJson(r)).items.map((i: { _id: string }) => i._id);
+    const ids = (await readJson(r)).items.map((i: { feedItemId: string }) => i.feedItemId);
     expect(ids).toContain(idC);
     expect(ids).not.toContain(idB); // exclude self
     expect(ids).not.toContain(idA); // hidden
-    expect(ids).not.toContain(idNews); // related off a paper never surfaces legacy news rows
   });
 
   itest("GET /papers/detail cache-only (fetchOnMiss=false) → paper ter-cache", async () => {
@@ -227,5 +195,20 @@ describe("api feed routes", () => {
     const paper = await readJson(r);
     expect(paper?.key).toBe(PAPER_KEY);
     expect(paper?.title).toBe("Cached Paper");
+  });
+});
+
+describe("GET /feed bentuk item", () => {
+  itest("item membawa feedItemId dan field paper, tanpa field mesin", async () => {
+    const res = await req("GET", "/feed?limit=40", tok(OWNER));
+    const body = await readJson(res);
+    const item = body.items.find((i: { key: string }) => i.key === ITEM_B);
+    expect(item).toBeDefined();
+    expect(typeof item.feedItemId).toBe("string");
+    expect(item.title).toBe("Beta");
+    expect(item).not.toHaveProperty("summary");
+    expect(item).not.toHaveProperty("provider");
+    expect(item).not.toHaveProperty("trendScore");
+    expect(item).not.toHaveProperty("kind");
   });
 });
