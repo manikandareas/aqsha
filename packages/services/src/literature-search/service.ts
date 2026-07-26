@@ -2,7 +2,7 @@ import type { Db } from "@aqsha/db";
 import { throwAppError } from "@aqsha/db";
 import { getCache, putCache } from "../papers/external-cache";
 import { PaperCacheService } from "../paper-cache.service";
-import type { ExplorePaperInput } from "../explore/model";
+import { literaturePaperToExplorePaper } from "../papers/work";
 import {
   normalizeLiteratureSearch,
   publicLiteratureCatalog,
@@ -80,28 +80,6 @@ function literatureCacheKey(args: {
   return `literature:v1:${payload}`;
 }
 
-function toExplorePaperInput(paper: LiteraturePaper): ExplorePaperInput {
-  return {
-    key: paper.key,
-    title: paper.title,
-    snippet: paper.snippet ?? "",
-    abstract: paper.snippet ?? undefined,
-    url: paper.url ?? (paper.doi ? `https://doi.org/${paper.doi}` : paper.key),
-    pdfUrl: paper.pdfUrl ?? undefined,
-    doi: paper.doi ?? undefined,
-    openalexId: paper.key.startsWith("https://openalex.org/") ? paper.key : undefined,
-    provider: "OpenAlex",
-    sourceLabel: paper.venue ?? "OpenAlex",
-    authors: paper.authors,
-    year: paper.year ?? undefined,
-    publicationDate: paper.publicationDate ?? undefined,
-    venue: paper.venue ?? undefined,
-    citedByCount: paper.citedByCount ?? undefined,
-    isOpenAccess: paper.isOpenAccess,
-    topics: paper.topics,
-  };
-}
-
 function parseCachedPage(valueJson: string): LiteratureSearchPage | null {
   try {
     const parsed = JSON.parse(valueJson) as LiteratureSearchPage;
@@ -152,11 +130,7 @@ export const LiteratureSearchService = {
     if (cached) {
       const page = parseCachedPage(cached.valueJson);
       if (page) {
-        await PaperCacheService.upsert(
-          db,
-          page.items.map(toExplorePaperInput),
-          now,
-        );
+        await PaperCacheService.upsert(db, page.items.map(literaturePaperToExplorePaper), now);
         return page;
       }
     }
@@ -184,7 +158,7 @@ export const LiteratureSearchService = {
       page.items.length > 0 ? "ready" : "empty",
       JSON.stringify(page),
     );
-    await PaperCacheService.upsert(db, page.items.map(toExplorePaperInput), now);
+    await PaperCacheService.upsert(db, page.items.map(literaturePaperToExplorePaper), now);
     return page;
   },
 };
