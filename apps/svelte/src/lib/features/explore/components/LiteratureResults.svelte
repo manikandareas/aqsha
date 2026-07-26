@@ -13,7 +13,7 @@
 		type AppliedLiteratureSearchState
 	} from '../literature-search-state.svelte';
 	import type { LiteraturePaper, LiteratureSortId } from '../literature-search-types';
-	import { exploreSourceToSearchInput, literaturePaperToExploreSource } from '../explore-source';
+	import { literaturePaperToSearchInput } from '../literature-search-types';
 	import ExploreSourceRow from './ExploreSourceRow.svelte';
 	import ExploreSourceListSkeleton from './ExploreSourceListSkeleton.svelte';
 	import LiteratureBatchBar from './LiteratureBatchBar.svelte';
@@ -67,9 +67,7 @@
 	const isEmpty = $derived(!query.isPending && !query.isError && items.length === 0);
 
 	const selectedSources = $derived<SearchSourceInput[]>(
-		items
-			.filter((item) => selectedKeys.has(item.key))
-			.map((item) => exploreSourceToSearchInput(literaturePaperToExploreSource(item)))
+		items.filter((item) => selectedKeys.has(item.key)).map(literaturePaperToSearchInput)
 	);
 
 	function toggleSelected(key: string, checked: boolean): void {
@@ -146,7 +144,7 @@
 		<div class="overflow-hidden" aria-label="Hasil pencarian">
 			{#each items as paper (paper.key)}
 				<ExploreSourceRow
-					source={literaturePaperToExploreSource(paper)}
+					source={paper}
 					selected={selectedKeys.has(paper.key)}
 					onSelectedChange={(selected) => toggleSelected(paper.key, selected)}
 				/>

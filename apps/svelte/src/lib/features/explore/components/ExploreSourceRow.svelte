@@ -11,7 +11,7 @@
 		ThumbsDownIcon
 	} from '$lib/icons';
 	import { formatCitationCount } from '$lib/features/discovery/format';
-	import type { ExploreSource } from '../explore-source';
+	import type { LiteraturePaper } from '../literature-search-types';
 	import SaveSourceButton from '$lib/features/discovery/components/SaveSourceButton.svelte';
 	import type { SourceSaveInput } from '$lib/features/discovery/source-save';
 
@@ -22,12 +22,15 @@
 		onSaved,
 		onHide
 	}: {
-		source: ExploreSource;
+		source: LiteraturePaper;
 		selected?: boolean;
 		onSelectedChange: (selected: boolean) => void;
 		onSaved?: () => void;
 		onHide?: () => void;
 	} = $props();
+
+	// Every row is a keyed paper now, so the reader link is always internal.
+	const detailHref = $derived(`/app/explore/${encodeURIComponent(source.key)}`);
 
 	const sourceLine = $derived(
 		[
@@ -83,17 +86,15 @@
 				</div>
 				<h3 class="text-[15px] leading-5 font-semibold break-words text-foreground sm:text-base">
 					<a
-						href={source.href}
-						target={source.external ? '_blank' : undefined}
-						rel={source.external ? 'noreferrer' : undefined}
+						href={detailHref}
 						class="rounded-sm underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 						>{source.title}</a
 					>
 				</h3>
 				{#if sourceLine}<p class="mt-2 text-label text-muted-foreground">{sourceLine}</p>{/if}
-				{#if source.summary}
+				{#if source.snippet}
 					<p class="mt-2 line-clamp-3 max-w-[75ch] text-[13px] leading-5 text-ink-soft">
-						{source.summary}
+						{source.snippet}
 					</p>
 				{/if}
 			</div>

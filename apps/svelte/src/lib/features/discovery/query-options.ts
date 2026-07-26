@@ -2,14 +2,16 @@ import { infiniteQueryOptions, keepPreviousData, type InfiniteData } from '@tans
 import type { ApiClient } from '@aqsha/api/client';
 import { queryKeys, unwrap } from '$lib/query';
 import type { AppliedLiteratureSearchState } from '$lib/features/explore/literature-search-state.svelte';
-import type { LiteratureSearchPage } from '$lib/features/explore/literature-search-types';
-import type { ExplorePaper, FeedItem, FeedMode, FeedTopic } from './types';
+import type {
+	FeedPaper,
+	LiteratureSearchPage
+} from '$lib/features/explore/literature-search-types';
+import type { ExplorePaper, FeedMode, FeedTopic } from './types';
 
 export const FEED_PAGE_SIZE = 20;
-const VISIBLE_KINDS = ['paper'] as const;
 const LITERATURE_PAGE_SIZE = 20;
 
-export type FeedPage = { items: FeedItem[]; nextCursor: string | null };
+export type FeedPage = { items: FeedPaper[]; nextCursor: string | null };
 export type SearchPaper = Omit<ExplorePaper, 'lastSeenAt'>;
 export type PaperSearchPage = {
 	items: SearchPaper[];
@@ -40,7 +42,6 @@ export function feedInfiniteQueryOptions(
 					query: {
 						limit: FEED_PAGE_SIZE,
 						mode: params.mode,
-						kinds: [...VISIBLE_KINDS],
 						...(params.topic ? { topic: params.topic } : {}),
 						...(pageParam ? { cursor: pageParam } : {})
 					},

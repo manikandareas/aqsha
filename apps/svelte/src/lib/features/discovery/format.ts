@@ -1,7 +1,5 @@
 // Pure formatters for the discovery mosaic. id-only (the surface is Indonesian-first).
 
-import type { DiscoveryItem } from './model';
-
 // ── Source / time / domain ────────────────────────────────────────────────
 export function sourceName(item: {
 	kind: string;
@@ -38,21 +36,6 @@ function absoluteDate(ms: number): string | null {
 	} catch {
 		return null;
 	}
-}
-
-export function buildSourceLine(item: DiscoveryItem): string {
-	const parts: string[] = [];
-	if (item.authors && item.authors.length > 0) {
-		parts.push(item.authors.slice(0, 4).join(', '));
-	} else {
-		parts.push(item.sourceLabel);
-	}
-	const date =
-		item.year && !item.publishedAt
-			? String(item.year)
-			: (relativeTime(item.publishedAt) ?? (item.year ? String(item.year) : ''));
-	if (date) parts.push(date);
-	return parts.join(' · ');
 }
 
 export function formatCitationCount(value: number | undefined): string | null {
