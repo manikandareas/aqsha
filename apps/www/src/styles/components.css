@@ -173,13 +173,16 @@
 	}
 
 	/* Feature steps timeline rails — gap matches sm/lg grid gap-x; overlap sits under the partner badge.
+	   The desktop-only final extension carries the second rail through step 05.
 	   Layout shell owns translateY; the inner span owns scaleX so Motion doesn't clobber centering. */
 	.feature-step-rail {
 		--rail-gap: 2rem;
 		--rail-overlap: 1.5rem;
 		position: absolute;
+		z-index: 0;
 		top: 50%;
 		display: none;
+		pointer-events: none;
 		height: 1px;
 		transform: translateY(-50%);
 	}
@@ -204,6 +207,21 @@
 	.feature-step-rail--pair {
 		left: -50vw;
 		width: calc(50vw + 100% + var(--rail-gap) + var(--rail-overlap));
+	}
+
+	/* Step 05 has no grid partner. Continue the row-two rail from step 04 to
+	   the centre of its badge, then stop; keep this desktop-only so the
+	   two-column tablet layout doesn't draw a connector into an empty cell. */
+	.feature-step-rail--last {
+		display: none;
+	}
+
+	@media (min-width: 1024px) {
+		.feature-step-rail--last {
+			display: block;
+			left: calc(-100% - var(--rail-gap) - var(--rail-overlap));
+			width: calc(100% + var(--rail-gap) + var(--rail-overlap) + 1.375rem);
+		}
 	}
 
 	.feature-step-rail-line {

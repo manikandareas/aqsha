@@ -1,7 +1,7 @@
 /// <reference types="bun-types" />
 
 import { expect, test } from "bun:test";
-import { FEATURE_KEYS, FEATURES } from "./features";
+import { FEATURE_KEYS, FEATURES, WORKFLOW_STEPS } from "./features";
 
 test("feature catalog tells the project-first product story", () => {
   expect(FEATURE_KEYS).toEqual(["projects", "document", "references", "astra"]);
@@ -11,6 +11,19 @@ test("feature catalog tells the project-first product story", () => {
   expect(FEATURES.astra.preview.surface).toBe("astra-review");
   expect(JSON.stringify(FEATURES)).not.toContain("frame-workspace.webp");
   expect(JSON.stringify(FEATURES)).not.toContain("fitur-provenance");
+});
+
+test("workflow steps tell the connected research-to-review story", () => {
+  expect(WORKFLOW_STEPS.map((step) => step.id)).toEqual([
+    "fitur-proyek",
+    "fitur-literatur",
+    "fitur-referensi",
+    "fitur-dokumen",
+    "fitur-astra",
+  ]);
+  expect(WORKFLOW_STEPS[1]?.body).toContain("322.192.000+");
+  expect(WORKFLOW_STEPS[2]?.body).toContain("Citation Manager");
+  expect(WORKFLOW_STEPS[4]?.title).toBe("Review usulan Aqsha");
 });
 
 test("placeholder is explicit and decorative", async () => {

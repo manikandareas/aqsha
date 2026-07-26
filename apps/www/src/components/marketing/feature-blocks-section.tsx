@@ -12,14 +12,13 @@ import { FeatureFrame } from "@/components/marketing/feature-frame";
 import { MotionProvider } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
 import {
-  FEATURE_KEYS,
-  FEATURES,
-  featurePartnerIndex,
+  WORKFLOW_STEPS,
+  type WorkflowStep,
 } from "@/data/features";
 import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { EASE_OUT } from "@/lib/motion";
 
-type Feature = (typeof FEATURES)[keyof typeof FEATURES];
+type Feature = WorkflowStep;
 
 /**
  * StepBadge — keycap-style number chip. Steps alternate: even steps ink
@@ -39,17 +38,17 @@ function StepBadge({
 }) {
   if (!filled) {
     return (
-      <span className="relative grid size-11 shrink-0 place-items-center rounded-md border-2 border-border bg-card font-mono text-sm font-bold text-foreground">
+      <span className="relative z-10 grid size-11 shrink-0 place-items-center rounded-md border-2 border-border bg-card font-mono text-sm font-bold text-foreground">
         {num}
       </span>
     );
   }
   return (
-    <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-md border-2 border-secondary bg-card font-mono text-sm font-bold text-foreground">
+    <span className="relative z-10 grid size-11 shrink-0 place-items-center overflow-hidden rounded-md border-2 border-primary bg-card font-mono text-sm font-bold text-foreground">
       {num}
       <m.span
         aria-hidden
-        className="absolute inset-0 grid place-items-center bg-secondary text-secondary-foreground"
+        className="btn-filled-gradient absolute inset-0 grid place-items-center bg-primary text-primary-foreground [--btn-face:var(--primary)]"
         initial={reduce ? false : { opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true, amount: 1 }}
@@ -64,14 +63,16 @@ function StepBadge({
 /**
  * StepBlock — one cell of the steps grid: number badge over a full-bleed rail,
  * then title, body, points, and a portrait FeatureFrame rising as one block.
- * Even cells own the row's rail, which draws once across the viewport and runs
- * behind the neighboring badge so the rows read as one continuous thread.
+ * Paired cells own one continuous rail; the final unpaired workflow step stays
+ * deliberately self-contained.
  */
 function StepBlock({
   feature,
   index,
   active,
   partnerActive,
+  hasPartner,
+  isFinalStep,
   canExpand,
   onHoverChange,
 }: {
@@ -79,14 +80,16 @@ function StepBlock({
   index: number;
   active: boolean;
   partnerActive: boolean;
+  hasPartner: boolean;
+  isFinalStep: boolean;
   canExpand: boolean;
   onHoverChange: (index: number | null) => void;
 }) {
   const reduce = useReducedMotion();
   const colDelay = (index % 2) * 0.18;
-  const ownsRail = index % 2 === 0;
+  const ownsRail = index % 2 === 0 && (hasPartner || isFinalStep);
   const anchorLeft = index % 2 === 0;
-  const grow = canExpand && active;
+  const grow = canExpand && hasPartner && active;
   const lean = canExpand && partnerActive;
 
   return (
@@ -112,7 +115,9 @@ function StepBlock({
             className={
               index === 0
                 ? "feature-step-rail feature-step-rail--first"
-                : "feature-step-rail feature-step-rail--pair"
+                : isFinalStep
+                  ? "feature-step-rail feature-step-rail--last"
+                  : "feature-step-rail feature-step-rail--pair"
             }
           >
             <m.span
@@ -188,11 +193,9 @@ function StepBlock({
 }
 
 /**
- * FeatureBlocksSection — Backyard-style numbered-steps grid. A two-tone
- * headline holds the first column while the four features flow as timeline
- * cells (01–02 beside it, 03–04 on the next row), each with a badge that inks
- * itself in on scroll, a connector hairline, and a portrait frame. The last
- * cell closes the sequence with the "want details?" CTA pair.
+ * FeatureBlocksSection — workflow-led numbered grid. The five steps explain
+ * how a student moves from a new project to an approved Aqsha proposal,
+ * instead of presenting disconnected product cards.
  */
 export function FeatureBlocksSection() {
   const reduce = useReducedMotion();
@@ -218,37 +221,47 @@ export function FeatureBlocksSection() {
           >
             <h2 className="font-heading text-balance text-4xl font-medium leading-[1.1] tracking-normal sm:text-[2.75rem] sm:leading-[1.08] lg:text-[2.9rem]">
               <span className="block text-foreground">
-                Dari nyari jurnal sampai siap dikirim.
+                Riset sampai draf siap review.
               </span>
               <span className="mt-2 block text-muted-foreground">
-                Empat langkah, ngikutin cara kamu riset beneran.
+                Satu alur untuk karya tulismu.
               </span>
             </h2>
           </m.div>
 
-          {FEATURE_KEYS.map((key, index) => (
-            <StepBlock
-              key={key}
-              feature={FEATURES[key]}
-              index={index}
-              active={activeFrame === index}
-              partnerActive={activeFrame === featurePartnerIndex(index)}
-              canExpand={canExpand}
-              onHoverChange={setActiveFrame}
-            />
-          ))}
+          {WORKFLOW_STEPS.map((feature, index) => {
+            const partnerIndex = index % 2 === 0 ? index + 1 : index - 1;
+            const hasPartner = index % 2 === 1 || partnerIndex < WORKFLOW_STEPS.length;
+
+            return (
+              <StepBlock
+                key={feature.id}
+                feature={feature}
+                index={index}
+                active={activeFrame === index}
+                partnerActive={hasPartner && activeFrame === partnerIndex}
+                hasPartner={hasPartner}
+                isFinalStep={index === WORKFLOW_STEPS.length - 1}
+                canExpand={canExpand && hasPartner}
+                onHoverChange={setActiveFrame}
+              />
+            );
+          })}
 
           <m.div
-            className="self-start sm:col-span-2 lg:col-span-1 lg:pt-16"
+            className="self-start sm:col-span-2 lg:col-span-2 lg:pt-16"
             initial={reduce ? false : { opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.4 }}
             transition={{ duration: 0.6, ease: EASE_OUT }}
           >
             <h3 className="font-heading text-2xl font-medium leading-[1.15] sm:text-[1.65rem]">
-              <span className="block text-foreground">Mau lihat detailnya?</span>
+              <span className="block text-foreground">
+                Siap skripsian bersama Aqsha?
+              </span>
               <span className="mt-1 block text-muted-foreground">
-                Coba langsung — gratis, tanpa kartu.
+                Gabung waitlist untuk akses awal Aqsha. {" "}
+                <span className="font-bold text-primary">Gratis.</span>
               </span>
             </h3>
             <div className="mt-7 flex items-start gap-4">

@@ -1,7 +1,8 @@
 /**
- * Feature identity SSOT for marketing — hero collage, feature blocks, and nav
- * share keys / ids / preview metadata / titles from here. Layout-only props
- * (tilt, collage position) stay colocated with the section that owns them.
+ * Feature identity SSOT for marketing — hero collage and nav share the core
+ * feature keys; `WORKFLOW_STEPS` owns the five-step landing narrative.
+ * Layout-only props (tilt, collage position) stay colocated with the section
+ * that owns them.
  */
 
 export type ProductPreviewSurface =
@@ -118,7 +119,7 @@ export const FEATURES = {
   },
 } as const satisfies Record<FeatureKey, FeatureDefinition>;
 
-/** Editorial order on the landing. Must stay even length for the 2-col steps grid. */
+/** Editorial order for the four-card hero collage. */
 export const FEATURE_KEYS = [
   "projects",
   "document",
@@ -134,6 +135,75 @@ export const FEATURE_NAV_KEYS = [
   "astra",
 ] as const satisfies readonly FeatureKey[];
 
+/** One user-facing action in the landing's five-step research workflow. */
+export type WorkflowStep = Pick<
+  FeatureDefinition,
+  "id" | "preview" | "title" | "num" | "body" | "points"
+>;
+
+/**
+ * Landing workflow — sells the connected journey, not a disconnected feature
+ * inventory. Existing core IDs keep hero and navigation deep-links valid.
+ */
+export const WORKFLOW_STEPS = [
+  {
+    id: "fitur-proyek",
+    preview: FEATURES.projects.preview,
+    title: "Mulai dari karya tulismu",
+    num: "01",
+    body: "Buat satu proyek untuk skripsi, tesis, disertasi, paper, proposal, atau makalah yang ingin kamu selesaikan.",
+    points: ["Topik, draf, dan referensi tinggal di satu rumah."],
+  },
+  {
+    id: "fitur-literatur",
+    preview: {
+      surface: "references",
+      title: "Cari literatur",
+      caption: "322.192.000+ karya ilmiah",
+    },
+    title: "Temukan sumber yang tepat",
+    num: "02",
+    body: "Telusuri 322.192.000+ literatur ilmiah untuk menemukan bahan yang benar-benar mendukung penelitianmu.",
+    points: ["Cari, simpan, dan bawa sumber yang relevan ke proyek aktif."],
+  },
+  {
+    id: "fitur-referensi",
+    preview: {
+      surface: "references",
+      title: "Citation Manager",
+      caption: "Sitasi yang tertaut ke proyek",
+    },
+    title: "Kelola sitasi tanpa pindah aplikasi",
+    num: "03",
+    body: "Impor referensi dari Mendeley atau Zotero, lalu kelola semuanya di Citation Manager Aqsha.",
+    points: ["Sitasi tetap dekat dengan draf yang membutuhkannya."],
+  },
+  {
+    id: "fitur-dokumen",
+    preview: {
+      surface: "typst-document",
+      title: "Anotasi draf",
+      caption: "Tandai bagian yang ingin dibantu",
+    },
+    title: "Tandai bagian yang perlu dibantu",
+    num: "04",
+    body: "Sedang buntu di satu paragraf atau bab? Tandai langsung bagian draf yang ingin kamu perbaiki.",
+    points: ["Beri Aqsha konteks yang tepat, bukan prompt yang harus dijelaskan dari awal."],
+  },
+  {
+    id: "fitur-astra",
+    preview: {
+      surface: "astra-review",
+      title: "Review Aqsha",
+      caption: "Usulan edit menunggu keputusanmu",
+    },
+    title: "Review usulan Aqsha",
+    num: "05",
+    body: "Aqsha mengusulkan perubahan berdasarkan proyek, draf, dan sumbermu. Kamu meninjau setiap usulan sebelum menerapkannya.",
+    points: ["Tetap karya kamu. Keputusan akhirnya tetap di tanganmu."],
+  },
+] as const satisfies readonly WorkflowStep[];
+
 /** In-page hash, e.g. `#fitur-proyek`. */
 export function featureHash(id: string): string {
   return `#${id}`;
@@ -142,12 +212,4 @@ export function featureHash(id: string): string {
 /** Cross-page landing deep link, e.g. `/#fitur-proyek`. */
 export function featurePath(id: string): string {
   return `/#${id}`;
-}
-
-/**
- * Partner cell in the 2-column steps grid (0↔1, 2↔3).
- * Assumes `FEATURE_KEYS` is even and laid out as row pairs.
- */
-export function featurePartnerIndex(index: number): number {
-  return index % 2 === 0 ? index + 1 : index - 1;
 }
