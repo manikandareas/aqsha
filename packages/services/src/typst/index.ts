@@ -25,7 +25,13 @@ export {
   parseTypstOutline,
   sliceOutlineSection,
 } from "./outline";
-export { composeProjectBib } from "./project-bib";
+export { composeProjectBib, listProjectReferences, type ProjectReference } from "./project-bib";
+export {
+  citeIntegrity,
+  type ProjectFacts,
+  ProjectFactsService,
+  renderProjectManifest,
+} from "./project-facts";
 export {
   applyHunkSelection,
   computeProposalHunks,
