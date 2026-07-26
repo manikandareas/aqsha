@@ -12,7 +12,14 @@ import {
   WorkspaceDocumentService,
 } from "../workspace-document.service";
 import { TypstCompileService } from "./compile.service";
-import { applyHunkSelection, computeProposalHunks, type ProposalHunk } from "./hunks";
+import {
+  applyHunkSelection,
+  computeProposalHunks,
+  type HunkDecision,
+  type HunkDecisions,
+  type ProposalHunk,
+  resolveHunkDecisions,
+} from "./hunks";
 import { resolveMainTypFilename } from "./main-filename";
 import { applyOutlineOperations, type OutlineOperation } from "./outline";
 import { composeProjectBib } from "./project-bib";
@@ -55,8 +62,18 @@ export type PendingProposalView = {
   currentSource: string;
   currentVersion: number;
   isStale: boolean;
+  /** Seluruh hunk basis→usulan, termasuk yang sudah diputuskan. */
   hunks: ProposalHunk[];
+  /** Hunk yang belum diputuskan, sudah dianchor ke sumber tersimpan sekarang. */
+  remainingHunks: ProposalHunk[];
+  decidedCount: number;
+  totalHunks: number;
 };
+
+export type DecideHunkResult =
+  | { status: "recorded"; contentVersion: number; remainingHunks: ProposalHunk[]; closed: boolean }
+  | { status: "compile_error"; compileErrors: TypstDiagnostic[] }
+  | { status: "stale"; currentVersion: number };
 
 /**
  * Terapkan edits search-replace anchored berurutan. Tiap oldText WAJIB match tepat satu —
@@ -239,6 +256,9 @@ export const DocumentProposalService = {
       workspaceId: input.workspaceId,
       threadId: input.threadId ?? null,
       baseVersion: currentVersion,
+      // Basis diff dibekukan di sini; keputusan per-hunk berikutnya diukur terhadap snapshot ini.
+      baseSource: doc?.source ?? "",
+      appliedVersion: currentVersion,
       proposedSource: candidate,
       summary: input.summary,
       resubmitInstruction: input.resubmitInstruction ?? "",
@@ -329,6 +349,7 @@ export const DocumentProposalService = {
   ): Promise<AcceptProposalResult> {
     const proposal = await assertPendingProposal(db, input.ownerUserId, input.proposalId);
 
+    const appliedVersion = proposal.appliedVersion ?? proposal.baseVersion;
     let source = proposal.proposedSource;
     if (input.acceptedHunkIndexes) {
       const doc = await WorkspaceDocumentService.getDocument(db, {
@@ -336,16 +357,21 @@ export const DocumentProposalService = {
         workspaceId: proposal.workspaceId,
       });
       const currentVersion = doc?.contentVersion ?? 0;
-      if (currentVersion !== proposal.baseVersion) {
+      if (currentVersion !== appliedVersion) {
         await DocumentEditProposalRepo.updateById(db, proposal.id, {
           status: "superseded",
           decidedAt: Date.now(),
         });
         return { status: "stale", currentVersion };
       }
-      const baseSource = doc?.source ?? "";
+      // Basis diff = snapshot proposal, bukan dokumen berjalan: keputusan per-hunk sebelumnya
+      // sudah menulis ke dokumen, jadi hanya snapshot yang masih cocok dengan indeks hunk.
+      const baseSource = proposal.baseSource;
       const hunks = computeProposalHunks(baseSource, proposal.proposedSource);
-      const selected = new Set(input.acceptedHunkIndexes);
+      const previouslyAccepted = Object.entries(
+        (proposal.hunkDecisions ?? {}) as HunkDecisions,
+      ).flatMap(([index, decision]) => (decision === "accepted" ? [Number(index)] : []));
+      const selected = new Set([...input.acceptedHunkIndexes, ...previouslyAccepted]);
       const invalid =
         selected.size === 0 ||
         [...selected].some((i) => !Number.isInteger(i) || i < 0 || i >= hunks.length);
@@ -388,7 +414,7 @@ export const DocumentProposalService = {
       workspaceId: proposal.workspaceId,
       source,
       // baseVersion 0 = dokumen belum pernah ditulis (lazy-create tanpa CAS versi).
-      ...(proposal.baseVersion > 0 ? { baseVersion: proposal.baseVersion } : {}),
+      ...(appliedVersion > 0 ? { baseVersion: appliedVersion } : {}),
       author: "agent",
     });
     const now = Date.now();
@@ -414,6 +440,129 @@ export const DocumentProposalService = {
       },
     );
     return { status: "accepted", contentVersion: saved.contentVersion };
+  },
+
+  /**
+   * Putuskan satu hunk. Tolak hanya mencatat keputusan — tanpa compile, tanpa tulis. Terima
+   * menghitung ulang dokumen dari basis + seluruh hunk yang diterima, meng-compile, lalu menyimpan
+   * dengan CAS terhadap versi yang terakhir ditulis proposal ini. Proposal tertutup sendiri saat
+   * hunk terakhir diputuskan.
+   */
+  async decideHunk(
+    db: Db,
+    input: {
+      ownerUserId: string;
+      proposalId: string;
+      hunkIndex: number;
+      decision: HunkDecision;
+      enforceRateLimit?: boolean;
+    },
+  ): Promise<DecideHunkResult> {
+    const proposal = await assertPendingProposal(db, input.ownerUserId, input.proposalId);
+    const doc = await WorkspaceDocumentService.getDocument(db, {
+      ownerUserId: input.ownerUserId,
+      workspaceId: proposal.workspaceId,
+    });
+    const currentVersion = doc?.contentVersion ?? 0;
+    const appliedVersion = proposal.appliedVersion ?? proposal.baseVersion;
+    if (proposal.baseSource === "" || currentVersion !== appliedVersion) {
+      await DocumentEditProposalRepo.updateById(db, proposal.id, {
+        status: "superseded",
+        decidedAt: Date.now(),
+      });
+      return { status: "stale", currentVersion };
+    }
+
+    const previousDecisions = (proposal.hunkDecisions ?? {}) as HunkDecisions;
+    const before = resolveHunkDecisions(
+      proposal.baseSource,
+      proposal.proposedSource,
+      previousDecisions,
+    );
+    if (
+      !Number.isInteger(input.hunkIndex) ||
+      input.hunkIndex < 0 ||
+      input.hunkIndex >= before.hunks.length
+    ) {
+      throwAppError({
+        message: "Hunk tidak ditemukan",
+        code: "invalid_hunk_selection",
+        severity: "warning",
+        status: 422,
+      });
+    }
+    const decisions: HunkDecisions = {
+      ...previousDecisions,
+      [String(input.hunkIndex)]: input.decision,
+    };
+    const after = resolveHunkDecisions(proposal.baseSource, proposal.proposedSource, decisions);
+
+    let nextVersion = currentVersion;
+    if (after.appliedSource !== before.appliedSource) {
+      if (Buffer.byteLength(after.appliedSource, "utf8") > TYPST_SOURCE_MAX_BYTES) {
+        throwAppError({
+          message: "Sumber hasil keputusan terlalu besar. Maksimum 2 MB.",
+          code: "typst_source_too_large",
+          severity: "warning",
+          status: 413,
+        });
+      }
+      // Sumber yang identik dengan usulan sudah lolos compile saat proposal dibuat.
+      if (after.appliedSource !== proposal.proposedSource) {
+        if (input.enforceRateLimit !== false) await consumeCompileQuota(input.ownerUserId);
+        const bib = await composeProjectBib(db, {
+          ownerUserId: input.ownerUserId,
+          workspaceId: proposal.workspaceId,
+        });
+        const mainFileName = await mainFileNameForWorkspace(db, proposal.workspaceId);
+        const compiled = await TypstCompileService.compile({
+          mainTyp: after.appliedSource,
+          bib,
+          mainFileName,
+        });
+        if (!compiled.ok) return { status: "compile_error", compileErrors: compiled.errors };
+      }
+      const saved = await WorkspaceDocumentService.saveDocument(db, {
+        ownerUserId: input.ownerUserId,
+        workspaceId: proposal.workspaceId,
+        source: after.appliedSource,
+        // baseVersion 0 = dokumen belum pernah ditulis (lazy-create tanpa CAS versi).
+        ...(appliedVersion > 0 ? { baseVersion: appliedVersion } : {}),
+        author: "agent",
+      });
+      if (saved.status === "stale_write") {
+        await DocumentEditProposalRepo.updateById(db, proposal.id, {
+          status: "superseded",
+          decidedAt: Date.now(),
+        });
+        return { status: "stale", currentVersion: saved.currentVersion };
+      }
+      nextVersion = saved.contentVersion;
+    }
+
+    const now = Date.now();
+    await DocumentEditProposalRepo.updateById(db, proposal.id, {
+      hunkDecisions: decisions,
+      appliedVersion: nextVersion,
+      ...(after.allDecided
+        ? { status: after.acceptedCount > 0 ? "accepted" : "rejected", decidedAt: now }
+        : {}),
+    });
+    if (after.allDecided) {
+      await DocumentAnnotationRepo.updateProposalStatusByIds(
+        db,
+        input.ownerUserId,
+        proposal.workspaceId,
+        proposal.annotationIds,
+        { status: after.acceptedCount > 0 ? "resolved" : "open", updatedAt: now },
+      );
+    }
+    return {
+      status: "recorded",
+      contentVersion: nextVersion,
+      remainingHunks: after.remainingHunks,
+      closed: after.allDecided,
+    };
   },
 
   /** Tolak proposal; anotasi yang dijawabnya dibuka kembali supaya bisa dikirim ulang. */
@@ -452,6 +601,11 @@ export const DocumentProposalService = {
       workspaceId: input.workspaceId,
     });
     const currentVersion = doc?.contentVersion ?? 0;
+    const decisions = (row.hunkDecisions ?? {}) as HunkDecisions;
+    const resolved = resolveHunkDecisions(row.baseSource, row.proposedSource, decisions);
+    const appliedVersion = row.appliedVersion ?? row.baseVersion;
+    // Proposal lama dari sebelum snapshot basis ada tak punya indeks hunk yang dapat dipercaya.
+    const isStale = row.baseSource === "" || currentVersion !== appliedVersion;
     return {
       id: row.id,
       workspaceId: row.workspaceId,
@@ -464,8 +618,11 @@ export const DocumentProposalService = {
       createdAt: row.createdAt,
       currentSource: doc?.source ?? "",
       currentVersion,
-      isStale: row.baseVersion !== currentVersion,
-      hunks: computeProposalHunks(doc?.source ?? "", row.proposedSource),
+      isStale,
+      hunks: resolved.hunks,
+      remainingHunks: isStale ? [] : resolved.remainingHunks,
+      decidedCount: resolved.hunks.length - resolved.remainingHunks.length,
+      totalHunks: resolved.hunks.length,
     };
   },
 };

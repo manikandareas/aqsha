@@ -70,3 +70,43 @@ export function applyHunkSelection(
   }
   return result;
 }
+
+export type HunkDecision = "accepted" | "rejected";
+export type HunkDecisions = Record<string, HunkDecision>;
+
+/**
+ * Hitung keadaan proposal dari peta keputusan. `appliedSource` adalah dokumen yang seharusnya
+ * tersimpan sekarang (basis + hunk yang diterima); `remainingHunks` adalah hunk yang belum
+ * diputuskan, sudah dianchor ke `appliedSource` sehingga klien tak perlu menggeser baris sendiri.
+ */
+export function resolveHunkDecisions(
+  baseSource: string,
+  proposedSource: string,
+  decisions: HunkDecisions,
+): {
+  hunks: ProposalHunk[];
+  appliedSource: string;
+  targetSource: string;
+  remainingHunks: ProposalHunk[];
+  allDecided: boolean;
+  acceptedCount: number;
+} {
+  const hunks = computeProposalHunks(baseSource, proposedSource);
+  const accepted = new Set<number>();
+  const undecided = new Set<number>();
+  for (const hunk of hunks) {
+    const decision = decisions[String(hunk.index)];
+    if (decision === "accepted") accepted.add(hunk.index);
+    else if (decision !== "rejected") undecided.add(hunk.index);
+  }
+  const appliedSource = applyHunkSelection(baseSource, hunks, accepted);
+  const targetSource = applyHunkSelection(baseSource, hunks, new Set([...accepted, ...undecided]));
+  return {
+    hunks,
+    appliedSource,
+    targetSource,
+    remainingHunks: computeProposalHunks(appliedSource, targetSource),
+    allDecided: undecided.size === 0,
+    acceptedCount: accepted.size,
+  };
+}

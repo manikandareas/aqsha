@@ -41,12 +41,16 @@ export {
 export {
   applyHunkSelection,
   computeProposalHunks,
+  type HunkDecision,
+  type HunkDecisions,
   type ProposalHunk,
+  resolveHunkDecisions,
 } from "./hunks";
 export {
   applyProposalEdits,
   DocumentProposalService,
   type AcceptProposalResult,
+  type DecideHunkResult,
   type PendingProposalView,
   type ProposalEdit,
   type ProposeDocumentEditResult,
