@@ -14,6 +14,7 @@ import { MegaNav } from "@/components/marketing/mega-nav";
 import { MobileNavTree } from "@/components/marketing/mobile-nav-tree";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { NAV_DESKTOP_MQ } from "@/lib/marketing/nav";
 import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
   const solidFace = !isHero || scrolled;
   const [menuOpen, setMenuOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const waitlistLabel = "Gabung waitlist";
 
   const { scrollY } = useScroll();
   const logoSpacing = useTransform(scrollY, [0, 300], ["0em", "0.06em"]);
@@ -123,8 +125,15 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
 
         <div className="col-start-3 flex items-center justify-self-end gap-2 sm:gap-3">
           <ThemeToggle />
-          <Button disabled size="sm" className="h-9 rounded-full px-4">
-            Gabung waitlist
+          <a
+            href={WAITLIST_PATH}
+            className="hidden rounded-full px-2 py-1.5 text-sm font-medium text-foreground/75 transition-colors hover:text-foreground sm:inline-block"
+          >
+            Dapatkan kabar saat rilis
+          </a>
+          <span aria-hidden className="hidden h-5 w-px bg-border sm:block" />
+          <Button asChild size="sm" className="h-9 rounded-full px-4">
+            <a href={WAITLIST_PATH}>{waitlistLabel}</a>
           </Button>
           <button
             type="button"
@@ -168,6 +177,7 @@ export function MarketingChrome({ variant }: MarketingChromeProps) {
                 openGroup={openGroup}
                 onOpenGroupChange={setOpenGroup}
                 onNavigate={() => setMenuOpen(false)}
+                waitlistLabel={waitlistLabel}
               />
             </m.nav>
           </>

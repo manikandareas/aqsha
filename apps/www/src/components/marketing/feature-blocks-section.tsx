@@ -16,6 +16,7 @@ import {
   FEATURES,
   featurePartnerIndex,
 } from "@/data/features";
+import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { EASE_OUT } from "@/lib/motion";
 
 type Feature = (typeof FEATURES)[keyof typeof FEATURES];
@@ -257,8 +258,8 @@ export function FeatureBlocksSection() {
                 <Button asChild variant="outline" className="h-11 px-5">
                   <a href="#faq">Tanya-tanya dulu</a>
                 </Button>
-                <Button disabled className="h-11 px-5">
-                  Gabung waitlist →
+                <Button asChild className="h-11 px-5">
+                  <a href={WAITLIST_PATH}>Gabung waitlist →</a>
                 </Button>
               </div>
               <CtaHandArrow className="pt-1" />

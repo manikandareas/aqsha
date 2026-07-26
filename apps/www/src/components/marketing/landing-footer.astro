@@ -6,6 +6,7 @@ import {
   XSocialIcon,
 } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { WAITLIST_PATH } from "@/lib/marketing/cta";
 
 /* Sosial: href masih "#" sampai akun resminya ada. */
 const socialLinks = [
@@ -28,6 +29,10 @@ const linkColumns = [
     { label: "Harga", href: "/#pricing" },
     { label: "Blog", href: "/blog" },
     { label: "Apa yang baru", href: "/changelog" },
+  ],
+  [
+    { label: "Dapatkan kabar saat rilis", href: WAITLIST_PATH },
+    { label: "Gabung waitlist", href: WAITLIST_PATH },
   ],
 ] as const;
 
@@ -122,7 +127,7 @@ for (let x = 0; x < TILE_W; x += PX) {
         </nav>
 
         <nav aria-label="Halaman" class="mt-9">
-          <div class="max-w-md">
+          <div class="grid max-w-md grid-cols-2 gap-x-10">
             {
               linkColumns.map((column) => (
                 <ul class="space-y-3">

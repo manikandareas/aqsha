@@ -4,6 +4,7 @@ import { AnimatePresence, m, useReducedMotion } from "motion/react";
 
 import { ArrowDownIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { navTree } from "@/lib/marketing/nav";
 import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,8 @@ type MobileNavTreeProps = {
   openGroup: string | null;
   onOpenGroupChange: (label: string | null) => void;
   onNavigate: () => void;
+  /** CTA copy — matches the desktop chrome waitlist label. */
+  waitlistLabel: string;
 };
 
 /**
@@ -22,6 +25,7 @@ export function MobileNavTree({
   openGroup,
   onOpenGroupChange,
   onNavigate,
+  waitlistLabel,
 }: MobileNavTreeProps) {
   const reduce = useReducedMotion();
 
@@ -122,9 +126,16 @@ export function MobileNavTree({
           ),
         )}
       </ul>
-      <div className="border-t border-border/70 p-3">
-        <Button disabled className="h-11 w-full rounded-xl text-sm">
-          Gabung waitlist
+      <div className="flex gap-2 border-t border-border/70 p-3">
+        <Button
+          asChild
+          variant="ghost"
+          className="h-11 flex-1 rounded-xl text-sm text-foreground/80 hover:bg-muted hover:text-foreground"
+        >
+          <a href={WAITLIST_PATH}>Dapatkan kabar saat rilis</a>
+        </Button>
+        <Button asChild className="h-11 flex-1 rounded-xl text-sm">
+          <a href={WAITLIST_PATH}>{waitlistLabel}</a>
         </Button>
       </div>
     </div>

@@ -13,6 +13,7 @@ import { faqItems } from "@/components/marketing/faq-data";
 import { MotionProvider } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
 import { EASE_OUT, IN_VIEW_ONCE } from "@/lib/motion";
+import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { contactEmail } from "@/lib/seo-config";
 import { cn } from "@/lib/utils";
 
@@ -265,8 +266,8 @@ export function FaqSection() {
                   <p className="text-sm leading-snug text-muted-foreground">
                     Atau coba langsung — gratis.
                   </p>
-                  <Button disabled size="sm">
-                    Gabung waitlist
+                  <Button asChild size="sm">
+                    <a href={WAITLIST_PATH}>Gabung waitlist</a>
                   </Button>
                 </div>
               </m.div>

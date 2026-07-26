@@ -5,6 +5,7 @@ import { m, useReducedMotion } from "motion/react";
 
 import { ArrowDownIcon } from "@/components/icons";
 import { HeroDoodles } from "@/components/marketing/hero-doodles";
+import { MagneticButton } from "@/components/marketing/magnetic-button";
 import { Button } from "@/components/ui/button";
 import {
   FEATURE_KEYS,
@@ -12,6 +13,7 @@ import {
   featureHash,
   type FeatureKey,
 } from "@/data/features";
+import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { EASE_OUT, FRAME_SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { LatestUpdate } from "@/lib/marketing/latest";
@@ -298,9 +300,11 @@ export function LandingHeroSection({
             animate="show"
           >
             <m.div variants={buttonItem(reduce)}>
-              <Button disabled size="lg">
-                Gabung waitlist
-              </Button>
+              <MagneticButton radius={140} strength={0.35}>
+                <Button asChild size="lg">
+                  <a href={WAITLIST_PATH}>Gabung waitlist</a>
+                </Button>
+              </MagneticButton>
             </m.div>
             <m.div variants={buttonItem(reduce)}>
               <Button asChild variant="outline" size="lg">

@@ -11,31 +11,35 @@ import {
 
 import { MotionProvider } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
+import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import { EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 const WAITLIST_PRICING_CTA = "Daftar untuk akses saat rilis";
 
 const planPresentation = {
-  free: { cta: WAITLIST_PRICING_CTA, badge: null, includes: null },
+  free: { href: WAITLIST_PATH, cta: WAITLIST_PRICING_CTA, badge: null, includes: null },
   starter: {
+    href: WAITLIST_PATH,
     cta: WAITLIST_PRICING_CTA,
     badge: "populer",
     includes: "semua di Free, plus",
   },
   plus: {
+    href: WAITLIST_PATH,
     cta: WAITLIST_PRICING_CTA,
     badge: null,
     includes: "semua di Starter, plus",
   },
   ultra: {
+    href: WAITLIST_PATH,
     cta: WAITLIST_PRICING_CTA,
     badge: "power",
     includes: "semua di Plus, plus",
   },
 } satisfies Record<
   PublicPlanKey,
-  { cta: string; badge: string | null; includes: string | null }
+  { href: string; cta: string; badge: string | null; includes: string | null }
 >;
 
 /** Resting tilt per receipt — a row of struk laid loosely on the counter. */
@@ -295,11 +299,11 @@ function PlanReceipt({
         </p>
         <div className="pt-4">
           <Button
-            disabled
+            asChild
             variant={highlight ? "default" : "outline"}
             className="h-11 w-full rounded-full font-sans text-sm font-medium"
           >
-            {presentation.cta}
+            <a href={presentation.href}>{presentation.cta}</a>
           </Button>
           <p className="pt-4 text-center text-xs text-muted-foreground">
             · · · terima kasih · · ·
