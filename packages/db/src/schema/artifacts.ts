@@ -59,7 +59,10 @@ export const artifacts = pgTable(
       "artifacts_artifact_family_check",
       sql`${t.artifactFamily} in ('text', 'file', 'interactive', 'visual', 'data', 'link')`,
     ),
-    check("artifacts_source_check", sql`${t.source} in ('manual', 'upload', 'agent', 'url')`),
+    check(
+      "artifacts_source_check",
+      sql`${t.source} in ('manual', 'upload', 'agent', 'url', 'reference')`,
+    ),
     check(
       "artifacts_indexing_status_check",
       sql`${t.indexingStatus} in ('not_indexed', 'pending', 'ready', 'failed')`,

@@ -18,6 +18,8 @@ export type CitationAuthor = { family?: string; given?: string; literal?: string
 export type CitationSource = "import" | "provider_sync" | "artifact" | "doi" | "manual";
 export type CitationProvider = "mendeley" | "zotero";
 export type CitationMetadataStatus = "verified" | "needs_review" | "incomplete";
+export type CitationIngestStatus = "pending" | "processing" | "ready" | "failed";
+export type CitationTextCoverage = "none" | "abstract" | "full_text";
 
 /**
  * citations — perpustakaan referensi global per akun. Koleksi per proyek hidup di
@@ -54,6 +56,13 @@ export const citations = pgTable(
     // di sumber LaTeX tidak boleh bergeser saat himpunan perpustakaan berubah.
     bibKey: text("bib_key"),
     metadataStatus: text("metadata_status").notNull(),
+    // Status pipeline ingest level ITEM perpustakaan (bukan level artifact): item
+    // tanpa PDF pun harus bisa melaporkan kemajuannya. Hanya orkestrator ingest
+    // yang menulis kolom-kolom ini.
+    ingestStatus: text("ingest_status").$type<CitationIngestStatus>().notNull().default("pending"),
+    textCoverage: text("text_coverage").$type<CitationTextCoverage>().notNull().default("none"),
+    ingestError: text("ingest_error"),
+    ingestedAt: bigint("ingested_at", { mode: "number" }),
     reviewedAt: bigint("reviewed_at", { mode: "number" }),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
     updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
@@ -72,6 +81,15 @@ export const citations = pgTable(
       "citations_metadata_status_check",
       sql`${t.metadataStatus} in ('verified', 'needs_review', 'incomplete')`,
     ),
+    check(
+      "citations_ingest_status_check",
+      sql`${t.ingestStatus} in ('pending', 'processing', 'ready', 'failed')`,
+    ),
+    check(
+      "citations_text_coverage_check",
+      sql`${t.textCoverage} in ('none', 'abstract', 'full_text')`,
+    ),
+    index("citations_by_owner_ingest_status").on(t.ownerUserId, t.ingestStatus),
     index("citations_by_owner_updated").on(t.ownerUserId, t.updatedAt),
     index("citations_by_owner_doi").on(t.ownerUserId, t.doi),
     index("citations_by_owner_canonical").on(t.ownerUserId, t.canonicalKey),

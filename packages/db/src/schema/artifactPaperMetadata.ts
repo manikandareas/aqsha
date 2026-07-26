@@ -7,8 +7,9 @@ import { workspaces } from "./workspaces";
 export type PaperAuthor = { name: string; affiliation?: string };
 
 /**
- * artifact_paper_metadata — 1:1 metadata bibliografi paper (P3). Hanya ada untuk
- * artifact workspace-scoped (upload PDF / url paper) → `workspace_id` NON-null.
+ * artifact_paper_metadata — 1:1 metadata bibliografi paper (P3). `workspace_id`
+ * null = paper perpustakaan level akun (satu item bisa dipakai banyak proyek);
+ * non-null = artifact yang dititipkan ke sebuah proyek (upload PDF / url paper).
  * `metadata_source` TANPA grobid; rank monotonik manual>resolver>llm ditegakkan di
  * `PaperMetadataService.upsert`. Kolom GROBID (tei/sections/references storage) di-drop.
  */
@@ -22,9 +23,7 @@ export const artifactPaperMetadata = pgTable(
     artifactId: text("artifact_id")
       .notNull()
       .references(() => artifacts.id),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id),
+    workspaceId: text("workspace_id").references(() => workspaces.id),
     title: text("title"),
     abstract: text("abstract"),
     doi: text("doi"),
