@@ -743,12 +743,25 @@ export const citationCrudMethods = {
   ): Promise<{ affected: number }> {
     const uniqueIds = [...new Set(input.ids)];
     if (uniqueIds.length === 0) return { affected: 0 };
-    const affected = await CitationRepo.softDeleteMany(
-      db,
-      input.ownerUserId,
-      uniqueIds,
-      Date.now(),
-    );
+    const rows = await CitationRepo.findByIds(db, input.ownerUserId, uniqueIds);
+    const now = Date.now();
+    const affected = await CitationRepo.softDeleteMany(db, input.ownerUserId, uniqueIds, now);
+
+    // Artifact bayangan hanya milik item perpustakaan, jadi ia ikut mati bersama
+    // referensinya — dan filter `status = 'active'` pada pencarian menyingkirkan
+    // chunk-nya tanpa perlu menghapus embedding. Artifact yang diunggah ke proyek
+    // punya hidupnya sendiri dan tidak boleh tersentuh.
+    for (const row of rows) {
+      if (!row.artifactId) continue;
+      const artifact = await ArtifactRepo.findById(db, row.artifactId);
+      if (!artifact || artifact.ownerUserId !== input.ownerUserId) continue;
+      if (artifact.source !== "reference" || artifact.status !== "active") continue;
+      await ArtifactRepo.update(db, artifact.id, {
+        status: "deleted",
+        deletedAt: now,
+        updatedAt: now,
+      });
+    }
     return { affected };
   },
 

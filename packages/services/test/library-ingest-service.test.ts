@@ -267,6 +267,59 @@ describe("ambil PDF open access", () => {
   });
 });
 
+describe("hapus item perpustakaan", () => {
+  test("artifact referensi ikut di-soft-delete", async () => {
+    const updates: Array<{ id: string; patch: { status?: string } }> = [];
+    spyOn(CitationRepo, "findByIds").mockResolvedValue([
+      { id: "c11", ownerUserId: OWNER, artifactId: "art_11" },
+    ] as never);
+    spyOn(CitationRepo, "softDeleteMany").mockResolvedValue(1 as never);
+    spyOn(ArtifactRepo, "findById").mockResolvedValue({
+      id: "art_11",
+      ownerUserId: OWNER,
+      source: "reference",
+      status: "active",
+    } as never);
+    spyOn(ArtifactRepo, "update").mockImplementation(
+      async (_db: unknown, id: string, patch: { status?: string }) => {
+        updates.push({ id, patch });
+      },
+    );
+
+    await citationCrudMethods.bulkSoftDelete({} as never, {
+      ownerUserId: OWNER,
+      ids: ["c11"],
+    });
+    expect(updates[0]).toEqual({
+      id: "art_11",
+      patch: expect.objectContaining({ status: "deleted" }),
+    });
+  });
+
+  test("artifact unggahan proyek tidak ikut terhapus", async () => {
+    const updates: string[] = [];
+    spyOn(CitationRepo, "findByIds").mockResolvedValue([
+      { id: "c12", ownerUserId: OWNER, artifactId: "art_12" },
+    ] as never);
+    spyOn(CitationRepo, "softDeleteMany").mockResolvedValue(1 as never);
+    spyOn(ArtifactRepo, "findById").mockResolvedValue({
+      id: "art_12",
+      ownerUserId: OWNER,
+      source: "upload",
+      status: "active",
+    } as never);
+    spyOn(ArtifactRepo, "update").mockImplementation(async (_db: unknown, id: string) => {
+      updates.push(id);
+    });
+
+    await citationCrudMethods.bulkSoftDelete({} as never, {
+      ownerUserId: OWNER,
+      ids: ["c12"],
+    });
+    expect(updates).toHaveLength(0);
+  });
+});
+
 describe("embed dan cakupan", () => {
   test("tanpa PDF, cakupan abstrak dari judul dan penulis", async () => {
     const patches: Array<Record<string, unknown>> = [];
