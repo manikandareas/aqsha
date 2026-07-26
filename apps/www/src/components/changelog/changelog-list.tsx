@@ -1,5 +1,7 @@
 import { ChangelogCard } from "@/components/changelog/changelog-card";
+import { Button } from "@/components/ui/button";
 import { changelogColumn, changelogGutter } from "@/lib/changelog/layout";
+import { WAITLIST_PATH } from "@/lib/marketing/cta";
 import type { ChangelogEntry } from "@/lib/changelog/types";
 
 export function ChangelogList({ entries }: { entries: ChangelogEntry[] }) {
@@ -18,9 +20,17 @@ export function ChangelogList({ entries }: { entries: ChangelogEntry[] }) {
       </header>
 
       {entries.length === 0 ? (
-        <p className={`${changelogGutter} mt-10 text-sm text-muted-foreground`}>
-          Belum ada pembaruan. Nantikan, ya.
-        </p>
+        <div
+          className={`${changelogGutter} mt-10 max-w-md rounded-xl border-2 border-border bg-card p-5`}
+        >
+          <p className="font-medium text-foreground">Belum ada catatan rilis.</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Aqsha sedang menyiapkan akses awal untuk workflow riset dan penulisan berbasis proyek.
+          </p>
+          <Button asChild className="mt-5">
+            <a href={WAITLIST_PATH}>Dapatkan kabar saat akses dibuka</a>
+          </Button>
+        </div>
       ) : (
         <div className="mt-8 divide-y divide-border/60 border-y border-border/60">
           {entries.map((entry, index) => (

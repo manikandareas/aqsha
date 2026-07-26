@@ -10,8 +10,7 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
           Blog
         </h1>
         <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-          Catatan tim Aqsha soal riset, verifikasi sumber, dan cara nulis ilmiah
-          yang sumbernya beneran ada.
+          Catatan Aqsha tentang menautkan proyek, sumber, dan draf saat menulis karya ilmiah.
         </p>
       </header>
 
