@@ -1,17 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import {
-  buildOpenAlexWorksUrl,
-  type OpenAlexWork,
-  openAlexWorkToExplorePaper,
-  workIdentifiers,
-} from "../src/feed/openAlex";
+import { buildOpenAlexWorksUrl, type OpenAlexWork, workIdentifiers } from "../src/feed/openAlex";
 import {
   canonicalPaperKey,
   dedupeExplorePapers,
   deriveKeyProbe,
   type ExplorePaperInput,
 } from "../src/explore/model";
-import { paperToFeedInput } from "../src/feed/model";
+import { buildFeedItemRow } from "../src/feed/model";
+import { mapOpenAlexWork } from "../src/papers/work";
 
 const WORK: OpenAlexWork = {
   id: "https://openalex.org/W123",
@@ -33,30 +29,8 @@ const WORK: OpenAlexWork = {
     { author: { display_name: "Jane Doe" } },
     { raw_author_name: "John Roe" },
   ],
-  primary_topic: { display_name: "Climate ML", score: 0.9, field: { display_name: "CS" } },
+  primary_topic: { display_name: "Climate ML", field: { display_name: "CS" } },
 };
-
-describe("openAlexWorkToExplorePaper", () => {
-  test("map field inti + key doi + author + topics + abstract", () => {
-    const paper = openAlexWorkToExplorePaper(WORK)!;
-    expect(paper).not.toBeNull();
-    expect(paper.key).toBe("doi:10.1234/abc"); // doi dinormalisasi lowercase
-    expect(paper.title).toBe("Deep Learning for Climate");
-    expect(paper.provider).toBe("OpenAlex");
-    expect(paper.url).toBe("https://example.org/oa"); // oa_url menang
-    expect(paper.authors).toEqual(["Jane Doe", "John Roe"]);
-    expect(paper.year).toBe(2023);
-    expect(paper.citedByCount).toBe(142);
-    expect(paper.isOpenAccess).toBe(true);
-    expect(paper.pdfUrl).toBe("https://example.org/paper.pdf");
-    expect(paper.topics).toContain("Climate ML");
-    expect(paper.abstract).toBe("Climate change study");
-  });
-
-  test("tanpa title atau url → null", () => {
-    expect(openAlexWorkToExplorePaper({ display_name: "" })).toBeNull();
-  });
-});
 
 describe("canonicalPaperKey", () => {
   test("prioritas doi > arxiv > url > title", () => {
@@ -112,15 +86,27 @@ describe("buildOpenAlexWorksUrl", () => {
   });
 });
 
-describe("workIdentifiers + paperToFeedInput retraction", () => {
-  test("retracted work → feed item retractionStatus retracted", () => {
-    const retractedWork: OpenAlexWork = { ...WORK, is_retracted: true };
-    const ids = new Set(workIdentifiers(retractedWork));
-    const paper = openAlexWorkToExplorePaper(retractedWork)!;
-    const input = paperToFeedInput(paper, ids);
-    expect(input.kind).toBe("paper");
-    expect(input.dedupeKey).toBe(`paper:${paper.key}`);
-    expect(input.retractionStatus).toBe("retracted");
-    expect(input.trendScore).toBe(142); // citedByCount
+describe("workIdentifiers", () => {
+  test("membawa openalexId + doi ternormalisasi", () => {
+    expect(workIdentifiers(WORK)).toEqual(["https://openalex.org/W123", "10.1234/abc"]);
+  });
+});
+
+describe("lane feed memakai mapper bersama", () => {
+  test("work trending jadi row feed lewat mapOpenAlexWork", () => {
+    const paper = mapOpenAlexWork(WORK)!;
+    const row = buildFeedItemRow(paper, 1_000);
+    expect(row.key).toBe(paper.key);
+    expect(row.oaStatus).toBe(paper.oaStatus);
+    expect(row.workType).toBe(paper.workType);
+    expect(row.language).toBe(paper.language);
+  });
+
+  test("retraksi ikut dari work, tanpa set id terpisah", () => {
+    const paper = mapOpenAlexWork({ ...WORK, is_retracted: true })!;
+    const row = buildFeedItemRow(paper, 1_000);
+    expect(row.isRetracted).toBe(true);
+    expect(row.dedupeKey).toBe(`paper:${paper.key}`);
+    expect(row.trendScore).toBe(142);
   });
 });

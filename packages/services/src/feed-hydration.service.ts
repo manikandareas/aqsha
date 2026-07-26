@@ -4,8 +4,8 @@
  * hanya dispatch. Lane: OpenAlex (papers). Provider lib di `feed/openAlex`.
  */
 import type { Db } from "@aqsha/db";
-import { fetchOpenAlexWorks, workIdentifiers } from "./feed/openAlex";
-import { paperToFeedInput } from "./feed/model";
+import { fetchOpenAlexWorks } from "./feed/openAlex";
+import { literaturePaperToExplorePaper } from "./papers/work";
 import { upsertFeedItems } from "./feed/write";
 import { PaperCacheService } from "./paper-cache.service";
 import { enqueue, FEED_QUEUES } from "./clients/queue";
@@ -24,20 +24,15 @@ export const FEED_HYDRATION_LANES = ["refreshTrendingPapers"] as const;
 export type FeedHydrationLane = (typeof FEED_HYDRATION_LANES)[number];
 
 export const FeedHydrationService = {
-  /** Trending papers OpenAlex → cache explore_papers + materialize feed kind=paper. */
+  /** Trending papers OpenAlex → cache explore_papers + materialize feed. */
   async refreshTrendingPapers(db: Db, args?: { limit?: number }): Promise<RefreshResult> {
     const limit = Math.min(args?.limit ?? TRENDING_LIMIT, 50);
-    const { papers, works } = await fetchOpenAlexWorks({ query: "", limit, includeRetracted: true });
+    const { papers } = await fetchOpenAlexWorks({ query: "", limit, includeRetracted: true });
     if (papers.length === 0) return { fetched: 0, written: 0 };
-    const retractedIds = new Set<string>();
-    for (const work of works) {
-      if (work.is_retracted) for (const id of workIdentifiers(work)) retractedIds.add(id);
-    }
     const now = Date.now();
-    await PaperCacheService.upsert(db, papers, now);
-    const inputs = papers.map((paper) => paperToFeedInput(paper, retractedIds));
-    await upsertFeedItems(db, inputs, now);
-    return { fetched: papers.length, written: inputs.length };
+    await PaperCacheService.upsert(db, papers.map(literaturePaperToExplorePaper), now);
+    await upsertFeedItems(db, papers, now);
+    return { fetched: papers.length, written: papers.length };
   },
 
   /** Jalankan satu lane by id (dispatch worker). */

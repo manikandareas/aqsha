@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { buildFeedItemRow, shapeFeedItem } from "../src/feed/model";
 import {
   explorePaperToLiteraturePaper,
   literaturePaperToExplorePaper,
@@ -78,5 +79,22 @@ describe("konversi cache paper", () => {
   test("paper tanpa url memakai doi sebagai alamat cache", () => {
     const paper: LiteraturePaper = { ...mapOpenAlexWork(WORK)!, url: null };
     expect(literaturePaperToExplorePaper(paper).url).toBe("https://doi.org/10.1234/abc");
+  });
+});
+
+describe("paritas feed ↔ pencarian", () => {
+  test("setiap field paper mendarat di baris feed tanpa berubah", () => {
+    const fromSearch = mapOpenAlexWork(WORK)!;
+    const row = buildFeedItemRow(fromSearch, 1_000) as Record<string, unknown>;
+    for (const field of Object.keys(fromSearch)) {
+      expect(row[field]).toEqual((fromSearch as Record<string, unknown>)[field]);
+    }
+  });
+
+  test("baris feed kembali jadi paper yang sama dengan hasil pencarian", () => {
+    const fromSearch = mapOpenAlexWork(WORK)!;
+    const { feedItemId, ...fromFeed } = shapeFeedItem({ id: "feed_1", ...fromSearch });
+    expect(feedItemId).toBe("feed_1");
+    expect(fromFeed).toEqual(fromSearch);
   });
 });

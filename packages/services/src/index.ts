@@ -171,15 +171,9 @@ export {
 export {
   buildFeedItemRow,
   deriveOrderAt,
-  deriveSearchText,
-  type FeedClaim,
-  type FeedItemInput,
-  type FeedItemResponse,
   type FeedItemRow,
-  type FeedKind,
-  type FeedProvider,
-  type FeedRetractionStatus,
-  paperToFeedInput,
+  type FeedPaper,
+  parsePublishedAt,
   shapeFeedItem,
 } from "./feed/model";
 export {
