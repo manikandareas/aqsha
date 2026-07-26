@@ -7,7 +7,9 @@ import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { citationCrudMethods } from "../src/citations/citation-crud.methods";
 import * as queue from "../src/clients/queue";
 import { LibraryIngestService } from "../src/library/library-ingest.service";
+import { ArtifactService } from "../src/artifact.service";
 import { PaperMetadataService } from "../src/paper-metadata.service";
+import * as rateLimits from "../src/quota/rate-limits";
 
 const OWNER = "user_1";
 const ARTIFACT = "art_1";
@@ -196,5 +198,69 @@ describe("resolve metadata", () => {
       },
     });
     expect(result).toBeNull();
+  });
+});
+
+describe("ambil PDF open access", () => {
+  // Limiter memakai Redis; di unit test kita hanya butuh gerbangnya selalu terbuka.
+  beforeEach(() => {
+    spyOn(rateLimits, "getRateLimiter").mockReturnValue({
+      consume: async () => ({}),
+    } as never);
+  });
+
+  test("tanpa kandidat, tidak mengunduh apa pun", async () => {
+    const ingest = spyOn(ArtifactService, "ingestResolvedPdf").mockResolvedValue({
+      indexed: true,
+    } as never);
+    ingest.mockClear();
+    const upgraded = await LibraryIngestService.fetchOpenAccessPdf({} as never, {
+      ownerUserId: OWNER,
+      citation: { id: "c6", ownerUserId: OWNER, title: "Judul" } as never,
+      artifactId: "art_6",
+      resolved: { pdfCandidates: [], authors: [], affiliations: [] } as never,
+    });
+    expect(upgraded).toBe(false);
+    expect(ingest).not.toHaveBeenCalled();
+  });
+
+  test("unduhan gagal bukan kegagalan item", async () => {
+    const upgraded = await LibraryIngestService.fetchOpenAccessPdf({} as never, {
+      ownerUserId: OWNER,
+      citation: { id: "c7", ownerUserId: OWNER, title: "Judul" } as never,
+      artifactId: "art_7",
+      resolved: {
+        pdfCandidates: ["https://contoh.test/a.pdf"],
+        authors: [],
+        affiliations: [],
+      } as never,
+      download: async () => {
+        throw new Error("jaringan mati");
+      },
+    });
+    expect(upgraded).toBe(false);
+  });
+
+  test("unduhan berhasil menaikkan artifact jadi PDF", async () => {
+    const ingest = spyOn(ArtifactService, "ingestResolvedPdf").mockResolvedValue({
+      indexed: true,
+    } as never);
+    const upgraded = await LibraryIngestService.fetchOpenAccessPdf({} as never, {
+      ownerUserId: OWNER,
+      citation: { id: "c8", ownerUserId: OWNER, title: "Judul paper" } as never,
+      artifactId: "art_8",
+      resolved: {
+        pdfCandidates: ["https://contoh.test/a.pdf"],
+        authors: [],
+        affiliations: [],
+      } as never,
+      download: async () => ({
+        bytes: new Uint8Array([1, 2, 3]),
+        byteSize: 3,
+        sourceUrl: "https://contoh.test/a.pdf",
+      }),
+    });
+    expect(upgraded).toBe(true);
+    expect(ingest).toHaveBeenCalled();
   });
 });

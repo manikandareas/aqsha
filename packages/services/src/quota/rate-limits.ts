@@ -23,7 +23,8 @@ export type RateLimitRule =
   | "waitlist:submit-email"
   | "waitlist:verify-ip"
   | "latex:compile"
-  | "typst:compile";
+  | "typst:compile"
+  | "library:oa-download";
 
 const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number }> = {
   "workspaces:create": { points: 3, duration: 3600 },
@@ -57,6 +58,9 @@ const RATE_LIMIT_RULES: Record<RateLimitRule, { points: number; duration: number
   // Compile/ekspor Typst server-side (dry-run proposal + ekspor PDF/DOCX) — bucket bersama
   // agen+user; 10/menit cukup untuk loop edit sekaligus mencegah antrean compile menumpuk.
   "typst:compile": { points: 10, duration: 60 },
+  // Unduhan PDF open access per-owner: menahan fan-out saat import besar
+  // memicu ratusan job sekaligus.
+  "library:oa-download": { points: 30, duration: 60 },
 };
 
 /** Konfigurasi rule (points/duration) — dipakai `getSendStatus` untuk hitung cooldown. */

@@ -1,10 +1,13 @@
 import { ArtifactRepo, type Citation, CitationRepo, type Db } from "@aqsha/db";
+import { ArtifactService } from "../artifact.service";
 import { artifactFamilyForType } from "../artifacts/model";
 import { ARTIFACT_QUEUES, enqueue, removeJob } from "../clients/queue";
 import { PaperMetadataService } from "../paper-metadata.service";
+import { downloadOaPdf, pdfFileName } from "../papers/download";
 import { type ClassifiedUrl, classifyPaperText } from "../papers/identifiers";
 import type { ResolvedPaper } from "../papers/model";
 import { resolvePaper } from "../papers/resolve";
+import { getRateLimiter } from "../quota/rate-limits";
 
 export type LibraryIngestJob = { ownerUserId: string; citationId: string };
 
@@ -170,6 +173,50 @@ export const LibraryIngestService = {
   },
 
   /**
+   * Best-effort: tak ada kandidat open access, unduhan gagal, atau host diblokir
+   * penjaga SSRF semuanya berarti item tetap hidup dengan cakupan abstrak.
+   */
+  async fetchOpenAccessPdf(
+    db: Db,
+    input: {
+      ownerUserId: string;
+      citation: Citation;
+      artifactId: string;
+      resolved: ResolvedPaper;
+      download?: typeof downloadOaPdf;
+    },
+  ): Promise<boolean> {
+    const candidates = input.resolved.pdfCandidates ?? [];
+    if (candidates.length === 0) return false;
+    // Import besar melepas ratusan job sekaligus; tanpa gerbang ini satu akun bisa
+    // memicu fan-out unduhan ke penerbit dalam hitungan detik. Kehabisan jatah bukan
+    // kegagalan item — ia sekadar tidak jadi mengunduh kali ini.
+    try {
+      await getRateLimiter("library:oa-download").consume(input.ownerUserId, 1);
+    } catch {
+      return false;
+    }
+    const run = input.download ?? downloadOaPdf;
+    let pdf: Awaited<ReturnType<typeof downloadOaPdf>> = null;
+    try {
+      pdf = await run({ candidates });
+    } catch {
+      return false;
+    }
+    if (!pdf) return false;
+    await ArtifactService.ingestResolvedPdf(db, {
+      ownerUserId: input.ownerUserId,
+      artifactId: input.artifactId,
+      workspaceId: null,
+      bytes: pdf.bytes,
+      byteSize: pdf.byteSize,
+      fileName: pdfFileName(input.resolved),
+      title: input.citation.title,
+    });
+    return true;
+  },
+
+  /**
    * State machine ingest. Idempoten: setiap langkah aman diulang, dan retry BullMQ
    * membaca ulang state dari DB alih-alih mempercayai payload job yang bisa basi.
    */
@@ -188,11 +235,19 @@ export const LibraryIngestService = {
         ownerUserId: job.ownerUserId,
         citation,
       });
-      await this.resolveMetadata(db, {
+      const resolved = await this.resolveMetadata(db, {
         ownerUserId: job.ownerUserId,
         citation,
         artifactId,
       });
+      if (resolved) {
+        await this.fetchOpenAccessPdf(db, {
+          ownerUserId: job.ownerUserId,
+          citation,
+          artifactId,
+          resolved,
+        });
+      }
       await CitationRepo.updateById(db, citation.id, {
         ingestStatus: "ready",
         ingestedAt: Date.now(),
