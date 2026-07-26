@@ -167,8 +167,7 @@ function StepBlock({
               anchorLeft={anchorLeft}
             >
               <FeatureFrame
-                image={feature.image}
-                alt={feature.alt}
+                preview={feature.preview}
                 aspectClassName="h-full w-full"
                 initialRotate={index % 2 === 0 ? -1.1 : 1.1}
               />
@@ -176,8 +175,7 @@ function StepBlock({
           ) : (
             <div className="absolute inset-0">
               <FeatureFrame
-                image={feature.image}
-                alt={feature.alt}
+                preview={feature.preview}
                 aspectClassName="h-full w-full"
                 initialRotate={index % 2 === 0 ? -1.1 : 1.1}
               />

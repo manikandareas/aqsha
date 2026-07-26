@@ -6,6 +6,7 @@ import { m, useReducedMotion } from "motion/react";
 import { ArrowDownIcon } from "@/components/icons";
 import { HeroDoodles } from "@/components/marketing/hero-doodles";
 import { MagneticButton } from "@/components/marketing/magnetic-button";
+import { ProductPreviewPlaceholder } from "@/components/marketing/product-preview-placeholder";
 import { Button } from "@/components/ui/button";
 import {
   FEATURE_KEYS,
@@ -38,7 +39,7 @@ const buttonItem = (reduce: boolean | null) =>
       };
 
 /**
- * Collage-only layout for the hero frame stack. Identity (image, title, href)
+ * Collage-only layout for the hero frame stack. Identity (preview, title, href)
  * comes from `data/features.ts`.
  */
 const HERO_FRAME_LAYOUT: Record<
@@ -51,14 +52,14 @@ const HERO_FRAME_LAYOUT: Record<
     zBase: number;
   }
 > = {
-  workspace: {
+  projects: {
     dotClass: "bg-mint",
     aspectClass: "aspect-[4/3]",
     positionClass: "left-[-4%] bottom-0 w-[40%] sm:left-[1%] sm:w-[27%]",
     rotate: -2,
     zBase: 20,
   },
-  astra: {
+  document: {
     dotClass: "bg-lavender",
     aspectClass: "aspect-[16/11]",
     positionClass:
@@ -66,7 +67,7 @@ const HERO_FRAME_LAYOUT: Record<
     rotate: 0.8,
     zBase: 10,
   },
-  citations: {
+  references: {
     dotClass: "bg-coral",
     aspectClass: "aspect-[4/3]",
     positionClass:
@@ -74,7 +75,7 @@ const HERO_FRAME_LAYOUT: Record<
     rotate: 1.6,
     zBase: 30,
   },
-  provenance: {
+  astra: {
     dotClass: "bg-lemon",
     aspectClass: "aspect-[4/3]",
     positionClass: "hidden sm:block sm:left-[73%] sm:bottom-0 sm:w-[27%]",
@@ -185,12 +186,7 @@ function HeroFrameCard({
           </span>
 
           <span className={cn("relative block", frame.aspectClass)}>
-            <img
-              src={frame.image}
-              alt=""
-              decoding="async"
-              className="absolute inset-0 h-full w-full object-cover"
-            />
+            <ProductPreviewPlaceholder preview={frame.preview} />
             <span aria-hidden className="paper-grain absolute inset-0" />
 
             {/* Hover/focus CTA — asymmetric timing: enter 180ms, exit faster. */}

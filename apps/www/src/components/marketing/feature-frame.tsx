@@ -3,6 +3,8 @@
 import { m, useReducedMotion, useScroll, useTransform } from "motion/react";
 import { useRef } from "react";
 
+import { ProductPreviewPlaceholder } from "@/components/marketing/product-preview-placeholder";
+import type { ProductPreview } from "@/data/features";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,8 +30,7 @@ export function FrameChrome() {
 }
 
 type FeatureFrameProps = {
-  image: string;
-  alt: string;
+  preview: ProductPreview;
   /** Aspect utility, e.g. "aspect-[16/10]". Varies per feature block. */
   aspectClassName: string;
   /** Starting tilt in degrees; the frame straightens to 0 as it scrolls in. */
@@ -38,17 +39,15 @@ type FeatureFrameProps = {
 };
 
 /**
- * FeatureFrame — big editorial image frame below each feature's copy.
+ * FeatureFrame — big editorial product-preview frame below each feature's copy.
  *
- * Signature micro-interaction: "foto diluruskan di meja" — the frame enters
- * slightly tilted and scroll-linked straightens (rotate → 0) while rising
- * (y 32 → 0), with a slow internal parallax and a gentle hover zoom. Thin 1px
- * border, no shadow. Image is a per-block prop so real screenshots can swap in
- * later without touching layout.
+ * Signature micro-interaction: the frame enters slightly tilted and
+ * scroll-linked straightens (rotate → 0) while rising (y 32 → 0), with a slow
+ * internal parallax. Its placeholder can later be replaced by a screenshot
+ * without changing the frame's layout.
  */
 export function FeatureFrame({
-  image,
-  alt,
+  preview,
   aspectClassName,
   initialRotate = 0,
   className,
@@ -85,13 +84,7 @@ export function FeatureFrame({
         className="absolute inset-[-8%]"
         style={reduce ? undefined : { y: parallaxY }}
       >
-        <img
-          src={image}
-          alt={alt}
-          loading="lazy"
-          decoding="async"
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out [@media(hover:hover)]:group-hover:scale-[1.03]"
-        />
+        <ProductPreviewPlaceholder preview={preview} />
       </m.div>
       <FrameChrome />
     </m.div>
