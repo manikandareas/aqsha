@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { createDb } from "../src/client";
+import { ArtifactRepo } from "../src/repositories/artifactRepo";
 import { artifactPaperMetadata } from "../src/schema/artifactPaperMetadata";
 import { artifacts } from "../src/schema/artifacts";
 import { citations } from "../src/schema/citations";
@@ -138,5 +139,13 @@ describe("library ingest schema", () => {
       .from(artifactPaperMetadata)
       .where(eq(artifactPaperMetadata.id, META));
     expect(row?.workspaceId).toBeNull();
+  });
+});
+
+describe("kapasitas library", () => {
+  itest("artifact referensi tidak menambah hitungan kapasitas", async () => {
+    // ARTIFACT dari describe sebelumnya adalah source='reference'.
+    const count = await ArtifactRepo.countActiveByOwner(db, OWNER, 50);
+    expect(count).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { type Artifact, artifacts, type NewArtifact } from "../schema/artifacts";
 import { artifactContents } from "../schema/artifactContents";
 import { type KeysetCursor, encodeKeysetCursor } from "../cursor";
@@ -11,12 +11,23 @@ export const ArtifactRepo = {
     return rows[0] ?? null;
   },
 
-  /** Hitung artifact aktif owner, capped (`limit(capAt+1)`) — untuk libraryItemLimit. */
+  /**
+   * Hitung artifact aktif owner yang memakan kuota library, capped (`limit(capAt+1)`)
+   * — untuk libraryItemLimit. Artifact `reference` adalah bayangan item perpustakaan
+   * (satu per referensi, dibuat otomatis), jadi mengikutsertakannya membuat satu
+   * import .bib menghabiskan kuota paket dalam sekali jalan.
+   */
   async countActiveByOwner(db: DbOrTx, ownerUserId: string, capAt: number): Promise<number> {
     const rows = await db
       .select({ id: artifacts.id })
       .from(artifacts)
-      .where(and(eq(artifacts.ownerUserId, ownerUserId), eq(artifacts.status, "active")))
+      .where(
+        and(
+          eq(artifacts.ownerUserId, ownerUserId),
+          eq(artifacts.status, "active"),
+          ne(artifacts.source, "reference"),
+        ),
+      )
       .limit(capAt + 1);
     return rows.length;
   },
