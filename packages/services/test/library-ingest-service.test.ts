@@ -5,6 +5,8 @@
 import { ArtifactPaperMetadataRepo, ArtifactRepo, CitationRepo } from "@aqsha/db";
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { citationCrudMethods } from "../src/citations/citation-crud.methods";
+import * as queue from "../src/clients/queue";
+import { LibraryIngestService } from "../src/library/library-ingest.service";
 
 const OWNER = "user_1";
 const ARTIFACT = "art_1";
@@ -36,5 +38,36 @@ describe("createFromArtifact akun-level", () => {
       .createFromArtifact({} as never, { ownerUserId: OWNER, artifactId: ARTIFACT })
       .catch(() => {});
     expect(inserted[0]?.title).toBe("makalah-metodologi.pdf");
+  });
+});
+
+describe("gerbang enqueue", () => {
+  // `removeJob` menyentuh Redis; unit test hanya peduli pada apa yang di-enqueue.
+  beforeEach(() => {
+    spyOn(queue, "removeJob").mockResolvedValue(undefined as never);
+  });
+
+  test("satu job per citation dengan jobId stabil", async () => {
+    const calls: Array<{ name: string; data: unknown; opts?: { jobId?: string } }> = [];
+    spyOn(queue, "enqueue").mockImplementation(
+      async (name: string, data: Record<string, unknown>, opts?: { jobId?: string }) => {
+        calls.push({ name, data, opts });
+        return "job";
+      },
+    );
+    await LibraryIngestService.enqueue({ ownerUserId: OWNER, citationIds: ["c1", "c2"] });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.name).toBe("library-ingest");
+    expect(calls[0]?.opts?.jobId).toBe("library-ingest:c1");
+    expect(calls[1]?.data).toEqual({ ownerUserId: OWNER, citationId: "c2" });
+  });
+
+  test("daftar kosong tidak menyentuh antrean", async () => {
+    const spy = spyOn(queue, "enqueue").mockResolvedValue("job" as never);
+    // `spyOn` atas properti yang sudah di-spy mengembalikan mock yang sama, jadi
+    // riwayat panggilan uji sebelumnya masih menempel.
+    spy.mockClear();
+    await LibraryIngestService.enqueue({ ownerUserId: OWNER, citationIds: [] });
+    expect(spy).not.toHaveBeenCalled();
   });
 });

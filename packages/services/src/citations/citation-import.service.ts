@@ -15,6 +15,7 @@ import {
   throwAppError,
   WorkspaceCitationLinkRepo,
 } from "@aqsha/db";
+import { LibraryIngestService } from "../library/library-ingest.service";
 import { WorkspaceService } from "../workspace.service";
 import {
   canonicalKeyForCsl,
@@ -352,6 +353,9 @@ export const CitationImportService = {
 
     const result: ImportCommitResult = { created: 0, merged: 0, skipped: 0, linked: 0 };
     const now = Date.now();
+    // Dikumpulkan di dalam transaksi, dipakai sesudahnya: enqueue post-processing
+    // baru sah dijalankan ketika baris-barisnya benar-benar committed.
+    const insertedCitationIds: string[] = [];
 
     await db.transaction(async (tx) => {
       if (input.workspaceId) {
@@ -459,6 +463,7 @@ export const CitationImportService = {
       }
 
       await CitationRepo.insertMany(tx, rowsToInsert);
+      insertedCitationIds.push(...rowsToInsert.map((row) => row.id));
       if (input.workspaceId) {
         const linkRows = [...resolvedCitationIds].map((citationId) => ({
           id: crypto.randomUUID(),
@@ -475,6 +480,11 @@ export const CitationImportService = {
         recordsJson: null,
         summaryJson: result,
       });
+    });
+
+    await LibraryIngestService.enqueue({
+      ownerUserId: input.ownerUserId,
+      citationIds: insertedCitationIds,
     });
 
     return result;

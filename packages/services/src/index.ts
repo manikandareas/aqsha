@@ -88,6 +88,9 @@ export {
 export { evaluateGate } from "./billing/period";
 export { deriveMayarMembershipEvent, MayarClient } from "./clients/mayar";
 
+// Perpustakaan — gerbang post-processing item referensi (resolve → OA PDF → embed).
+export * from "./library";
+
 // Artifacts (P3) — pure helpers + konstanta + capacity gate + storage/RAG/extract.
 export * from "./artifacts/model";
 export { assertLibraryCapacity } from "./artifacts/capacity";

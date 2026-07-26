@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   AppError,
   CitationImportBatchRepo,
@@ -8,6 +8,7 @@ import {
 } from "@aqsha/db";
 import { CitationImportService } from "../src/citations/citation-import.service";
 import { CitationService } from "../src/citations/citation.service";
+import * as queueMod from "../src/clients/queue";
 import { WorkspaceService } from "../src/workspace.service";
 
 const fakeDb = { transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fakeDb) } as never;
@@ -74,6 +75,18 @@ async function appErrorCode(p: Promise<unknown>): Promise<string> {
   }
 }
 
+/**
+ * Item perpustakaan baru selalu melewati gerbang post-processing, yang butuh Redis.
+ * Uji ini menguji aturan import/dedupe, jadi antreannya di-stub — dan harus dipasang
+ * ulang setiap kali sebuah uji memanggil `mock.restore()` di tengah jalan.
+ */
+function stubLibraryIngestQueue() {
+  spyOn(queueMod, "enqueue").mockResolvedValue("job" as never);
+  spyOn(queueMod, "removeJob").mockResolvedValue(undefined as never);
+}
+
+beforeEach(stubLibraryIngestQueue);
+
 afterEach(() => mock.restore());
 
 describe("CitationImportService.preview", () => {
@@ -126,6 +139,7 @@ describe("CitationImportService.commit", () => {
       content: BIB,
     });
     mock.restore();
+    stubLibraryIngestQueue();
     // Kolom ber-default DB (status) tidak ada di payload insert — isi manual seperti DB.
     return {
       preview,

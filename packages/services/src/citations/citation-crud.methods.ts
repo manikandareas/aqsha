@@ -15,6 +15,7 @@ import {
   throwAppError,
   WorkspaceCitationLinkRepo,
 } from "@aqsha/db";
+import { LibraryIngestService } from "../library/library-ingest.service";
 import { classifyPaperText } from "../papers/identifiers";
 import { resolvePaper } from "../papers/resolve";
 import { WorkspaceService } from "../workspace.service";
@@ -166,6 +167,10 @@ export const citationCrudMethods = {
       }
     }
     await CitationRepo.insert(db, row);
+    await LibraryIngestService.enqueue({
+      ownerUserId: input.ownerUserId,
+      citationIds: [row.id],
+    });
     const detail = await this.get(db, {
       ownerUserId: input.ownerUserId,
       citationId: row.id,
@@ -239,6 +244,10 @@ export const citationCrudMethods = {
       }
     }
     await CitationRepo.insert(db, row);
+    await LibraryIngestService.enqueue({
+      ownerUserId: input.ownerUserId,
+      citationIds: [row.id],
+    });
     const detail = await this.get(db, {
       ownerUserId: input.ownerUserId,
       citationId: row.id,
@@ -354,6 +363,10 @@ export const citationCrudMethods = {
       };
     }
     await CitationRepo.insert(db, row);
+    await LibraryIngestService.enqueue({
+      ownerUserId: input.ownerUserId,
+      citationIds: [row.id],
+    });
     return {
       citation: await this.get(db, {
         ownerUserId: input.ownerUserId,

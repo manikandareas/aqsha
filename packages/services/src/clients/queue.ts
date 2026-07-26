@@ -15,6 +15,9 @@ export const ARTIFACT_QUEUES = {
   // Index lampiran thread besar (D5) — ekstraksi+embedding di-offload dari finalize upload
   // supaya response tak terblok; file kecil tetap inline.
   artifactIndexing: "artifact-indexing",
+  // Gerbang tunggal post-processing item perpustakaan: resolve metadata, ambil PDF
+  // open access, ekstrak teks, embed. Semua jalur pembuatan referensi bermuara ke sini.
+  libraryIngest: "library-ingest",
 } as const;
 
 /** Queue feed (P4) — lane hydration discovery (ganti cron 3h Convex). */
