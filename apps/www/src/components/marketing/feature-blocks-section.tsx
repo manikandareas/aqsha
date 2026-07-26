@@ -21,6 +21,13 @@ import { EASE_OUT } from "@/lib/motion";
 type Feature = WorkflowStep;
 
 /**
+ * Cells pair up left-to-right, so an odd number of steps leaves the last one
+ * without a partner. It still expands — it just anchors to the opposite side.
+ */
+const UNPAIRED_INDEX =
+  WORKFLOW_STEPS.length % 2 === 1 ? WORKFLOW_STEPS.length - 1 : null;
+
+/**
  * StepBadge — keycap-style number chip. Steps alternate: even steps ink
  * themselves in with the secondary (Deep Pine) face once in view, odd steps
  * stay as outlined chips.
@@ -70,7 +77,7 @@ function StepBlock({
   feature,
   index,
   active,
-  partnerActive,
+  leanFrom,
   hasPartner,
   isFinalStep,
   canExpand,
@@ -79,7 +86,8 @@ function StepBlock({
   feature: Feature;
   index: number;
   active: boolean;
-  partnerActive: boolean;
+  /** Index of the neighbour currently expanding over this cell, if any. */
+  leanFrom: number | null;
   hasPartner: boolean;
   isFinalStep: boolean;
   canExpand: boolean;
@@ -88,9 +96,18 @@ function StepBlock({
   const reduce = useReducedMotion();
   const colDelay = (index % 2) * 0.18;
   const ownsRail = index % 2 === 0 && (hasPartner || isFinalStep);
-  const anchorLeft = index % 2 === 0;
-  const grow = canExpand && hasPartner && active;
-  const lean = canExpand && partnerActive;
+  // Paired cells expand toward their partner. The unpaired final step sits in
+  // the grid's last column, so it anchors right and expands leftward like the
+  // odd cells do — anchoring left would push it past the container edge.
+  const anchorLeft = hasPartner ? index % 2 === 0 : false;
+  // Expansion is not partner-gated: every card grows on hover, including the
+  // unpaired one. A cell leans away from whichever neighbour is covering it,
+  // so the direction follows that neighbour's side rather than this cell's.
+  const grow = canExpand && active;
+  const lean = canExpand && leanFrom !== null;
+  const leanDirection = lean
+    ? ((-Math.sign(leanFrom! - index) as -1 | 1))
+    : (0 as const);
 
   return (
     <m.div
@@ -168,7 +185,7 @@ function StepBlock({
           {canExpand ? (
             <ExpandableFeatureFrame
               grow={grow}
-              lean={lean}
+              leanDirection={leanDirection}
               anchorLeft={anchorLeft}
             >
               <FeatureFrame
@@ -233,16 +250,28 @@ export function FeatureBlocksSection() {
             const partnerIndex = index % 2 === 0 ? index + 1 : index - 1;
             const hasPartner = index % 2 === 1 || partnerIndex < WORKFLOW_STEPS.length;
 
+            // Two cells can expand over this one: its partner, and — for the
+            // cell just left of an odd-length grid's unpaired last step — that
+            // last step, which anchors right and grows leftward.
+            const coveredBy = [
+              hasPartner ? partnerIndex : null,
+              UNPAIRED_INDEX !== null && index === UNPAIRED_INDEX - 1
+                ? UNPAIRED_INDEX
+                : null,
+            ];
+            const leanFrom =
+              coveredBy.find((i) => i !== null && activeFrame === i) ?? null;
+
             return (
               <StepBlock
                 key={feature.id}
                 feature={feature}
                 index={index}
                 active={activeFrame === index}
-                partnerActive={hasPartner && activeFrame === partnerIndex}
+                leanFrom={leanFrom}
                 hasPartner={hasPartner}
                 isFinalStep={index === WORKFLOW_STEPS.length - 1}
-                canExpand={canExpand && hasPartner}
+                canExpand={canExpand}
                 onHoverChange={setActiveFrame}
               />
             );
