@@ -215,7 +215,13 @@ const diffTheme = EditorView.baseTheme({
 		borderLeft: '2px solid var(--mint)',
 		padding: '0 0 0 6px'
 	},
-	'.cm-proposal-added-line': { whiteSpace: 'pre-wrap' },
+	// `pre-wrap` sendiri hanya memutus di spasi; token panjang tanpa spasi tetap melebar dan memaksa
+	// scroll horizontal. Samakan dengan perilaku `.cm-lineWrapping` bawaan CodeMirror.
+	'.cm-proposal-added-line': {
+		whiteSpace: 'pre-wrap',
+		overflowWrap: 'anywhere',
+		wordBreak: 'break-word'
+	},
 	'.cm-proposal-bar': {
 		display: 'flex',
 		alignItems: 'center',
@@ -226,9 +232,17 @@ const diffTheme = EditorView.baseTheme({
 		border: '2px solid var(--border)',
 		borderRadius: '8px',
 		background: 'var(--card)',
-		fontSize: '11px'
+		fontSize: '11px',
+		maxWidth: '100%'
 	},
-	'.cm-proposal-bar-label': { flex: '1 1 auto', color: 'var(--muted-foreground)' },
+	// `min-width: 0` wajib: default `auto` menahan flex item menyusut di bawah lebar isinya, sehingga
+	// judul bab yang panjang melebarkan bar melewati editor.
+	'.cm-proposal-bar-label': {
+		flex: '1 1 auto',
+		minWidth: 0,
+		overflowWrap: 'anywhere',
+		color: 'var(--muted-foreground)'
+	},
 	'.cm-proposal-bar-action': {
 		border: '2px solid var(--border)',
 		borderRadius: '8px',
@@ -239,7 +253,9 @@ const diffTheme = EditorView.baseTheme({
 	'.cm-proposal-bar-accept': { background: 'var(--mint)', color: 'var(--mint-foreground)' },
 	'.cm-proposal-bar-error': {
 		flexBasis: '100%',
+		minWidth: 0,
 		margin: '2px 0 0',
+		overflowWrap: 'anywhere',
 		color: 'var(--destructive)'
 	}
 });
