@@ -1,11 +1,13 @@
-import { ChatThreadRepo } from "@aqsha/db";
-import { WorkspaceDocumentService } from "@aqsha/services";
-import { WorkspaceService } from "@aqsha/services/workspace";
+import { ProjectFactsService, renderProjectManifest } from "@aqsha/services/typst";
 import type { ProcessInputArgs } from "@mastra/core/processors";
 import { getServiceDb } from "../lib/db";
 import { resolveOwnerThread } from "../lib/owner-thread";
 
-/** Menyuntik scope proyek tepercaya dari thread aktif tanpa memasukkan isi dokumen ke prompt. */
+/**
+ * Menyuntik peta proyek tepercaya dari thread aktif: identitas, kerangka bab beserta panjangnya,
+ * cacat sitasi, anotasi terbuka, dan status proposal — tanpa memasukkan isi dokumen ke prompt.
+ * Peta ini menggantikan satu ronde tool call yang dulu terpakai hanya untuk orientasi.
+ */
 export const workspaceProjectManifestProcessor = {
   id: "workspace-project-manifest" as const,
   async processInput({ requestContext, messages, systemMessages }: ProcessInputArgs) {
@@ -14,26 +16,15 @@ export const workspaceProjectManifestProcessor = {
 
     try {
       const db = getServiceDb();
-      const thread = await ChatThreadRepo.findById(db, threadId);
-      if (!thread || thread.ownerUserId !== ownerUserId || !thread.workspaceId) return messages;
-
-      const [workspace, document] = await Promise.all([
-        WorkspaceService.get(db, ownerUserId, thread.workspaceId),
-        WorkspaceDocumentService.getDocument(db, { ownerUserId, workspaceId: thread.workspaceId }),
-      ]);
-      if (!workspace) return messages;
-
-      systemMessages.push({
-        role: "system",
-        content: [
-          "<system-reminder>",
-          `Proyek aktif: "${workspace.name}" (workspaceId: ${workspace.id}).`,
-          `Dokumen Typst aktif: ${document ? `tersedia, contentVersion ${document.contentVersion}` : "belum ditulis"}.`,
-          "Gunakan proyek ini sebagai scope default tanpa meminta @mention. Untuk pertanyaan isi proyek, cari artifact relevan dengan `search_thread_documents` tanpa workspaceId; untuk edit Typst selalu baca `get_document_source` terlebih dahulu.",
-          "Dokumen/proyek yang disebut lewat @mention adalah context baca prioritas. Jangan mengubahnya kecuali itu dokumen aktif dari thread ini.",
-          "</system-reminder>",
-        ].join("\n"),
+      const workspaceId = await ProjectFactsService.workspaceIdForThread(db, {
+        ownerUserId,
+        threadId,
       });
+      if (!workspaceId) return messages;
+      const facts = await ProjectFactsService.get(db, { ownerUserId, workspaceId });
+      if (!facts) return messages;
+
+      systemMessages.push({ role: "system", content: renderProjectManifest(facts) });
       return { messages, systemMessages };
     } catch (err) {
       console.error("[workspace-project-manifest] failed", err);
