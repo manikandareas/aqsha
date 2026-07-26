@@ -570,12 +570,14 @@ describe("api citations — artifact bridge", () => {
     expect(res.status).toBe(404);
   });
 
-  itest("artifact tanpa metadata → 404 citation_artifact_no_metadata", async () => {
+  // Metadata paper yang belum ada BUKAN lagi kegagalan — judul artifact jadi placeholder
+  // sampai resolver melengkapinya. Yang tetap 404 adalah artifact yang memang tak ada.
+  itest("artifact tak ada → 404 artifact_not_found", async () => {
     const res = await req("POST", `/workspaces/${workspaceId}/citations/from-artifact`, tok(OWNER), {
       artifactId: "art_tidak_ada",
     });
     expect(res.status).toBe(404);
-    expect((await readJson(res)).code).toBe("citation_artifact_no_metadata");
+    expect((await readJson(res)).code).toBe("artifact_not_found");
   });
 });
 

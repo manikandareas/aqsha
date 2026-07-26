@@ -1,4 +1,4 @@
-import { ArtifactService } from "@aqsha/services";
+import { ArtifactService, CitationService } from "@aqsha/services";
 import { Elysia, t } from "elysia";
 import { getDb } from "../clients/db";
 import { authMacro } from "../plugins/auth";
@@ -69,11 +69,44 @@ export const artifacts = new Elysia()
     "/artifacts/upload-url",
     ({ ownerUserId, body }) => {
       const { db } = getDb();
-      return ArtifactService.generateUploadUrl(db, ownerUserId, body.workspaceId);
+      // `workspaceId` opsional: unggahan perpustakaan tidak menuju proyek mana pun.
+      return ArtifactService.generateUploadUrl(db, ownerUserId, body.workspaceId ?? null);
     },
     {
       auth: true,
-      body: t.Object({ workspaceId: t.String() }),
+      body: t.Object({ workspaceId: t.Optional(t.String()) }),
+    },
+  )
+  .post(
+    "/artifacts/upload",
+    async ({ ownerUserId, email, body }) => {
+      const { db } = getDb();
+      // Paper perpustakaan tidak dititipkan ke proyek mana pun; citation yang lahir
+      // dari sini otomatis melewati gerbang ingest.
+      const uploaded = await ArtifactService.finalizeUpload(db, {
+        ownerUserId,
+        ownerEmail: email,
+        workspaceId: null,
+        key: body.key,
+        fileName: body.fileName,
+        mimeType: body.mimeType,
+        size: body.size,
+      });
+      const citation = await CitationService.createFromArtifact(db, {
+        ownerUserId,
+        artifactId: uploaded.artifactId,
+      });
+      return { ...uploaded, citationId: citation.citation.id };
+    },
+    {
+      auth: true,
+      rateLimit: "artifacts:upload",
+      body: t.Object({
+        key: t.String({ minLength: 1 }),
+        fileName: t.String({ minLength: 1 }),
+        mimeType: t.String({ minLength: 1 }),
+        size: t.Number(),
+      }),
     },
   )
   .post(

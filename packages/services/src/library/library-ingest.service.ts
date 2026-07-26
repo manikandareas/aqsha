@@ -46,9 +46,12 @@ function referenceText(citation: Citation): string {
     .join("\n");
 }
 
-/** jobId stabil supaya enqueue ganda atas item yang sama tidak menggandakan kerja. */
+/**
+ * jobId stabil supaya enqueue ganda atas item yang sama tidak menggandakan kerja.
+ * Pemisahnya `-`, bukan `:` — BullMQ menolak custom job id yang memuat titik dua.
+ */
 function jobIdFor(citationId: string): string {
-  return `${ARTIFACT_QUEUES.libraryIngest}:${citationId}`;
+  return `${ARTIFACT_QUEUES.libraryIngest}-${citationId}`;
 }
 
 export const LibraryIngestService = {

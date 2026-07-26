@@ -62,7 +62,8 @@ describe("gerbang enqueue", () => {
     await LibraryIngestService.enqueue({ ownerUserId: OWNER, citationIds: ["c1", "c2"] });
     expect(calls).toHaveLength(2);
     expect(calls[0]?.name).toBe("library-ingest");
-    expect(calls[0]?.opts?.jobId).toBe("library-ingest:c1");
+    // BullMQ menolak `:` di custom job id, jadi pemisahnya `-`.
+    expect(calls[0]?.opts?.jobId).toBe("library-ingest-c1");
     expect(calls[1]?.data).toEqual({ ownerUserId: OWNER, citationId: "c2" });
   });
 
