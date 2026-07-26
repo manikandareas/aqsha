@@ -114,7 +114,6 @@ export {
 	PaintBoardIcon as PaletteIcon,
 	Attachment01Icon as PaperclipIcon,
 	PanelLeftIcon as PanelLeftIcon,
-	PanelRightIcon as PanelRightIcon,
 	PenTool01Icon as PenLineIcon,
 	PencilEdit01Icon as PencilIcon,
 	Pin02Icon as PinIcon,

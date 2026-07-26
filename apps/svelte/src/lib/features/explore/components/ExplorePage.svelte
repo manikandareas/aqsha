@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 	import { SvelteURL } from 'svelte/reactivity';
 	import { Button } from '@aqsha/ui-svelte/components/button';
-	import { Icon, ChevronRightIcon, PanelRightIcon } from '$lib/icons';
+	import { Icon, ChevronRightIcon, FilterIcon } from '$lib/icons';
 	import { cn } from '@aqsha/ui-svelte/utils';
 	import { getAuthState } from '$lib/auth';
 	import { readableApiErrorMessage } from '$lib/errors';
@@ -192,6 +192,7 @@
 	-->
 	<DetailSplitLayout
 		sideOpen={filterPanelOpen}
+		sideVariant="rail"
 		sideWidth="clamp(20rem,24vw,24rem)"
 		onSideOpenChange={(open) => {
 			if (!open) closeFilterPanel();
@@ -237,7 +238,7 @@
 									: 'text-muted-foreground hover:bg-muted hover:text-foreground'
 							)}
 						>
-							<Icon icon={PanelRightIcon} class="size-3.5" />
+							<Icon icon={FilterIcon} class="size-3.5" />
 							{#if applied.filters.length > 0}
 								<span
 									aria-hidden="true"

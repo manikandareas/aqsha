@@ -1,8 +1,13 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { cn } from '@aqsha/ui-svelte/utils';
 	import { PanelInline } from '$lib/hooks/panel-inline.svelte';
-	import { detailSplitMainSurfaceClass, PANEL_TRANSITION_MS } from './panel-surface';
+	import {
+		detailSplitMainRailClass,
+		detailSplitMainSurfaceClass,
+		PANEL_TRANSITION_MS
+	} from './panel-surface';
 	import { panelExpandContext } from './panel-expand.svelte';
 
 	/**
@@ -17,7 +22,8 @@
 		side,
 		sideOpen,
 		onSideOpenChange,
-		sideWidth = 'clamp(26rem,32vw,32rem)'
+		sideWidth = 'clamp(26rem,32vw,32rem)',
+		sideVariant = 'panel'
 	}: {
 		main: Snippet;
 		side: Snippet;
@@ -25,6 +31,12 @@
 		onSideOpenChange: (open: boolean) => void;
 		/** Docked width of the side track. Any CSS length; the closed/expanded tracks are fixed. */
 		sideWidth?: string;
+		/**
+		 * `panel` — main stays full-bleed and the side column brings its own framing.
+		 * `rail` — the nav sidebar's inset shell mirrored to this edge: the side column is a flush
+		 * rail surface and main floats over it as a card, rounded on the edge that faces the rail.
+		 */
+		sideVariant?: 'panel' | 'rail';
 	} = $props();
 
 	const panelInline = new PanelInline();
@@ -35,6 +47,15 @@
 	let expanded = $state(false);
 
 	const sideTrack = $derived(inset ? (expanded ? '70%' : sideWidth) : '0rem');
+
+	const rail = $derived(sideVariant === 'rail');
+	// Only rounds/gutters while the rail is actually docked — a closed rail must leave no strip of
+	// rail surface showing past main's edge.
+	const mainSurface = $derived(
+		rail
+			? cn(detailSplitMainRailClass, inset ? 'mr-2 rounded-r-xl' : 'rounded-none')
+			: detailSplitMainSurfaceClass
+	);
 
 	panelExpandContext.set({
 		get canExpand() {
@@ -57,9 +78,12 @@
 >
 	<div
 		style="transition-duration: {PANEL_TRANSITION_MS}ms; grid-template-columns: minmax(0,1fr) {sideTrack}"
-		class="grid min-h-0 w-full flex-1 transition-[grid-template-columns] ease-out"
+		class={cn(
+			'grid min-h-0 w-full flex-1 transition-[grid-template-columns] ease-out',
+			rail && 'bg-sidebar'
+		)}
 	>
-		<Sidebar.Inset class={detailSplitMainSurfaceClass}>
+		<Sidebar.Inset class={mainSurface} style="transition-duration: {PANEL_TRANSITION_MS}ms">
 			{@render main()}
 		</Sidebar.Inset>
 		{@render side()}
