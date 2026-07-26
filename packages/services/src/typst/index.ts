@@ -15,6 +15,16 @@ export {
 } from "./main-filename";
 export { scaffoldTypstDocument, type ScaffoldTypstOptions } from "./scaffold";
 export { scanTypstCiteKeys, stripTypstComments } from "./cite-scan";
+export {
+  applyOutlineOperations,
+  countWords,
+  findOutlineSectionByTitle,
+  type OutlineHeading,
+  type OutlineOperation,
+  type OutlineSection,
+  parseTypstOutline,
+  sliceOutlineSection,
+} from "./outline";
 export { composeProjectBib } from "./project-bib";
 export {
   applyHunkSelection,
