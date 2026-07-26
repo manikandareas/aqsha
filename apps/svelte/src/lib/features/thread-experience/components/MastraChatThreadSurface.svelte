@@ -49,7 +49,8 @@
 		ambientWorkspaceId = null,
 		getExtraClientContext,
 		onTurnSent,
-		history = null
+		history = null,
+		suggestions
 	}: {
 		agent: ThreadAgent;
 		threadId: string;
@@ -84,6 +85,8 @@
 		onTurnSent?: (threadId: string, sentContextRefs: ContextRef[]) => void;
 		/** Older-history pager owned by the shell; null when the surface has no persisted timeline. */
 		history?: ThreadHistoryControls | null;
+		/** Overrides the static composer prompt set with ones derived from the current document. */
+		suggestions?: readonly { label: string; prompt: string }[];
 	} = $props();
 
 	const qc = useQueryClient();
@@ -252,6 +255,7 @@
 				{errorDraft}
 				showSuggestions={!compact}
 				showLandingSuggestions={compact}
+				{suggestions}
 				recentThreads={recentThreads.data}
 				{initialContent}
 			/>

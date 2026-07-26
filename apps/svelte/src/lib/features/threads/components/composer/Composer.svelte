@@ -69,6 +69,7 @@
 		errorDraft = null,
 		showSuggestions = false,
 		showLandingSuggestions = false,
+		suggestions,
 		recentThreads = [],
 		initialContent,
 		placeholder
@@ -86,6 +87,8 @@
 		showSuggestions?: boolean;
 		/** Initial project-chat rail: four prompts above the unchanged composer shell. */
 		showLandingSuggestions?: boolean;
+		/** Overrides the static prompt set; project chat computes these from the live document. */
+		suggestions?: readonly { label: string; prompt: string }[];
 		recentThreads?: RecentThreadSummary[];
 		initialContent?: string;
 		placeholder?: ComposerPlaceholder;
@@ -391,6 +394,7 @@
 	{#if showLandingSuggestions && !disabled}
 		<ComposerSuggestionList
 			landing
+			items={suggestions}
 			onSelectSuggestion={(prompt) => {
 				commands = [];
 				content = prompt;
@@ -565,6 +569,7 @@
 	{#if showSuggestions && !disabled}
 		<ComposerStartPanel
 			{recentThreads}
+			{suggestions}
 			onSelectSuggestion={(prompt) => {
 				commands = [];
 				content = prompt;

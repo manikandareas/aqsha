@@ -7,11 +7,13 @@
 	let {
 		recentThreads,
 		onSelectThread,
-		onSelectSuggestion
+		onSelectSuggestion,
+		suggestions
 	}: {
 		recentThreads: RecentThreadSummary[];
 		onSelectThread: (threadId: string) => void;
 		onSelectSuggestion: (prompt: string) => void;
+		suggestions?: readonly { label: string; prompt: string }[];
 	} = $props();
 
 	const sortedThreads = $derived(takeRecentThreads(recentThreads));
@@ -89,6 +91,6 @@
 		<h2 class="px-1 text-left text-label font-semibold tracking-normal text-muted-foreground">
 			Saran
 		</h2>
-		<ComposerSuggestionList {onSelectSuggestion} />
+		<ComposerSuggestionList {onSelectSuggestion} items={suggestions} />
 	</section>
 </div>

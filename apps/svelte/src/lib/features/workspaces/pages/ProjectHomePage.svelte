@@ -21,6 +21,7 @@
 	import ProjectChatPane from '../components/ProjectChatPane.svelte';
 	import ProjectChatRuntimeProvider from '../components/ProjectChatRuntimeProvider.svelte';
 	import { useWorkspace } from '../api';
+	import { projectQuickActions } from '../lib/project-quick-actions';
 	import { resolveMainTypFilename } from '../main-typ-filename';
 	import { projectDisplayTitle } from '../types';
 	import TocOverlay from '$lib/features/document/components/TocOverlay.svelte';
@@ -80,7 +81,6 @@
 	}
 	const activationController = new ProjectActivationController(dispatchActivation);
 	const backgroundQueriesActive = $derived(enabled && activation.shellPainted);
-	const documentQueriesActive = $derived(enabled && activation.documentRuntimeActive);
 	const qc = useQueryClient();
 
 	const mentions = new ComposerMentions();
@@ -93,13 +93,15 @@
 		() => workspaceId,
 		() => enabled
 	);
+	// Gated on the painted shell rather than the document runtime: the chat tab can open first on
+	// narrow layouts, and its opening prompts are computed from the document and bib.
 	const documentQuery = useWorkspaceDocument(
 		() => workspaceId,
-		() => documentQueriesActive
+		() => backgroundQueriesActive
 	);
 	const bibQuery = useWorkspaceBib(
 		() => workspaceId,
-		() => documentQueriesActive
+		() => backgroundQueriesActive
 	);
 	const saveDocument = useSaveWorkspaceDocument(() => workspaceId);
 	const annotations = useWorkspaceAnnotations(
@@ -239,6 +241,14 @@
 		)
 	);
 
+	const quickActions = $derived(
+		projectQuickActions({
+			source: documentQuery.data?.source ?? '',
+			bib: bibQuery.data?.bib ?? '',
+			annotations: annotations.data ?? []
+		})
+	);
+
 	function attachWorkspace(node: HTMLDivElement): () => void {
 		return activationController.attach(node);
 	}
@@ -343,7 +353,7 @@
 {#snippet chatPanel()}
 	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
 		<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-			<ProjectChatPane leading={leftToggle} />
+			<ProjectChatPane leading={leftToggle} suggestions={quickActions} />
 		</div>
 	</div>
 {/snippet}

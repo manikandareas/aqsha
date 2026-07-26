@@ -13,11 +13,14 @@
 
 	let {
 		leading,
-		getExtraClientContext
+		getExtraClientContext,
+		suggestions
 	}: {
 		/** Rendered on the toolbar's left — the page's chat/editor panel toggle. */
 		leading?: Snippet;
 		getExtraClientContext?: () => string[];
+		/** Opening prompts derived from this project's document state. */
+		suggestions?: readonly { label: string; prompt: string }[];
 	} = $props();
 
 	const runtime = getProjectChatRuntime();
@@ -116,6 +119,7 @@
 				compact
 				bindUrlOnSend={false}
 				{getExtraClientContext}
+				{suggestions}
 				onTurnSent={runtime.onTurnSent}
 			/>
 		{:else}
