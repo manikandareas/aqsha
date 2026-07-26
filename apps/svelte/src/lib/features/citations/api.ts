@@ -104,6 +104,44 @@ export function useCitationsList(
 	}));
 }
 
+/**
+ * Unggah PDF ke perpustakaan akun: presign → PUT langsung ke object storage →
+ * finalize. Finalize-lah yang membuat citation dan memicu post-processing, jadi
+ * daftar cukup diinvalidasi sekali di akhir.
+ */
+export function useUploadLibraryPdf() {
+	const api = getApiClient();
+	const invalidate = useInvalidateCitations();
+	return createMutation(() => ({
+		mutationFn: async (file: File) => {
+			// Body presign kosong: unggahan perpustakaan tidak menuju proyek mana pun.
+			const presigned = unwrap(await api.artifacts['upload-url'].post({})) as {
+				uploadUrl: string;
+				key: string;
+			};
+			const put = await fetch(presigned.uploadUrl, {
+				method: 'PUT',
+				body: file,
+				headers: { 'content-type': file.type || 'application/pdf' }
+			});
+			if (!put.ok) throw new Error('Unggahan gagal');
+			return unwrap(
+				await api.artifacts.upload.post({
+					key: presigned.key,
+					fileName: file.name,
+					mimeType: file.type || 'application/pdf',
+					size: file.size
+				})
+			);
+		},
+		onSuccess: () => {
+			invalidate();
+			toast.success('PDF diunggah — metadata sedang diproses');
+		},
+		onError: (error: unknown) => toast.error(readableApiErrorMessage(error, 'Unggahan gagal'))
+	}));
+}
+
 export function useCitationTags(
 	enabled: () => boolean,
 	workspaceId: () => string | null = () => null

@@ -20,12 +20,14 @@
 	let {
 		scope,
 		onAddFromLibrary,
+		onUploadPdf,
 		onImportFile,
 		onAddByDoi,
 		onAddManual
 	}: {
 		scope: LibraryScope;
 		onAddFromLibrary?: () => void;
+		onUploadPdf: () => void;
 		onImportFile: () => void;
 		onAddByDoi: () => void;
 		onAddManual: () => void;
@@ -69,8 +71,12 @@
 				<Icon icon={FolderIcon} class="size-4" />
 				Tambah dari Perpustakaan
 			</Button>
-			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onImportFile}>
+			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onUploadPdf}>
 				<Icon icon={UploadIcon} class="size-4" />
+				Unggah PDF
+			</Button>
+			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onImportFile}>
+				<Icon icon={FileTextIcon} class="size-4" />
 				Import
 			</Button>
 			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onAddByDoi}>
@@ -82,8 +88,12 @@
 				Manual
 			</Button>
 		{:else}
-			<Button type="button" class="rounded-full px-4" onclick={onImportFile}>
+			<Button type="button" class="rounded-full px-4" onclick={onUploadPdf}>
 				<Icon icon={UploadIcon} class="size-4" />
+				Unggah PDF
+			</Button>
+			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onImportFile}>
+				<Icon icon={FileTextIcon} class="size-4" />
 				Import
 			</Button>
 			<Button type="button" variant="secondary" class="rounded-full px-4" onclick={onAddByDoi}>

@@ -16,6 +16,7 @@
 	import { readableApiErrorMessage } from '$lib/errors';
 	import {
 		Icon,
+		FileTextIcon,
 		FilterIcon,
 		FolderIcon,
 		LinkIcon,
@@ -53,7 +54,8 @@
 		useDeleteCitation,
 		useMergeManyCitations,
 		useUnlinkCitation,
-		useUpdateCitation
+		useUpdateCitation,
+		useUploadLibraryPdf
 	} from '../api';
 	import { CITATION_SOURCE_LABELS, CITATION_STATUS_LABELS, type CitationListItem } from '../types';
 	import { applyLibraryUrl, readLibraryUrl, type LibraryUrlState } from '../library-url-model';
@@ -122,6 +124,17 @@
 	}
 
 	const createCitation = useCreateCitation(() => workspaceId);
+	const uploadPdf = useUploadLibraryPdf();
+	let fileInputEl = $state<HTMLInputElement | null>(null);
+
+	function pickPdf() {
+		fileInputEl?.click();
+	}
+
+	function uploadFiles(files: File[]) {
+		for (const file of files) uploadPdf.mutate(file);
+	}
+
 	const updateCitation = useUpdateCitation();
 	const deleteCitation = useDeleteCitation();
 	const bulkTag = useBulkTagCitations();
@@ -250,8 +263,13 @@
 								</DropdownMenu.Item>
 								<DropdownMenu.Separator />
 							{/if}
-							<DropdownMenu.Item onSelect={() => (dialog = 'import')}>
+							<DropdownMenu.Item onSelect={pickPdf}>
 								<Icon icon={UploadIcon} class="size-4" />
+								Unggah PDF
+							</DropdownMenu.Item>
+							<DropdownMenu.Separator />
+							<DropdownMenu.Item onSelect={() => (dialog = 'import')}>
+								<Icon icon={FileTextIcon} class="size-4" />
 								Import file (.bib/.ris)
 							</DropdownMenu.Item>
 							<DropdownMenu.Item onSelect={() => (dialog = 'doi')}>
@@ -442,6 +460,7 @@
 					<CitationEmptyState
 						{scope}
 						onAddFromLibrary={() => (dialog = 'addFromLibrary')}
+						onUploadPdf={pickPdf}
 						onImportFile={() => (dialog = 'import')}
 						onAddByDoi={() => (dialog = 'doi')}
 						onAddManual={() => (dialog = 'manual')}
@@ -608,5 +627,19 @@
 		if (urlState.cite && selectedIds.has(urlState.cite)) navigate({ cite: null });
 		confirmBulkDelete = false;
 		clearSelection();
+	}}
+/>
+
+<!-- Dipicu aksi "Unggah PDF" (dropdown, empty state, dan context menu latar). -->
+<input
+	bind:this={fileInputEl}
+	type="file"
+	accept="application/pdf"
+	multiple
+	class="hidden"
+	onchange={(event) => {
+		const files = [...(event.currentTarget.files ?? [])];
+		event.currentTarget.value = '';
+		uploadFiles(files);
 	}}
 />

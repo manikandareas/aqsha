@@ -30,6 +30,12 @@ describe('library page and route contracts', () => {
 		expect(libraryPage).toContain('Hapus dari Perpustakaan');
 		expect(libraryPage).toContain('libraryBasePath(scope)');
 	});
+
+	it('library offers PDF upload as the primary add action', () => {
+		expect(libraryPage).toContain('Unggah PDF');
+		expect(libraryPage).toContain('useUploadLibraryPdf');
+		expect(read('../components/CitationEmptyState.svelte')).toContain('onUploadPdf');
+	});
 });
 
 describe('reader route contracts', () => {

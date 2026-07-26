@@ -39,6 +39,7 @@
 		useCitationTags,
 		useCopyCitation,
 		useCreateCitation,
+		useUploadLibraryPdf,
 		useDeleteCitation,
 		useMergeManyCitations,
 		useUpdateCitation
@@ -111,6 +112,12 @@
 	const list = useCitationsList(() => filters, enabled);
 	const tags = useCitationTags(enabled);
 	const createCitation = useCreateCitation();
+	const uploadPdf = useUploadLibraryPdf();
+	let fileInputEl = $state<HTMLInputElement | null>(null);
+
+	function pickPdf() {
+		fileInputEl?.click();
+	}
 	const deleteCitation = useDeleteCitation();
 	const copyCitation = useCopyCitation(() => workspaceId);
 	const bulkTag = useBulkTagCitations();
@@ -260,6 +267,7 @@
 			<div class={cn('min-h-0 flex-1 overflow-y-auto', panelBodyPaddingClass)}>
 				<CitationEmptyState
 					scope={{ kind: 'project', workspaceId, workspaceName: '' }}
+					onUploadPdf={pickPdf}
 					onImportFile={() => (dialog = 'import')}
 					onAddByDoi={() => (dialog = 'doi')}
 					onAddManual={() => (dialog = 'manual')}
@@ -646,3 +654,17 @@
 		}}
 	/>
 {/if}
+
+<!-- Dipicu aksi "Unggah PDF" pada empty state panel. -->
+<input
+	bind:this={fileInputEl}
+	type="file"
+	accept="application/pdf"
+	multiple
+	class="hidden"
+	onchange={(event) => {
+		const files = [...(event.currentTarget.files ?? [])];
+		event.currentTarget.value = "";
+		for (const file of files) uploadPdf.mutate(file);
+	}}
+/>
