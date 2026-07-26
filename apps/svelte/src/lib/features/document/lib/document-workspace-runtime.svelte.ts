@@ -10,6 +10,7 @@ import {
 import type { AnnotationDraft } from '$lib/features/document/lib/annotation-selection';
 import type { AnnotationView, SaveWorkspaceDocumentResult } from '$lib/features/document/api';
 import type { Cm6Diagnostic } from '$lib/features/document/typst/diagnostics';
+import type { ProposalDiffState } from '$lib/features/document/lib/proposal-diff-extension';
 import type {
 	DocumentTypstEngine,
 	VedivadDocumentTypstEngine
@@ -25,6 +26,7 @@ type EditorComponent = Component<
 		diagnostics?: Cm6Diagnostic[];
 		mainFilePath?: string;
 		project: TypstProject | null;
+		proposalDiff?: ProposalDiffState | null;
 		onChange: (next: string) => void;
 	},
 	EditorHandle
