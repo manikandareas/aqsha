@@ -1,12 +1,5 @@
-import { type Extension, StateEffect, StateField } from '@codemirror/state';
-import {
-	Decoration,
-	type DecorationSet,
-	EditorView,
-	ViewPlugin,
-	type ViewUpdate,
-	WidgetType
-} from '@codemirror/view';
+import { type Extension, StateEffect, StateField, type Text } from '@codemirror/state';
+import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import type { ProposalHunk } from '../api';
 
 export type ProposalDiffState = {
@@ -70,14 +63,6 @@ export function planDiffDecorations(
 }
 
 export const setProposalDiff = StateEffect.define<ProposalDiffState | null>();
-
-const proposalDiffField = StateField.define<ProposalDiffState | null>({
-	create: () => null,
-	update(value, tr) {
-		for (const effect of tr.effects) if (effect.is(setProposalDiff)) return effect.value;
-		return value;
-	}
-});
 
 class AddedLinesWidget extends WidgetType {
 	constructor(readonly lines: string[]) {
@@ -156,10 +141,8 @@ class HunkBarWidget extends WidgetType {
 	}
 }
 
-function buildDecorations(view: EditorView): DecorationSet {
-	const state = view.state.field(proposalDiffField, false);
+function buildDecorations(doc: Text, state: ProposalDiffState | null): DecorationSet {
 	if (!state || state.hunks.length === 0) return Decoration.none;
-	const doc = view.state.doc;
 	const byIndex = new Map(state.hunks.map((h) => [h.index, h] as const));
 	const ranges = planDiffDecorations(doc.lines, state.hunks).flatMap((item) => {
 		const line = doc.line(item.line);
@@ -186,25 +169,30 @@ function buildDecorations(view: EditorView): DecorationSet {
 	return Decoration.set(ranges, true);
 }
 
-const diffDecorationsPlugin = ViewPlugin.fromClass(
-	class {
-		decorations: DecorationSet;
-		constructor(view: EditorView) {
-			this.decorations = buildDecorations(view);
-		}
-		update(update: ViewUpdate) {
-			if (
-				update.docChanged ||
-				update.viewportChanged ||
-				update.state.field(proposalDiffField, false) !==
-					update.startState.field(proposalDiffField, false)
-			) {
-				this.decorations = buildDecorations(update.view);
+/**
+ * Dekorasi hidup di StateField, bukan ViewPlugin: CodeMirror menolak block decoration yang datang
+ * dari plugin karena tinggi baris harus diketahui sebelum viewport dihitung — lewat plugin, SELURUH
+ * set dibuang sehingga diff tak pernah tampil.
+ */
+const proposalDiffField = StateField.define<{
+	diff: ProposalDiffState | null;
+	decorations: DecorationSet;
+}>({
+	create: () => ({ diff: null, decorations: Decoration.none }),
+	update(value, tr) {
+		let diff = value.diff;
+		let changed = false;
+		for (const effect of tr.effects) {
+			if (effect.is(setProposalDiff)) {
+				diff = effect.value;
+				changed = true;
 			}
 		}
+		if (!changed && !tr.docChanged) return value;
+		return { diff, decorations: buildDecorations(tr.state.doc, diff) };
 	},
-	{ decorations: (v) => v.decorations }
-);
+	provide: (field) => EditorView.decorations.from(field, (value) => value.decorations)
+});
 
 const diffTheme = EditorView.baseTheme({
 	'.cm-proposal-removed': {
@@ -261,5 +249,5 @@ const diffTheme = EditorView.baseTheme({
 });
 
 export function proposalDiffExtension(): Extension {
-	return [proposalDiffField, diffDecorationsPlugin, diffTheme];
+	return [proposalDiffField, diffTheme];
 }
