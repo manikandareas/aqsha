@@ -15,6 +15,7 @@
     "worker:start": "bun run src/workers/index.ts",
     "seed:feed": "bun run scripts/seed-feed.ts",
     "dedupe:news": "bun run scripts/dedupe-news.ts",
+    "backfill:library-ingest": "bun run scripts/backfill-library-ingest.ts",
     "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"
   },

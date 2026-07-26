@@ -15,6 +15,7 @@ import {
 import { encodeKeysetCursor, type KeysetCursor } from "../cursor";
 import {
   type Citation,
+  type CitationIngestStatus,
   type CitationMetadataStatus,
   type CitationProvider,
   type CitationSource,
@@ -344,5 +345,22 @@ export const CitationRepo = {
         ),
       );
     return rows.map((r) => r.tag).sort();
+  },
+
+  /**
+   * Item yang belum pernah diproses, untuk backfill bertahap. Sengaja LINTAS OWNER —
+   * ini perkakas operasional yang dijalankan dari shell, bukan jalur permintaan
+   * pengguna, jadi tidak ada scope owner yang bisa disimpulkan.
+   */
+  async listByIngestStatus(
+    db: DbOrTx,
+    ingestStatus: CitationIngestStatus,
+    limit: number,
+  ): Promise<Array<{ id: string; ownerUserId: string }>> {
+    return db
+      .select({ id: citations.id, ownerUserId: citations.ownerUserId })
+      .from(citations)
+      .where(and(eq(citations.ingestStatus, ingestStatus), isNull(citations.deletedAt)))
+      .limit(limit);
   },
 };
