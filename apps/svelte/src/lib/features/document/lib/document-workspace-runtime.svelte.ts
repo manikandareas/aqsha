@@ -8,7 +8,7 @@ import {
 	type DocumentOutlineEntry
 } from '$lib/features/document/lib/outline';
 import type { AnnotationDraft } from '$lib/features/document/lib/annotation-selection';
-import type { SaveWorkspaceDocumentResult } from '$lib/features/document/api';
+import type { AnnotationView, SaveWorkspaceDocumentResult } from '$lib/features/document/api';
 import type { Cm6Diagnostic } from '$lib/features/document/typst/diagnostics';
 import type {
 	DocumentTypstEngine,
@@ -35,12 +35,7 @@ type PreviewComponent = Component<
 		project?: TypstProject | null;
 		source?: string;
 		mainFilePath?: string;
-		annotations?: Array<{
-			id: string;
-			page: number;
-			rects: AnnotationDraft['rects'];
-			status: string;
-		}>;
+		annotations?: AnnotationView[];
 		activeAnnotationId?: string | null;
 		selectedAnnotationIds?: ReadonlySet<string>;
 		outlineTitles?: string[];
@@ -50,6 +45,9 @@ type PreviewComponent = Component<
 		proposalHunkCount?: number;
 		onReviewProposal?: () => void;
 		annotationMode?: boolean;
+		onToggleAnnotationContext?: (id: string) => void;
+		onAskAnnotation?: (id: string) => void;
+		onDismissAnnotation?: (id: string) => void;
 	},
 	PreviewHandle
 >;

@@ -18,7 +18,10 @@
 		resolveSemanticAreaRange,
 		resolveVedivadBlockAtPoint
 	} from '../lib/annotation-hover-targets';
+	import { placePins, type PinCandidate } from '../lib/annotation-pins';
+	import type { AnnotationView } from '../api';
 	import AnnotationModeLayer from './AnnotationModeLayer.svelte';
+	import AnnotationPinLayer from './AnnotationPinLayer.svelte';
 
 	/**
 	 * Preview dokumen Typst: memasang SVG terseleksi yang sudah selesai di-compile dan dirender worker.
@@ -26,13 +29,6 @@
 	 * inline (`onCreateAnnotation`). Sorotan anotasi digambar sebagai overlay ternormalisasi.
 	 * `svg` null (compile gagal total) mempertahankan render terakhir supaya baca tak terlempar.
 	 */
-	type PreviewAnnotation = {
-		id: string;
-		page: number;
-		rects: AnnotationRect[];
-		status: string;
-	};
-
 	let {
 		svg,
 		annotations = [],
@@ -47,10 +43,13 @@
 		annotationMode = $bindable(false),
 		project = null,
 		source = '',
-		mainFilePath = '/main.typ'
+		mainFilePath = '/main.typ',
+		onToggleAnnotationContext,
+		onAskAnnotation,
+		onDismissAnnotation
 	}: {
 		svg: string | null;
-		annotations?: PreviewAnnotation[];
+		annotations?: AnnotationView[];
 		activeAnnotationId?: string | null;
 		selectedAnnotationIds?: ReadonlySet<string>;
 		outlineTitles?: string[];
@@ -64,6 +63,9 @@
 		project?: TypstProject | null;
 		source?: string;
 		mainFilePath?: string;
+		onToggleAnnotationContext?: (id: string) => void;
+		onAskAnnotation?: (id: string) => void;
+		onDismissAnnotation?: (id: string) => void;
 	} = $props();
 
 	const MAX_WIDTH = 860;
@@ -78,7 +80,11 @@
 	let overlayItems = $state<
 		Array<{ id: string; active: boolean; selected: boolean; boxes: OverlayBox[] }>
 	>([]);
+	let pinCandidates = $state<PinCandidate[]>([]);
 	let vedivadBlockCache = new WeakMap<Element, ReturnType<typeof resolveVedivadBlockAtPoint>>();
+
+	const pins = $derived(placePins(pinCandidates));
+	const annotationsById = $derived(new Map((annotations ?? []).map((a) => [a.id, a] as const)));
 
 	const stageWidth = $derived(fitWidth > 0 ? Math.max(280, Math.round(fitWidth * zoom)) : 0);
 
@@ -268,9 +274,11 @@
 	function refreshOverlays(): void {
 		if (!svgHost || !stageEl) {
 			overlayItems = [];
+			pinCandidates = [];
 			return;
 		}
 		const items: typeof overlayItems = [];
+		const candidates: PinCandidate[] = [];
 		for (const a of annotations) {
 			if (a.status === 'resolved' || a.status === 'dismissed') continue;
 			const boxes = overlayBoxes(svgHost, stageEl, a.page, a.rects);
@@ -281,9 +289,20 @@
 					selected: selectedAnnotationIds?.has(a.id) ?? false,
 					boxes
 				});
+				const first = boxes[0]!;
+				candidates.push({
+					id: a.id,
+					page: a.page,
+					// Pin duduk di kiri-luar blok supaya tak menutupi teks dokumen.
+					left: Math.max(first.left - 14, 10),
+					top: first.top + 8,
+					status: a.status === 'sent' ? 'sent' : 'open',
+					floating: false
+				});
 			}
 		}
 		overlayItems = items;
+		pinCandidates = candidates;
 	}
 
 	function setZoom(next: number): void {
@@ -398,6 +417,19 @@
 					{/each}
 				</button>
 			{/each}
+
+			<AnnotationPinLayer
+				{pins}
+				{annotationsById}
+				{stageEl}
+				{scrollEl}
+				activeId={activeAnnotationId ?? null}
+				contextIds={selectedAnnotationIds ?? new Set()}
+				onFocus={(id) => onSelectAnnotation?.(id)}
+				onToggleContext={(id) => onToggleAnnotationContext?.(id)}
+				onAsk={(id) => onAskAnnotation?.(id)}
+				onDismiss={(id) => onDismissAnnotation?.(id)}
+			/>
 
 			<AnnotationModeLayer {agentation} {svgHost} {stageEl} {scrollEl} />
 		</div>

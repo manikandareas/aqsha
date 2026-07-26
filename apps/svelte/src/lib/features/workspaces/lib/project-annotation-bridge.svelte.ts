@@ -3,6 +3,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import {
 	buildDocumentAnnotationMentionLabel,
 	type ContextRef,
+	contextRefKey,
 	MAX_CONTEXT_ANNOTATIONS
 } from '@aqsha/chat-core';
 import { readableApiErrorMessage } from '$lib/errors/api-error';
@@ -28,6 +29,8 @@ type ProjectAnnotationBridgeOptions = {
 	) => void;
 	markSent: (input: { ids: string[]; threadId: string }) => void;
 	scrollToText: (text: string) => void;
+	setComposerDraft: (text: string) => void;
+	selectChat: () => void;
 };
 
 /** Connects preview annotations to composer context chips and sent-turn bookkeeping. */
@@ -86,6 +89,44 @@ export class ProjectAnnotationBridge {
 				onError: (error) => toast.error(readableApiErrorMessage(error, 'Gagal menyimpan anotasi.'))
 			}
 		);
+	};
+
+	toggleContext = (id: string): void => {
+		const existing = this.#options.mentions.selectionRefs.find(
+			(ref) => ref.kind === 'document-annotation' && ref.annotationId === id
+		);
+		if (existing) {
+			this.#options.mentions.removeSelectionRefByKey(contextRefKey(existing));
+			return;
+		}
+		const annotation = this.#options.getAnnotations().find((item) => item.id === id);
+		if (!annotation) return;
+		const selectedText = annotation.selectedText ?? '';
+		const elementLabel = annotation.selectedText ?? 'Bagian dokumen';
+		this.#options.mentions.addSelectionRef({
+			kind: 'document-annotation',
+			workspaceId: this.#options.workspaceId(),
+			annotationId: annotation.id,
+			page: annotation.page,
+			selectedText,
+			note: annotation.note ?? '',
+			elementLabel,
+			label: buildDocumentAnnotationMentionLabel(elementLabel, selectedText)
+		});
+	};
+
+	/** Siapkan giliran untuk anotasi ini: pasang sebagai konteks, isi composer, pindah ke Chat. */
+	ask = (id: string): void => {
+		const annotation = this.#options.getAnnotations().find((item) => item.id === id);
+		if (!annotation) return;
+		const alreadyContext = this.#options.mentions.selectionRefs.some(
+			(ref) => ref.kind === 'document-annotation' && ref.annotationId === id
+		);
+		if (!alreadyContext) this.toggleContext(id);
+		this.#options.setComposerDraft(
+			annotation.note?.trim() ? annotation.note.trim() : 'Kerjakan anotasi ini.'
+		);
+		this.#options.selectChat();
 	};
 
 	focus = (id: string): void => {

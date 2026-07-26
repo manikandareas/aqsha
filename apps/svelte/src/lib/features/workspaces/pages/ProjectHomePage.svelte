@@ -184,7 +184,9 @@
 		getAnnotations: () => annotations.data ?? [],
 		create: (input, handlers) => createAnnotation.mutate(input, handlers),
 		markSent: (input) => markSent.mutate(input),
-		scrollToText: (text) => previewRef?.scrollToHeading(text)
+		scrollToText: (text) => previewRef?.scrollToHeading(text),
+		setComposerDraft: (text) => mentions.setComposerDraft(text),
+		selectChat: () => selectLeftMode('chat')
 	});
 
 	const proposalController = new ProjectProposalController({
@@ -489,6 +491,11 @@
 					onReviewProposal={proposalController.beginReview}
 					onCreateAnnotation={annotationBridge.create}
 					onSelectAnnotation={annotationBridge.focus}
+					onToggleAnnotationContext={annotationBridge.toggleContext}
+					onAskAnnotation={annotationBridge.ask}
+					onDismissAnnotation={(id: string) => {
+						void dismissAnnotations.mutateAsync({ ids: [id] });
+					}}
 					onActiveHeading={(index: number) => (activeTocIndex = index)}
 				/>
 				<TocOverlay
