@@ -107,7 +107,8 @@ Chrome dan layout responsive frame yang ada dipertahankan. Sebuah leaf component
 - Semua acquisition button yang sebelumnya disabled menjadi link aksesibel menuju `/waitlist`.
 - Label CTA dapat berbeda sesuai konteks, tetapi semua harus menuju route yang sama.
 - Konstanta path waitlist bersama mencegah destination drift.
-- Form waitlist, API call verifikasi, error handling, dan perilaku email tidak diubah.
+- Form waitlist diaktifkan kembali: field dan submit aktif saat idle, disabled hanya selama submit, lalu memakai kembali submit API, honeypot, success state, dan structured API error state yang sebelumnya sudah ada.
+- API call verifikasi dan perilaku email tidak diubah.
 - Copy halaman waitlist menjelaskan akses awal untuk Aqsha research-first dan mempertahankan penjelasan bahwa email bukan newsletter.
 
 ## 8. Reset editorial
