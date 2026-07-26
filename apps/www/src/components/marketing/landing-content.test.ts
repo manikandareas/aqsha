@@ -28,4 +28,7 @@ test("founder story no longer embeds the old product tour media", () => {
   expect(founderSource).not.toContain("hero-loop.mp4");
   expect(founderSource).not.toContain("hero-poster.webp");
   expect(founderSource).toContain("karya tulis");
+  expect(founderSource).toContain('/landing/me.jpeg');
+  expect(founderSource).toContain('/landing/tegar.webp');
+  expect(founderSource).toContain("FRAME_SPRING");
 });

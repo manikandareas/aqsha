@@ -1,15 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { m, useReducedMotion } from "motion/react";
 
-import {
-  drawAnimate,
-  drawInitial,
-  drawTransition,
-  Starburst,
-} from "@/components/marketing/doodles";
+import { HandUnderline, Starburst } from "@/components/marketing/doodles";
 import { MotionProvider } from "@/components/motion-provider";
-import { EASE_OUT } from "@/lib/motion";
+import { EASE_OUT, FRAME_SPRING } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
 const REASONS = [
   {
@@ -21,14 +18,118 @@ const REASONS = [
     rest: ", supaya ide, catatan, dan referensi tidak tercerai-berai.",
   },
   {
-    lead: "Memberi Astra ruang untuk membantu tanpa mengambil alih",
+    lead: "Memberi Aqsha ruang untuk membantu tanpa mengambil alih",
     rest: ", lewat usulan yang tetap kamu review sendiri.",
   },
 ] as const;
 
-/** FounderStorySection — surat singkat dari pembuat Aqsha. */
+const FOUNDERS = [
+  {
+    name: "Vito",
+    src: "/landing/me.jpeg",
+    alt: "Vito, pembuat Aqsha",
+    rotate: -3,
+    zBase: 10,
+    imageClassName: "object-center",
+  },
+  {
+    name: "Tegar",
+    src: "/landing/tegar.webp",
+    alt: "Tegar, pembuat Aqsha",
+    rotate: 3,
+    zBase: 20,
+    imageClassName: "object-[55%_center]",
+  },
+] as const;
+
+type Founder = (typeof FOUNDERS)[number];
+
+/** Two square cards that overlap, lift, and lean together like the hero frame stack. */
+function FounderFrame({
+  founder,
+  index,
+  reduce,
+  activeIndex,
+  lastActiveIndex,
+  onActiveChange,
+}: {
+  founder: Founder;
+  index: number;
+  reduce: boolean | null;
+  activeIndex: number | null;
+  lastActiveIndex: number | null;
+  onActiveChange: (index: number | null) => void;
+}) {
+  const isActive = activeIndex === index;
+  const distance = activeIndex === null ? 0 : index - activeIndex;
+  const shiftX =
+    reduce || distance === 0
+      ? 0
+      : Math.sign(distance) * (Math.abs(distance) === 1 ? 10 : 5);
+  const liftY = !reduce && isActive ? -12 : 0;
+  const rotate = isActive ? founder.rotate * 0.35 : founder.rotate;
+  const zIndex = isActive
+    ? 40
+    : lastActiveIndex === index
+      ? 35
+      : founder.zBase;
+
+  return (
+    <m.div
+      className={cn("group relative w-[56%]", index > 0 && "-ml-[12%]")}
+      style={{ zIndex }}
+      initial={reduce ? false : { opacity: 0, y: 48 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.5 }}
+      transition={{
+        delay: reduce ? 0 : 0.12 + index * 0.1,
+        type: "spring",
+        stiffness: 170,
+        damping: 21,
+      }}
+      onHoverStart={() => onActiveChange(index)}
+      onHoverEnd={() => onActiveChange(null)}
+    >
+      <m.div
+        className="relative"
+        animate={{ x: shiftX, y: liftY, rotate }}
+        transition={FRAME_SPRING}
+      >
+        <m.div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-xl [box-shadow:0_3px_0_0_var(--border),var(--shadow-soft-card)]"
+          initial={false}
+          animate={{ opacity: isActive ? 1 : 0 }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+        />
+        <div className="relative aspect-square overflow-hidden rounded-xl border-2 border-border bg-card">
+          <img
+            src={founder.src}
+            alt={founder.alt}
+            loading="lazy"
+            decoding="async"
+            className={cn(
+              "absolute inset-0 h-full w-full object-cover",
+              founder.imageClassName,
+            )}
+          />
+          <span aria-hidden className="paper-grain pointer-events-none absolute inset-0" />
+        </div>
+      </m.div>
+    </m.div>
+  );
+}
+
+/** FounderStorySection — surat singkat dari para pembuat Aqsha. */
 export function FounderStorySection() {
   const reduce = useReducedMotion();
+  const [activeFrame, setActiveFrame] = useState<number | null>(null);
+  const [lastActiveFrame, setLastActiveFrame] = useState<number | null>(null);
+
+  const handleActiveFrameChange = (index: number | null) => {
+    setActiveFrame(index);
+    if (index !== null) setLastActiveFrame(index);
+  };
 
   const rise = reduce
     ? { hidden: { opacity: 0 }, shown: { opacity: 1 } }
@@ -48,7 +149,7 @@ export function FounderStorySection() {
         aria-label="Cerita di balik Aqsha"
         className="w-full scroll-mt-[72px] overflow-x-clip bg-background pb-24 sm:pb-32 lg:pb-40"
       >
-        <div className="mx-auto w-full max-w-2xl px-4 sm:px-6">
+        <div className="mx-auto w-full max-w-4xl px-4 sm:px-6">
           <m.div
             className="text-sm leading-relaxed text-muted-foreground sm:text-[15px]"
             initial="hidden"
@@ -56,35 +157,20 @@ export function FounderStorySection() {
             viewport={{ once: true, amount: 0.2 }}
             transition={{ staggerChildren: 0.07 }}
           >
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-[10.5rem_1fr] sm:gap-8">
-              <m.div
-                className="relative mx-auto aspect-square w-full max-w-[10.5rem] self-start overflow-hidden rounded-2xl border-2 border-border"
-                variants={
-                  reduce
-                    ? rise
-                    : {
-                        hidden: { opacity: 0, scale: 0.92, rotate: -2 },
-                        shown: {
-                          opacity: 1,
-                          scale: 1,
-                          rotate: 0,
-                          transition: {
-                            type: "spring" as const,
-                            stiffness: 260,
-                            damping: 24,
-                          },
-                        },
-                      }
-                }
-              >
-                <img
-                  src="/landing/me.jpeg"
-                  alt="Vito, pembuat Aqsha"
-                  loading="lazy"
-                  decoding="async"
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              </m.div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-[22rem_1fr] md:gap-8">
+              <div className="mx-auto flex w-full max-w-[22rem] items-start justify-center self-start">
+                {FOUNDERS.map((founder, index) => (
+                  <FounderFrame
+                    key={founder.name}
+                    founder={founder}
+                    index={index}
+                    reduce={reduce}
+                    activeIndex={activeFrame}
+                    lastActiveIndex={lastActiveFrame}
+                    onActiveChange={handleActiveFrameChange}
+                  />
+                ))}
+              </div>
 
               <div className="relative">
                 <Starburst
@@ -98,24 +184,7 @@ export function FounderStorySection() {
                   Halo, penulis{" "}
                   <span className="relative inline-block">
                     karya tulis
-                    <svg
-                      aria-hidden
-                      viewBox="0 0 120 12"
-                      fill="none"
-                      preserveAspectRatio="none"
-                      className="absolute -bottom-1 left-0 h-2 w-full text-primary"
-                    >
-                      <m.path
-                        d="M3 8 C 7 3, 11 3, 15 8 S 23 13, 27 8 S 35 3, 39 8 S 47 13, 51 8 S 59 3, 63 8 S 71 13, 75 8 S 83 3, 87 8 S 95 13, 99 8 S 107 3, 111 8 L 117 8"
-                        stroke="currentColor"
-                        strokeWidth={3.5}
-                        strokeLinecap="round"
-                        initial={drawInitial(reduce)}
-                        whileInView={drawAnimate}
-                        viewport={{ once: true }}
-                        transition={drawTransition(0.35, 0.55)}
-                      />
-                    </svg>
+                    <HandUnderline />
                   </span>{" "}
                   👋
                 </m.h2>
@@ -124,8 +193,9 @@ export function FounderStorySection() {
                   sering hidup di tempat yang berbeda.
                 </m.p>
                 <m.p className="mt-3 text-pretty" variants={rise}>
-                  Aku Vito, pembuat Aqsha. Saat mengerjakan karya tulis, aku
-                  sering berpindah antara catatan, dokumen, dan sumber yang sama.
+                  Kami Vito dan Tegar, pembuat Aqsha. Saat mengerjakan karya
+                  tulis, kami sering berpindah antara catatan, dokumen, dan
+                  sumber yang sama.
                 </m.p>
               </div>
             </div>
@@ -145,7 +215,7 @@ export function FounderStorySection() {
               ))}
             </ol>
             <m.p className="mt-5 text-pretty" variants={rise}>
-              Aqsha terus aku rapikan pelan-pelan. Semoga ia membantu kamu
+              Aqsha terus kami rapikan pelan-pelan. Semoga ia membantu kamu
               kembali ke karya yang ingin kamu selesaikan. 🎓
             </m.p>
           </m.div>

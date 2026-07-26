@@ -143,6 +143,46 @@ export function HandNote({
   );
 }
 
+/**
+ * Squiggle underline for one highlighted word. Sits absolutely inside a
+ * `relative inline-block` wrapper around the word it underlines.
+ */
+export function HandUnderline({
+  className,
+  delay = 0.35,
+  duration = 0.55,
+  mode = "inView",
+}: DoodleBaseProps & { duration?: number }) {
+  const reduce = useReducedMotion();
+  const pathReveal =
+    mode === "animate"
+      ? { initial: drawInitial(reduce), animate: drawAnimate }
+      : {
+          initial: drawInitial(reduce),
+          whileInView: drawAnimate,
+          viewport: IN_VIEW_ONCE,
+        };
+
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 120 12"
+      fill="none"
+      preserveAspectRatio="none"
+      className={cn("absolute -bottom-1 left-0 h-2 w-full text-primary", className)}
+    >
+      <m.path
+        d="M3 8 C 7 3, 11 3, 15 8 S 23 13, 27 8 S 35 3, 39 8 S 47 13, 51 8 S 59 3, 63 8 S 71 13, 75 8 S 83 3, 87 8 S 95 13, 99 8 S 107 3, 111 8 L 117 8"
+        stroke="currentColor"
+        strokeWidth={3.5}
+        strokeLinecap="round"
+        {...pathReveal}
+        transition={drawTransition(delay, duration)}
+      />
+    </svg>
+  );
+}
+
 type DrawnArrowProps = DoodleBaseProps & {
   /** Curve path in the local viewBox. */
   curve: string;
