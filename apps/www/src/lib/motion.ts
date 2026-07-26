@@ -57,23 +57,44 @@ export function useMagneticButton<T extends HTMLElement = HTMLDivElement>(
     const el = ref.current;
     if (!el) return;
 
-    const handleMove = (event: MouseEvent) => {
+    // The pointer handler only records coordinates — measuring the element
+    // there would put a layout read on a listener that fires per mouse event
+    // (up to 1000Hz on a high-polling mouse) and interleave it with Motion's
+    // style writes. Collapsing the read into one rAF tick keeps the geometry
+    // exact while it can only ever cost one measurement per rendered frame.
+    // The springs smooth the input either way, so the feel is unchanged.
+    let pointerX = 0;
+    let pointerY = 0;
+    let scheduled = 0;
+
+    const apply = () => {
+      scheduled = 0;
       const rect = el.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      const dx = event.clientX - centerX;
-      const dy = event.clientY - centerY;
-      const distance = Math.hypot(dx, dy);
-      if (distance > radius) {
+      const dx = pointerX - (rect.left + rect.width / 2);
+      const dy = pointerY - (rect.top + rect.height / 2);
+
+      if (Math.hypot(dx, dy) > radius) {
         mx.set(0);
         my.set(0);
         return;
       }
+
       mx.set(dx * strength);
       my.set(dy * strength);
     };
 
+    const handleMove = (event: MouseEvent) => {
+      pointerX = event.clientX;
+      pointerY = event.clientY;
+      if (scheduled === 0) scheduled = requestAnimationFrame(apply);
+    };
+
     const handleLeave = () => {
+      // Drop the queued tick too, so it can't re-apply an offset after reset.
+      if (scheduled !== 0) {
+        cancelAnimationFrame(scheduled);
+        scheduled = 0;
+      }
       mx.set(0);
       my.set(0);
     };
@@ -81,6 +102,7 @@ export function useMagneticButton<T extends HTMLElement = HTMLDivElement>(
     window.addEventListener("mousemove", handleMove, { passive: true });
     el.addEventListener("mouseleave", handleLeave);
     return () => {
+      if (scheduled !== 0) cancelAnimationFrame(scheduled);
       window.removeEventListener("mousemove", handleMove);
       el.removeEventListener("mouseleave", handleLeave);
     };

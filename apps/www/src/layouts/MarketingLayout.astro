@@ -13,11 +13,11 @@ type Props = {
 const props = Astro.props as Props;
 ---
 
-<!--
+{/*
   Header as a sibling island — don't wrap <slot /> in a React island.
   Astro slot + nested client components in one parent often fail to hydrate.
   Footer is static Astro (no JS).
--->
+*/}
 <BaseLayout {...props}>
   <LandingHeader client:load />
   <div class="min-h-[90vh]">

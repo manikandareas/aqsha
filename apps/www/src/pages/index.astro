@@ -26,12 +26,22 @@ const entries = (await getCollection("changelog"))
 const { teaserLatest } = mapLandingLatest(entries[0] ?? null);
 ---
 
-<!--
+{/*
   Astro owns the page graph; React owns interactive widgets only.
   client:load  — above-the-fold chrome + hero
   client:visible — below-fold motion / pricing / FAQ
   static Astro — teaser (CSS motion) + footer (no JS)
--->
+
+  `rootMargin` on every below-fold island: Locomotive lerps the scroll, so a
+  section observed at the exact viewport edge hydrates at the same moment its
+  entrance animation should already be playing, and the reveal gets clipped.
+  Hydrating 300px early costs nothing extra — the same chunks, just fetched
+  before the section is on screen — and lets the animation start on time.
+
+  Comment form matters: an HTML comment ships to every response, this
+  expression-style one does not. Never write the closing marker inside the
+  body either — it terminates the comment early and leaks the rest as text.
+*/}
 <BaseLayout
   title="Workspace riset dan karya tulis untuk mahasiswa"
   description="Aqsha menyatukan proyek karya tulis, dokumen Typst, referensi, dan Astra supaya risetmu bergerak menjadi draf yang siap direview."
@@ -40,14 +50,14 @@ const { teaserLatest } = mapLandingLatest(entries[0] ?? null);
   <main class="min-h-svh bg-background text-foreground">
     <StructuredData />
     <LandingHeroZone client:load />
-    <AudienceMarqueeSection client:visible />
-    <WhyAqshaSection client:visible />
+    <AudienceMarqueeSection client:visible={{ rootMargin: "300px" }} />
+    <WhyAqshaSection client:visible={{ rootMargin: "300px" }} />
     <WhatsNewTeaserSection latest={teaserLatest} />
-    <FeatureBlocksSection client:visible />
-    <FounderStorySection client:visible />
-    <PricingSection client:visible />
-    <FaqSection client:visible />
-    <BottomCtaSection client:visible />
+    <FeatureBlocksSection client:visible={{ rootMargin: "300px" }} />
+    <FounderStorySection client:visible={{ rootMargin: "300px" }} />
+    <PricingSection client:visible={{ rootMargin: "300px" }} />
+    <FaqSection client:visible={{ rootMargin: "300px" }} />
+    <BottomCtaSection client:visible={{ rootMargin: "300px" }} />
     <LandingFooter />
   </main>
 </BaseLayout>

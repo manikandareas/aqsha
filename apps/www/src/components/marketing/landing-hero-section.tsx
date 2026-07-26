@@ -59,7 +59,11 @@ const HERO_FRAMES = [
     feature: FEATURES.astra,
     label: "Aqsha di HP",
     chipLabel: "Lihat",
-    media: "/landing/workspace-view.webp",
+    // 560px variant, not the 1122px original the footer uses: this frame renders
+    // at ~22% of the hero (≈264 CSS px), and React's float machinery preloads
+    // both hero media, so the full-size file would have competed with the LCP
+    // image for four times the pixels it can show.
+    media: "/landing/workspace-view-phone.webp",
     mediaClass: "object-[50%_30%]",
     aspectClass: "aspect-[9/19.5]",
     positionClass: "bottom-[2%] left-[72%] w-[24%] sm:left-[70%] sm:w-[22%]",

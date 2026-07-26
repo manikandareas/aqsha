@@ -37,6 +37,32 @@ const canonical = `${siteUrl}${path === "/" ? "" : path}`;
     <meta name="twitter:title" content={title ?? siteName} />
     <meta name="twitter:description" content={description} />
     <link rel="icon" href="/web-app-manifest-192x192.png" type="image/png" />
+    {/*
+      Preload the two faces that carry actual reading text: Nunito Sans
+      (--font-heading) and Inter (--font-sans). Measured on the landing page,
+      these start at ~35ms here versus ~128ms when left for CSS to discover.
+
+      Caveat (--font-hand, 73KB) and JetBrains Mono (--font-mono, 40KB) do also
+      render above the fold — doodle notes and button keycap glyphs — but they
+      stay lazily discovered on purpose: 113KB of decorative faces competing
+      with the LCP image costs more than the brief `font-display: swap` fallback
+      on a keycap. Subsetting them to the glyphs actually used would be the real
+      fix, and is a separate job.
+    */}
+    <link
+      rel="preload"
+      href="/fonts/nunito-sans-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/inter-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <script is:inline>
       // Anti-flash theme init — key must match components/theme-toggle.tsx.
       (() => {

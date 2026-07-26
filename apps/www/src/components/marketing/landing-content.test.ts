@@ -13,7 +13,9 @@ const marqueeSource = await Bun.file(
 ).text();
 
 test("landing uses a worldwide literature marquee rather than customer social proof", () => {
-  expect(indexSource).toContain('<AudienceMarqueeSection client:visible />');
+  // Prefix match, not the whole tag: the marquee must be present and lazily
+  // hydrated, but `client:visible` carries a `rootMargin` we tune for perf.
+  expect(indexSource).toContain("<AudienceMarqueeSection client:visible");
   expect(indexSource).not.toContain("UniversityMarqueeSection");
   expect(indexSource).not.toContain("TestimonialSection");
   expect(marqueeSource).toContain("LITERATURE_COUNT = 322_192_000");
