@@ -7,12 +7,23 @@ import { cn } from '@aqsha/ui-svelte/utils';
  * width, not the viewport.
  */
 
+const detailSplitMainBaseClass =
+	'@container flex min-h-0 min-w-0 flex-col overflow-hidden bg-background shadow-none';
+
 /**
  * Main column surface — stays full-bleed / edge-to-edge (no card framing, no gutter),
  * so opening the panel never reshapes main into a floating card.
  */
-export const detailSplitMainSurfaceClass =
-	'@container flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none bg-background shadow-none';
+export const detailSplitMainSurfaceClass = `${detailSplitMainBaseClass} rounded-none`;
+
+/**
+ * Main column surface for the `rail` side variant, which mirrors the nav sidebar's inset shell:
+ * main floats as a rounded card over the rail surface. The rounding/gutter itself is applied by
+ * `DetailSplitLayout` only while the rail is docked, so a closed rail leaves main full-bleed.
+ * Kept free of a `rounded-*` of its own — a base `rounded-none` and a `rounded-r-*` land in
+ * different tailwind-merge groups, so both would survive and CSS order would decide the winner.
+ */
+export const detailSplitMainRailClass = `${detailSplitMainBaseClass} transition-[margin,border-radius] ease-out`;
 
 /**
  * Side-panel column — the plain flex column the inline panel docks into (the grid's

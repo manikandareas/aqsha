@@ -1,85 +1,24 @@
 /**
  * OpenAlexService — service-path OpenAlex `works` fetch untuk lane feed (trending papers,
- * + nanti claim-supporting/consensus). Port V1 `feed/openAlex.ts` + `agent/providers/
- * openalexProvider.ts`, di-decouple dari ExternalCandidate: map work → ExplorePaperInput
- * langsung. Cache via Redis external-cache (getCache/putCache, 24h ready). TANPA per-user
- * credit (cron tak punya user); cache = pacer.
+ * + nanti claim-supporting/consensus). Work dinormalisasi lewat mapper bersama di
+ * `papers/work.ts`, jadi paper hasil lane ini identik dengan paper hasil pencarian literatur.
+ * Cache via Redis external-cache (getCache/putCache, 24h ready). TANPA per-user credit
+ * (cron tak punya user); cache = pacer.
  */
 import { getCache, putCache } from "../papers/external-cache";
 import { fetchWithTimeout } from "../papers/http";
-import { reconstructOpenAlexAbstract } from "../papers/providers";
 import { normalizeDoi } from "../papers/identifiers";
-import { collapse, firstNonEmpty, numberOrUndefined, uniqueCompact } from "../lib/text";
 import {
-  canonicalPaperKey,
-  dedupeExplorePapers,
-  type ExplorePaperInput,
-} from "../explore/model";
+  LITERATURE_WORK_SELECT,
+  mapOpenAlexWork,
+  type LiteraturePaper,
+  type OpenAlexWorkPayload,
+} from "../papers/work";
 
 const OPENALEX_ENDPOINT = "https://api.openalex.org/works";
 
-const OPENALEX_SELECT_FIELDS = [
-  "id",
-  "doi",
-  "title",
-  "display_name",
-  "publication_year",
-  "publication_date",
-  "cited_by_count",
-  "is_retracted",
-  "abstract_inverted_index",
-  "primary_location",
-  "best_oa_location",
-  "open_access",
-  "authorships",
-  "primary_topic",
-  "topics",
-  "ids",
-];
-
-type OpenAlexLocation = {
-  landing_page_url?: string | null;
-  pdf_url?: string | null;
-  is_oa?: boolean | null;
-  source?: { display_name?: string | null; host_organization_name?: string | null } | null;
-};
-type OpenAlexTopic = {
-  display_name?: string | null;
-  score?: number | null;
-  field?: { display_name?: string | null } | null;
-  subfield?: { display_name?: string | null } | null;
-};
-
-/** Superset field OpenAlex `works` yang dikonsumsi feed (semua optional, additive). */
-export type OpenAlexWork = {
-  id?: string;
-  doi?: string | null;
-  title?: string | null;
-  display_name?: string | null;
-  publication_year?: number | null;
-  publication_date?: string | null;
-  cited_by_count?: number | null;
-  is_retracted?: boolean | null;
-  abstract_inverted_index?: Record<string, number[]> | null;
-  primary_location?: OpenAlexLocation | null;
-  best_oa_location?: OpenAlexLocation | null;
-  open_access?: { is_oa?: boolean | null; oa_status?: string | null; oa_url?: string | null } | null;
-  authorships?: Array<{
-    author?: { display_name?: string | null } | null;
-    raw_author_name?: string | null;
-    countries?: string[] | null;
-    institutions?: Array<{
-      id?: string | null;
-      display_name?: string | null;
-      country_code?: string | null;
-    }> | null;
-  }> | null;
-  primary_topic?: OpenAlexTopic | null;
-  topics?: OpenAlexTopic[] | null;
-  /** ID OpenAlex work terkait (algoritmik, konsep paling tumpang-tindih) — edge constellation. */
-  related_works?: string[] | null;
-  ids?: { openalex?: string | null; doi?: string | null } | null;
-};
+/** Work OpenAlex sebagaimana dikonsumsi feed; `related_works` khusus graf kemiripan. */
+export type OpenAlexWork = OpenAlexWorkPayload & { related_works?: string[] | null };
 
 function normalizeFromYear(value: number | undefined): number | undefined {
   if (value === undefined || !Number.isFinite(value)) return undefined;
@@ -105,7 +44,7 @@ export function buildOpenAlexWorksUrl(args: {
   url.searchParams.set("api_key", args.apiKey);
   url.searchParams.set("per_page", String(args.limit));
   if (args.page && args.page > 1) url.searchParams.set("page", String(args.page));
-  url.searchParams.set("select", OPENALEX_SELECT_FIELDS.join(","));
+  url.searchParams.set("select", LITERATURE_WORK_SELECT);
   if (query) {
     const dateFilter = fromYear ? `,from_publication_date:${fromYear}-01-01` : "";
     url.searchParams.set("filter", `${retractionFilter}is_paratext:false${dateFilter}`);
@@ -119,63 +58,6 @@ export function buildOpenAlexWorksUrl(args: {
     );
   }
   return url;
-}
-
-function trimSnippet(value: string, max: number): string {
-  const clean = collapse(value);
-  return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
-}
-
-/** Map satu OpenAlex work → ExplorePaperInput (port openAlexWorkToCandidate + candidateToExplorePaper). */
-export function openAlexWorkToExplorePaper(work: OpenAlexWork): ExplorePaperInput | null {
-  const title = collapse(work.display_name ?? work.title ?? "");
-  const openalexId = work.ids?.openalex ?? work.id ?? undefined;
-  const doi = normalizeDoi(work.ids?.doi ?? work.doi ?? "");
-  const location = work.best_oa_location ?? work.primary_location ?? null;
-  const url = firstNonEmpty(
-    work.open_access?.oa_url,
-    location?.landing_page_url,
-    doi ? `https://doi.org/${doi}` : null,
-    openalexId,
-  );
-  if (!title || !url) return null;
-
-  const topics = uniqueCompact([
-    work.primary_topic?.display_name,
-    work.primary_topic?.subfield?.display_name,
-    work.primary_topic?.field?.display_name,
-    ...(work.topics ?? []).map((t) => t.display_name),
-  ]).slice(0, 5);
-  const abstract = reconstructOpenAlexAbstract(work.abstract_inverted_index);
-  const authors = (work.authorships ?? [])
-    .map((a) => collapse(a.author?.display_name ?? a.raw_author_name ?? ""))
-    .filter(Boolean)
-    .slice(0, 6);
-  const sourceLabel = collapse(location?.source?.display_name ?? "") || "OpenAlex";
-
-  return {
-    key: canonicalPaperKey({ doi: doi || undefined, url, title }),
-    title,
-    snippet:
-      trimSnippet(abstract, 1_200) ||
-      trimSnippet(topics.join(", "), 1_200) ||
-      "OpenAlex metadata result.",
-    abstract: collapse(abstract) || undefined,
-    url,
-    pdfUrl: location?.pdf_url ?? undefined,
-    doi: doi || undefined,
-    openalexId,
-    provider: "OpenAlex",
-    sourceLabel,
-    authors,
-    year: numberOrUndefined(work.publication_year),
-    publicationDate: work.publication_date ?? undefined,
-    venue: collapse(location?.source?.display_name ?? "") || undefined,
-    citedByCount: numberOrUndefined(work.cited_by_count),
-    isOpenAccess: Boolean(work.open_access?.is_oa ?? location?.is_oa),
-    topics,
-    score: numberOrUndefined(work.primary_topic?.score),
-  };
 }
 
 export function normalizeDoiLoose(value: string | null | undefined): string {
@@ -204,7 +86,7 @@ export async function fetchOpenAlexWorks(args: {
   fromYear?: number;
   page?: number;
   now?: number;
-}): Promise<{ papers: ExplorePaperInput[]; works: OpenAlexWork[] }> {
+}): Promise<{ papers: LiteraturePaper[]; works: OpenAlexWork[] }> {
   const query = args.query.trim();
   const limit = Math.min(Math.max(args.limit, 1), 50);
   const includeRetracted = args.includeRetracted ?? false;
@@ -393,9 +275,12 @@ export function fetchOpenAlexYearCounts(args: { query: string; fromYear?: number
   return fetchOpenAlexGroupBy({ query: args.query, groupBy: "publication_year", fromYear: args.fromYear });
 }
 
-function worksToPapers(works: OpenAlexWork[], limit: number): ExplorePaperInput[] {
-  const mapped = works
-    .map(openAlexWorkToExplorePaper)
-    .filter((p): p is ExplorePaperInput => p !== null);
-  return dedupeExplorePapers(mapped, limit);
+function worksToPapers(works: OpenAlexWork[], limit: number): LiteraturePaper[] {
+  const byKey = new Map<string, LiteraturePaper>();
+  for (const work of works) {
+    const paper = mapOpenAlexWork(work);
+    if (paper && !byKey.has(paper.key)) byKey.set(paper.key, paper);
+    if (byKey.size >= limit) break;
+  }
+  return [...byKey.values()];
 }

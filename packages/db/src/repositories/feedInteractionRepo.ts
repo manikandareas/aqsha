@@ -110,7 +110,7 @@ export const FeedInteractionRepo = {
       ...(feedItemIds ? [inArray(savedFeedItems.feedItemId, feedItemIds)] : []),
     );
     const rows = await db
-      .select({ feedItemId: savedFeedItems.feedItemId, paperKey: feedItems.paperKey })
+      .select({ feedItemId: savedFeedItems.feedItemId, paperKey: feedItems.key })
       .from(savedFeedItems)
       .innerJoin(feedItems, eq(savedFeedItems.feedItemId, feedItems.id))
       .where(base)
@@ -130,7 +130,7 @@ export const FeedInteractionRepo = {
       ...(feedItemIds ? [inArray(hiddenFeedItems.feedItemId, feedItemIds)] : []),
     );
     const rows = await db
-      .select({ feedItemId: hiddenFeedItems.feedItemId, paperKey: feedItems.paperKey })
+      .select({ feedItemId: hiddenFeedItems.feedItemId, paperKey: feedItems.key })
       .from(hiddenFeedItems)
       .innerJoin(feedItems, eq(hiddenFeedItems.feedItemId, feedItems.id))
       .where(base)

@@ -174,15 +174,9 @@ export {
 export {
   buildFeedItemRow,
   deriveOrderAt,
-  deriveSearchText,
-  type FeedClaim,
-  type FeedItemInput,
-  type FeedItemResponse,
   type FeedItemRow,
-  type FeedKind,
-  type FeedProvider,
-  type FeedRetractionStatus,
-  paperToFeedInput,
+  type FeedPaper,
+  parsePublishedAt,
   shapeFeedItem,
 } from "./feed/model";
 export {
@@ -222,13 +216,21 @@ export {
   type LiteratureFilterId,
   type LiteratureFilterKind,
   type LiteratureFilterValue,
-  type LiteraturePaper,
   type LiteratureSearchInput,
   type LiteratureSearchPage,
   type LiteratureSortId,
   type NormalizedLiteratureSearch,
   type PublicLiteratureCatalog,
 } from "./literature-search/types";
+export {
+  explorePaperToLiteraturePaper,
+  type ExplorePaperCacheRow,
+  LITERATURE_WORK_SELECT,
+  type LiteraturePaper,
+  literaturePaperToExplorePaper,
+  mapOpenAlexWork,
+  type OpenAlexWorkPayload,
+} from "./papers/work";
 export {
   type DiscoveryItemRef,
   type DiscoveryResolvedRef,

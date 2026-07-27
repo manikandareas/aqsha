@@ -64,7 +64,6 @@ export const ContextService = {
     const wantWorkspaces = dedupe(input.workspaceIds).slice(0, MAX_WORKSPACES);
     const wantArtifacts = dedupe(input.artifactIds).slice(0, MAX_ARTIFACTS);
     const wantPapers = dedupe(input.paperKeys ?? []).slice(0, MAX_DISCOVERY);
-    const wantFeedItems = dedupe(input.feedItemIds ?? []).slice(0, MAX_DISCOVERY);
     const wantCitations = dedupeCitations(input.workspaceCitations ?? []).slice(0, MAX_CITATIONS);
     // Pilihan blok: dedup per artifact (pilihan terakhir menang), clamp jumlah + blockIds + excerpt.
     const wantSelections = dedupeSelections(input.selections ?? []).slice(0, MAX_SELECTIONS);
@@ -74,7 +73,7 @@ export const ContextService = {
     const wantArtifactSet = new Set(wantArtifacts);
     const artifactIdsToHydrate = dedupe([...wantArtifacts, ...wantSelections.map((s) => s.artifactId)]);
 
-    const [workspaces, artifactEntries, papers, feedItems] = await Promise.all([
+    const [workspaces, artifactEntries, papers] = await Promise.all([
       Promise.all(
         wantWorkspaces.map((id) => WorkspaceService.get(db, input.ownerUserId, id)),
       ),
@@ -101,11 +100,6 @@ export const ContextService = {
           ExploreService.getOrFetchPaper(db, key, { fetchOnMiss: true }).catch(() => null),
         ),
       ),
-      Promise.all(
-        wantFeedItems.map((id) =>
-          FeedService.getFeedItem(db, input.ownerUserId, id).catch(() => null),
-        ),
-      ),
     ]);
 
     // Referensi perpustakaan: metadata terstruktur saja (bukan file/token). Ownership
@@ -126,11 +120,6 @@ export const ContextService = {
       .map((id) => artifactById.get(id) ?? null)
       .filter((a): a is NonNullable<typeof a> => a !== null);
     const validPapers = papers.filter((p): p is NonNullable<typeof p> => p !== null);
-    // Hanya berita (`kind: "news"`): kontrak `feedItemIds` = berita-by-id, dan `buildNote`
-    // melabelinya "Berita" → jangan salah-label feed item kind lain yang lolos lewat API.
-    const validFeedItems = feedItems.filter(
-      (f): f is NonNullable<typeof f> => f !== null && f.kind === "news",
-    );
     // Pilihan blok: artifact bukan-milik / hilang → drop senyap. Title diambil untuk catatan;
     // blockIds + excerpt sudah di-clamp.
     const validSelections: NoteSelection[] = wantSelections
@@ -169,14 +158,15 @@ export const ContextService = {
         validWorkspaces,
         validArtifacts,
         validPapers,
-        validFeedItems,
         validSelections,
         validCitations,
       ),
       workspaceIds: validWorkspaces.map((w) => w.id),
       artifactIds: validArtifacts.map((a) => a._id),
       paperKeys: validPapers.map((p) => p.key),
-      feedItemIds: validFeedItems.map((f) => f._id),
+      // Kontrak konteks masih menerima `feedItemIds`, tapi tak ada jenis feed item yang
+      // dilampirkan ke catatan agen — selalu kosong.
+      feedItemIds: [],
     };
   },
 };
@@ -230,16 +220,7 @@ type NotePaper = {
   doi?: string;
   url: string;
   abstract?: string;
-  snippet: string;
-};
-
-type NoteFeedItem = {
-  title: string;
-  sourceLabel: string;
-  url: string;
-  tldr?: string;
-  summary: string;
-  publishedAt?: number;
+  snippet: string | null;
 };
 
 type NoteSelection = {
@@ -264,7 +245,6 @@ function buildNote(
   workspaces: Array<{ id: string; name: string }>,
   artifacts: Array<{ _id: string; title: string; plainTextPreview: string | null }>,
   papers: NotePaper[],
-  feedItems: NoteFeedItem[],
   selections: NoteSelection[],
   citations: NoteCitation[],
 ): string {
@@ -272,7 +252,6 @@ function buildNote(
     workspaces.length === 0 &&
     artifacts.length === 0 &&
     papers.length === 0 &&
-    feedItems.length === 0 &&
     selections.length === 0 &&
     citations.length === 0
   ) {
@@ -315,17 +294,6 @@ function buildNote(
       const body = (p.abstract ?? p.snippet ?? "").trim();
       lines.push(`- "${p.title}"${meta ? ` (${meta})` : ""}${ident ? ` — ${ident}` : ""}`);
       if (body) lines.push(`  Abstrak: ${body.slice(0, 600)}`);
-    }
-  }
-  if (feedItems.length > 0) {
-    lines.push(
-      "",
-      "Berita tersemat (sumber publik; ringkasannya disertakan — sebut sumber & tautannya):",
-    );
-    for (const f of feedItems) {
-      const body = (f.tldr ?? f.summary ?? "").trim();
-      lines.push(`- "${f.title}" (${f.sourceLabel})${f.url ? ` — ${f.url}` : ""}`);
-      if (body) lines.push(`  Ringkas: ${body.slice(0, 600)}`);
     }
   }
   if (selections.length > 0) {

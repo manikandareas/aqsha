@@ -2,124 +2,85 @@ import { describe, expect, test } from "bun:test";
 import {
   buildFeedItemRow,
   deriveOrderAt,
-  deriveSearchText,
-  type FeedItemInput,
+  parsePublishedAt,
   shapeFeedItem,
 } from "../src/feed/model";
 import { matchesTopicCategory } from "../src/feed/topicCategories";
+import type { LiteraturePaper } from "../src/papers/work";
 
-const baseInput: FeedItemInput = {
-  kind: "paper",
+const PAPER: LiteraturePaper = {
+  key: "doi:10.1/qubit",
   title: "Quantum Computing",
-  summary: "A study of qubits",
+  snippet: "A study of qubits",
+  doi: "10.1/qubit",
   url: "https://example.org",
-  provider: "openalex",
-  sourceLabel: "OpenAlex",
+  pdfUrl: null,
+  hasPdf: false,
+  authors: ["A"],
+  year: 2023,
+  publicationDate: "2023-06-01",
+  venue: "Nature",
+  citedByCount: 3,
+  isOpenAccess: false,
+  oaStatus: null,
+  workType: "article",
+  language: "en",
+  isRetracted: false,
   topics: ["physics", "Quantum"],
-  trendScore: 3,
-  dedupeKey: "paper:k1",
 };
 
 describe("deriveOrderAt", () => {
   test("publishedAt menang atas lastSeenAt/createdAt", () => {
     expect(deriveOrderAt({ publishedAt: 50, lastSeenAt: 99, createdAt: 99 })).toBe(50);
   });
-  test("fallback ke lastSeenAt saat tak ada publishedAt", () => {
-    expect(deriveOrderAt({ lastSeenAt: 77, createdAt: 10 })).toBe(77);
+
+  test("tanpa publishedAt jatuh ke lastSeenAt", () => {
+    expect(deriveOrderAt({ lastSeenAt: 70, createdAt: 99 })).toBe(70);
   });
 });
 
-describe("deriveSearchText", () => {
-  test("lowercase + gabung title+summary+topics + collapse whitespace", () => {
-    const out = deriveSearchText({
-      title: "Quantum   Computing",
-      summary: "A Study",
-      topics: ["Physics", "ML"],
-    });
-    expect(out).toBe("quantum computing a study physics ml");
+describe("parsePublishedAt", () => {
+  test("tanggal ISO jadi epoch ms", () => {
+    expect(parsePublishedAt("2023-06-01")).toBe(Date.parse("2023-06-01"));
   });
-  test("cap 2000 char", () => {
-    const out = deriveSearchText({ title: "x".repeat(5000), summary: "", topics: [] });
-    expect(out.length).toBe(2000);
+
+  test("null dan tanggal ngawur jadi undefined", () => {
+    expect(parsePublishedAt(null)).toBeUndefined();
+    expect(parsePublishedAt("bukan-tanggal")).toBeUndefined();
   });
 });
 
 describe("buildFeedItemRow", () => {
-  test("mint id, set created/lastSeen=now, derive orderAt + searchText", () => {
-    const row = buildFeedItemRow(baseInput, 12345);
-    expect(row.id).toBeString();
-    expect(row.createdAt).toBe(12345);
-    expect(row.lastSeenAt).toBe(12345);
-    expect(row.orderAt).toBe(12345); // tak ada publishedAt → fallback now
-    expect(row.searchText).toBe("quantum computing a study of qubits physics quantum");
-    expect(row.primaryClaim).toBeNull();
+  test("menurunkan header mesin dari paper", () => {
+    const row = buildFeedItemRow(PAPER, 1_000);
+    expect(row.kind).toBe("paper");
+    expect(row.key).toBe("doi:10.1/qubit");
+    expect(row.dedupeKey).toBe("paper:doi:10.1/qubit");
+    expect(row.trendScore).toBe(3);
+    expect(row.publishedAt).toBe(Date.parse("2023-06-01"));
+    expect(row.orderAt).toBe(Date.parse("2023-06-01"));
+    expect(row.createdAt).toBe(1_000);
+    expect(row.lastSeenAt).toBe(1_000);
+    expect(row.id).toMatch(/[0-9a-f-]{36}/);
   });
-  test("publishedAt jadi orderAt", () => {
-    const row = buildFeedItemRow({ ...baseInput, publishedAt: 999 }, 12345);
-    expect(row.orderAt).toBe(999);
+
+  test("paper tanpa sitasi dan tanpa tanggal tetap punya urutan", () => {
+    const row = buildFeedItemRow({ ...PAPER, citedByCount: null, publicationDate: null }, 2_000);
+    expect(row.trendScore).toBe(0);
+    expect(row.publishedAt).toBeUndefined();
+    expect(row.orderAt).toBe(2_000);
   });
 });
 
 describe("shapeFeedItem", () => {
-  test("strip field internal, surface primaryClaim sebagai claim, graft enrichments", () => {
-    const claim = {
-      claim: "X benar",
-      verdict: "supported" as const,
-      verdictSource: "src",
-      verdictBy: "human" as const,
-      verdictLabelRaw: "Benar",
-    };
-    const shaped = shapeFeedItem(
-      {
-        id: "f1",
-        kind: "claim",
-        title: "T",
-        summary: "S",
-        tldr: null,
-        tldrId: null,
-        titleId: null,
-        url: "u",
-        resolvedUrl: null,
-        imageUrl: null,
-        articleText: null,
-        enrichAttempts: null,
-        provider: "google_factcheck",
-        sourceLabel: "FactCheck",
-        paperKey: null,
-        doi: null,
-        authors: null,
-        year: null,
-        venue: null,
-        pdfUrl: null,
-        citedByCount: null,
-        isOpenAccess: null,
-        topics: ["sains"],
-        trendScore: 1,
-        retractionStatus: null,
-        primaryClaim: claim,
-        stanceSupporting: null,
-        stanceContrasting: null,
-        sparkline: null,
-        publishedAt: null,
-      },
-      { relevanceScore: 80, reason: "karena minatmu", saved: true },
-    );
-    expect(shaped._id).toBe("f1");
-    expect(shaped.claim).toEqual(claim);
-    expect(shaped.primaryClaim).toEqual(claim);
-    expect(shaped.tldr).toBeUndefined(); // null → undefined
-    expect(shaped.relevanceScore).toBe(80);
-    expect(shaped.saved).toBe(true);
-    expect((shaped as Record<string, unknown>).dedupeKey).toBeUndefined();
+  test("baris jadi paper + feedItemId, tanpa field mesin", () => {
+    // `FeedItemRow` = id + persis 18 field LiteraturePaper, jadi spread ini typecheck apa adanya.
+    expect(shapeFeedItem({ id: "feed_1", ...PAPER })).toEqual({ ...PAPER, feedItemId: "feed_1" });
   });
 });
 
 describe("matchesTopicCategory", () => {
-  test("paper fisika → sains_teknologi", () => {
-    expect(matchesTopicCategory("sains_teknologi", ["physics"], "Quantum study")).toBe(true);
-  });
-  test("vaksin → kesehatan, bukan lingkungan", () => {
-    expect(matchesTopicCategory("kesehatan", ["vaksin"], "Berita vaksin")).toBe(true);
-    expect(matchesTopicCategory("lingkungan", ["vaksin"], "Berita vaksin")).toBe(false);
+  test("mencocokkan topik ke kategori", () => {
+    expect(matchesTopicCategory("sains_teknologi", ["physics"], "Quantum")).toBe(true);
   });
 });

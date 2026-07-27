@@ -5,12 +5,16 @@ import {
 	literatureSearchInfiniteQueryOptions
 } from '$lib/features/discovery/query-options';
 import { readExploreUrl } from '$lib/features/explore/explore-url-model';
+import {
+	EXPLORE_FILTER_PANEL_COOKIE,
+	isFilterPanelOpenFromCookie
+} from '$lib/features/explore/filter-panel-state';
 import { createQueryClient, deferredQueryResult, queryBootstrapId } from '$lib/query';
 import type { PageServerLoad } from './$types';
 
 const EXPLORE_FEED_DEPENDENCY = 'app:explore-feed';
 
-export const load: PageServerLoad = ({ depends, locals, url }) => {
+export const load: PageServerLoad = ({ cookies, depends, locals, url }) => {
 	depends(EXPLORE_FEED_DEPENDENCY);
 	const auth = locals.auth();
 	const api = createServerApiClient(() => auth.getToken());
@@ -35,6 +39,8 @@ export const load: PageServerLoad = ({ depends, locals, url }) => {
 	}, 'Temuan belum dapat dimuat.');
 
 	return {
+		// Read server-side so a restored-open rail is docked on first paint, not after hydration.
+		filterPanelOpen: isFilterPanelOpenFromCookie(cookies.get(EXPLORE_FILTER_PANEL_COOKIE)),
 		exploreBootstrap: {
 			id: queryBootstrapId('/app/(product)/explore', {
 				q: state.q,

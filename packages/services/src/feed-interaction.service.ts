@@ -11,7 +11,7 @@ import {
   FeedRepo,
 } from "@aqsha/db";
 import { InterestService } from "./interest.service";
-import { paperToFeedInput } from "./feed/model";
+import { explorePaperToLiteraturePaper } from "./papers/work";
 import { upsertFeedItems } from "./feed/write";
 import { PaperCacheService } from "./paper-cache.service";
 
@@ -37,8 +37,31 @@ async function ensureFeedItemForPaperKey(db: DbOrTx, paperKey: string): Promise<
   const paper = await PaperCacheService.getByKey(db as never, paperKey);
   if (!paper) return null;
 
-  const input = paperToFeedInput(paper, new Set<string>());
-  const [row] = await upsertFeedItems(db, [input], Date.now());
+  const [row] = await upsertFeedItems(
+    db,
+    [
+      explorePaperToLiteraturePaper({
+        key: paper.key,
+        title: paper.title,
+        snippet: paper.snippet ?? null,
+        url: paper.url,
+        pdfUrl: paper.pdfUrl ?? null,
+        doi: paper.doi ?? null,
+        authors: paper.authors,
+        year: paper.year ?? null,
+        publicationDate: paper.publicationDate ?? null,
+        venue: paper.venue ?? null,
+        citedByCount: paper.citedByCount ?? null,
+        isOpenAccess: paper.isOpenAccess ?? null,
+        oaStatus: paper.oaStatus ?? null,
+        workType: paper.workType ?? null,
+        language: paper.language ?? null,
+        isRetracted: paper.isRetracted ?? false,
+        topics: paper.topics,
+      }),
+    ],
+    Date.now(),
+  );
   return row?.id ?? null;
 }
 
@@ -211,7 +234,7 @@ export const FeedInteractionService = {
         if (!row) continue;
         if (!(await FeedInteractionRepo.findSaved(db, ownerUserId, row))) continue;
         const feed = await FeedRepo.findById(db, row);
-        if (feed) refs.push(...refsForRow({ feedItemId: feed.id, paperKey: feed.paperKey }));
+        if (feed) refs.push(...refsForRow({ feedItemId: feed.id, paperKey: feed.key }));
       }
       return { refs };
     }
@@ -233,7 +256,7 @@ export const FeedInteractionService = {
         if (!row) continue;
         if (!(await FeedInteractionRepo.findHidden(db, ownerUserId, row))) continue;
         const feed = await FeedRepo.findById(db, row);
-        if (feed) refs.push(...refsForRow({ feedItemId: feed.id, paperKey: feed.paperKey }));
+        if (feed) refs.push(...refsForRow({ feedItemId: feed.id, paperKey: feed.key }));
       }
       return { refs };
     }

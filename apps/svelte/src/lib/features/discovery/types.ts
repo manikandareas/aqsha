@@ -2,34 +2,6 @@
  * Local `FeedItem` subset for component props. apps/svelte must not import `@aqsha/services` (client
  * boundary); Eden still types the route response — this only lists fields the UI renders.
  */
-export type FeedKind = 'paper';
-
-export type FeedItem = {
-	_id: string;
-	kind: FeedKind;
-	title: string;
-	summary: string;
-	tldr?: string;
-	url: string;
-	resolvedUrl?: string;
-	imageUrl?: string;
-	provider: string;
-	sourceLabel: string;
-	paperKey?: string;
-	doi?: string;
-	authors?: string[];
-	year?: number;
-	venue?: string;
-	citedByCount?: number;
-	isOpenAccess?: boolean;
-	topics: string[];
-	retractionStatus?: 'none' | 'concern' | 'retracted';
-	relevanceScore?: number;
-	reason?: string;
-	publishedAt?: number;
-	pdfUrl?: string;
-};
-
 export type DiscoveryItemRef =
 	{ kind: 'feed'; feedItemId: string } | { kind: 'paper'; paperKey: string };
 
@@ -93,14 +65,6 @@ export type PaperEnrichment = {
 	related: PaperEnrichmentRef[];
 };
 
-/** Internal reader link: paper with a key → `/[key]`; else → external source. */
-export function feedItemHref(item: FeedItem): { href: string; external: boolean } {
-	if (item.kind === 'paper' && item.paperKey) {
-		return { href: `/app/explore/${encodeURIComponent(item.paperKey)}`, external: false };
-	}
-	return { href: item.resolvedUrl ?? item.url, external: true };
-}
-
 export type FeedMode = 'foryou' | 'top' | 'topics';
 export type FeedTopic =
 	'sains_teknologi' | 'kesehatan' | 'lingkungan' | 'sosial_ekonomi' | 'pendidikan';
@@ -111,8 +75,4 @@ export const FEED_TOPIC_LABELS: Record<FeedTopic, string> = {
 	lingkungan: 'Lingkungan',
 	sosial_ekonomi: 'Sosial & Ekonomi',
 	pendidikan: 'Pendidikan'
-};
-
-export const KIND_LABELS: Record<FeedKind, string> = {
-	paper: 'Paper'
 };

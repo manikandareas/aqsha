@@ -1,3 +1,5 @@
+import type { SearchSourceInput } from '$lib/features/citations/types';
+
 export const LITERATURE_SORT_IDS = [
 	'relevance',
 	'publication_date_desc',
@@ -138,4 +140,19 @@ export type LiteratureAutocompleteItem = {
 
 export function isLiteratureSortId(value: unknown): value is LiteratureSortId {
 	return typeof value === 'string' && (LITERATURE_SORT_IDS as readonly string[]).includes(value);
+}
+
+/** Feed rows are the same paper as a search result, plus the handle used to hide or save them. */
+export type FeedPaper = LiteraturePaper & { feedItemId: string };
+
+export function literaturePaperToSearchInput(paper: LiteraturePaper): SearchSourceInput {
+	return {
+		clientKey: paper.key,
+		title: paper.title,
+		doi: paper.doi,
+		url: paper.url,
+		authors: paper.authors,
+		year: paper.year,
+		venue: paper.venue
+	};
 }

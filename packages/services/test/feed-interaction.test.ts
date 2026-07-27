@@ -6,7 +6,7 @@ import { PaperCacheService } from "../src/paper-cache.service";
 
 const fakeDb = {} as never;
 const feedRow = (over: Record<string, unknown> = {}) =>
-  ({ id: "F1", topics: ["ml"], paperKey: null, ...over }) as never;
+  ({ id: "F1", topics: ["ml"], key: "doi:10.1/a", ...over }) as never;
 
 afterEach(() => {
   for (const fn of [
@@ -67,10 +67,14 @@ describe("FeedInteractionService.saveDiscoveryItem (paper ref)", () => {
       sourceLabel: "OpenAlex",
       authors: [],
       topics: ["bio"],
+      oaStatus: null,
+      workType: null,
+      language: null,
+      isRetracted: false,
       lastSeenAt: 1,
     } as never);
     const upsert = spyOn(FeedRepo, "upsertByDedupeKey").mockResolvedValue(
-      feedRow({ id: "NEW", topics: ["bio"], paperKey: "doi:10.1/x" }),
+      feedRow({ id: "NEW", topics: ["bio"], key: "doi:10.1/x" }),
     );
     // topicsOf("NEW") + saveFeedItemForUser path
     spyOn(FeedRepo, "findById").mockResolvedValue(feedRow({ id: "NEW", topics: ["bio"] }));

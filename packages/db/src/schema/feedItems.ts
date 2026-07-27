@@ -3,100 +3,62 @@ import {
   bigint,
   boolean,
   check,
-  customType,
   doublePrecision,
   index,
   integer,
-  jsonb,
   pgTable,
-  real,
   text,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 /**
- * Postgres `tsvector` (drizzle pg-core tak punya tipe bawaan). Dipakai untuk kolom
- * full-text GENERATED + index GIN. Read-path tsvector search dihapus (search Explore
- * kini live OpenAlex/arXiv/Crossref); kolom+index DIPERTAHANKAN (drop = migrasi Tier-2
- * tersendiri). pgvector KHUSUS RAG (P3), full-text feed KHUSUS tsvector — jangan dicampur.
- */
-const tsvector = customType<{ data: string }>({
-  dataType() {
-    return "tsvector";
-  },
-});
-
-/**
- * feed_items — surface discovery cross-kind (P4). Port V1 `feedItems` (feedItemFields +
- * orderAt + searchText). Fields denormalized supaya kartu render tanpa join.
+ * feed_items — cermin bentuk paper hasil pencarian literatur, ditambah header mesin untuk
+ * urutan dan dedup. Bentuknya sengaja identik dengan hasil pencarian supaya kartu feed dan
+ * kartu hasil dirender komponen yang sama tanpa pemetaan apa pun.
  *
- * - `order_at` bigint NOT NULL → kunci sort total untuk keyset infinite scroll
- *   (getFeedPaginated by_order). DIISI `deriveOrderAt` di SETIAP write.
- * - `search_text` (blob title+summary+topics) + `search_tsv` GENERATED tsvector +
- *   index GIN (retained; read-path search dihapus). DIISI `deriveSearchText` di SETIAP write.
- * - `paper_key` = logical ref ke `explore_papers.key` (TANPA FK keras; lihat explorePapers.ts).
- * - Enum (kind/provider/retraction) = text + CHECK. provider LOWERCASE (beda dari explore_papers).
- * - `stance_supporting`/`stance_contrasting` di-keep nullable demi kontrak FeedItem; TIDAK
- *   ditulis di P4 (fitur consensus dibuang — owner decision).
+ * - `order_at` bigint NOT NULL → kunci sort total untuk keyset infinite scroll. DIISI
+ *   `deriveOrderAt` di SETIAP write.
+ * - `key` = ref logis ke `explore_papers.key` (TANPA FK keras; lihat explorePapers.ts).
+ * - `trend_score` mengikuti `cited_by_count`; dipisah karena jadi kolom index ranking.
+ * - Field paper di-denormalisasi di sini supaya kartu render tanpa join ke explore_papers.
  */
 export const feedItems = pgTable(
   "feed_items",
   {
     id: text("id").primaryKey(),
     kind: text("kind").notNull(),
+    key: text("key").notNull(),
     title: text("title").notNull(),
-    summary: text("summary").notNull(),
-    tldr: text("tldr"),
-    tldrId: text("tldr_id"),
-    titleId: text("title_id"),
-    url: text("url").notNull(),
-    resolvedUrl: text("resolved_url"),
-    imageUrl: text("image_url"),
-    articleText: text("article_text"),
-    enrichAttempts: integer("enrich_attempts"),
-    provider: text("provider").notNull(),
-    sourceLabel: text("source_label").notNull(),
-    paperKey: text("paper_key"),
+    snippet: text("snippet"),
     doi: text("doi"),
-    authors: text("authors").array(),
-    year: integer("year"),
-    venue: text("venue"),
+    url: text("url"),
     pdfUrl: text("pdf_url"),
+    hasPdf: boolean("has_pdf").notNull().default(false),
+    authors: text("authors").array().notNull().default(sql`'{}'`),
+    year: integer("year"),
+    publicationDate: text("publication_date"),
+    venue: text("venue"),
     citedByCount: integer("cited_by_count"),
-    isOpenAccess: boolean("is_open_access"),
+    isOpenAccess: boolean("is_open_access").notNull().default(false),
+    oaStatus: text("oa_status"),
+    workType: text("work_type"),
+    language: text("language"),
+    isRetracted: boolean("is_retracted").notNull().default(false),
     topics: text("topics").array().notNull().default(sql`'{}'`),
     trendScore: doublePrecision("trend_score").notNull(),
-    retractionStatus: text("retraction_status"),
-    primaryClaim: jsonb("primary_claim"),
-    stanceSupporting: integer("stance_supporting"),
-    stanceContrasting: integer("stance_contrasting"),
-    sparkline: real("sparkline").array(),
     publishedAt: bigint("published_at", { mode: "number" }),
     dedupeKey: text("dedupe_key").notNull(),
     lastSeenAt: bigint("last_seen_at", { mode: "number" }).notNull(),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
     orderAt: bigint("order_at", { mode: "number" }).notNull(),
-    searchText: text("search_text"),
-    searchTsv: tsvector("search_tsv").generatedAlwaysAs(
-      sql`to_tsvector('simple', coalesce(search_text, ''))`,
-    ),
   },
   (t) => [
-    check("feed_items_kind_check", sql`${t.kind} in ('paper', 'news', 'claim', 'topic', 'idea')`),
-    check(
-      "feed_items_provider_check",
-      sql`${t.provider} in ('openalex', 'exa_news', 'gdelt', 'google_factcheck', 'turnbackhoax')`,
-    ),
-    check(
-      "feed_items_retraction_status_check",
-      sql`${t.retractionStatus} is null or ${t.retractionStatus} in ('none', 'concern', 'retracted')`,
-    ),
+    check("feed_items_kind_check", sql`${t.kind} = 'paper'`),
     uniqueIndex("feed_items_by_dedupe_key").on(t.dedupeKey),
     index("feed_items_by_kind_trend").on(t.kind, t.trendScore),
     index("feed_items_by_kind_published").on(t.kind, t.publishedAt),
     index("feed_items_by_order").on(t.orderAt, t.id),
-    index("feed_items_by_paper_key").on(t.paperKey),
-    index("feed_items_search_gin").using("gin", t.searchTsv),
+    index("feed_items_by_key").on(t.key),
   ],
 );
 

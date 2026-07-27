@@ -98,7 +98,7 @@ describe("FeedService.getRelatedFeedItems", () => {
     spyOn(FeedInteractionRepo, "savedItemIds").mockResolvedValue([]);
 
     const res = await FeedService.getRelatedFeedItems(fakeDb, "u", "S", 6);
-    expect(res.map((r) => r._id)).toEqual(["P1", "P3", "P2"]);
+    expect(res.map((r) => r.feedItemId)).toEqual(["P1", "P3", "P2"]);
   });
 
   test("self tak ditemukan → []", async () => {

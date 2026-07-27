@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createDb } from "../src/client";
 import { decodeKeysetCursor } from "../src/cursor";
 import { FeedInteractionRepo } from "../src/repositories/feedInteractionRepo";
-import { FeedRepo, mergeBalancedLanes } from "../src/repositories/feedRepo";
+import { FeedRepo } from "../src/repositories/feedRepo";
 import { PaperCacheRepo } from "../src/repositories/paperCacheRepo";
 import type { NewExplorePaper } from "../src/schema/explorePapers";
 import type { NewFeedItem } from "../src/schema/feedItems";
@@ -27,16 +27,13 @@ function mkFeed(over: Partial<NewFeedItem> & { dedupeKey: string; orderAt: numbe
   return {
     id: crypto.randomUUID(),
     kind: "paper",
+    key: PKEY(`auto${nextId}`),
     title: "Untitled",
-    summary: "",
     url: "https://example.org",
-    provider: "openalex",
-    sourceLabel: "OpenAlex",
     topics: [],
     trendScore: 0,
     lastSeenAt: now,
     createdAt: now,
-    searchText: "",
     ...over,
   };
 }
@@ -105,43 +102,6 @@ describe("FeedRepo — paginateByOrder keyset", () => {
   });
 });
 
-describe("mergeBalancedLanes (pure)", () => {
-  test("interleave paper↔news 50/50", () => {
-    const r = mergeBalancedLanes(["p1", "p2", "p3", "p4"], ["n1", "n2"], 4);
-    expect(r.items).toEqual(["p1", "n1", "p2", "n2"]);
-    expect(r.consumedPaper).toBe(2);
-    expect(r.consumedNews).toBe(2);
-  });
-  test("backfill dari lane lain saat satu kosong", () => {
-    const r = mergeBalancedLanes(["p1", "p2", "p3"], [], 2);
-    expect(r.items).toEqual(["p1", "p2"]);
-    expect(r.consumedNews).toBe(0);
-  });
-  test("kedua kind tetap muncul walau papers minoritas", () => {
-    const r = mergeBalancedLanes(["p1"], ["n1", "n2", "n3", "n4"], 4);
-    expect(r.items).toContain("p1");
-    expect(r.items.filter((x) => x.startsWith("n")).length).toBe(3);
-  });
-});
-
-describe("FeedRepo — paginateBalanced (paper↔news seimbang)", () => {
-  itest("page memuat paper & news walau news jauh lebih baru (fix bug paper hilang)", async () => {
-    for (const o of [9000, 9001, 9002, 9003]) {
-      await FeedRepo.upsertByDedupeKey(
-        db,
-        mkFeed({ dedupeKey: DEDUPE(`bn${o}`), orderAt: o, kind: "news", provider: "gdelt" }),
-      );
-    }
-    for (const o of [100, 101, 102, 103]) {
-      await FeedRepo.upsertByDedupeKey(db, mkFeed({ dedupeKey: DEDUPE(`bp${o}`), orderAt: o, kind: "paper" }));
-    }
-    const page = await FeedRepo.paginateBalanced(db, { limit: 4, cursor: null });
-    const kinds = new Set(page.items.map((i) => i.kind));
-    expect(kinds.has("paper")).toBe(true);
-    expect(kinds.has("news")).toBe(true);
-  });
-});
-
 describe("PaperCacheRepo", () => {
   itest("upsert replace-by-key + getByKey + findByKeys + bump lastSeenAt", async () => {
     const base: NewExplorePaper = {
@@ -171,11 +131,11 @@ describe("FeedInteractionRepo — saved/hidden refs", () => {
   itest("insertSaved idempotent + savedRefs membawa paperKey + hiddenItemIds", async () => {
     const paperFeed = await FeedRepo.upsertByDedupeKey(
       db,
-      mkFeed({ dedupeKey: DEDUPE("ix1"), orderAt: 500, paperKey: PKEY("k1") }),
+      mkFeed({ dedupeKey: DEDUPE("ix1"), orderAt: 500, key: PKEY("k1") }),
     );
-    const newsFeed = await FeedRepo.upsertByDedupeKey(
+    const hiddenFeed = await FeedRepo.upsertByDedupeKey(
       db,
-      mkFeed({ dedupeKey: DEDUPE("ix2"), orderAt: 501, kind: "news", provider: "gdelt" }),
+      mkFeed({ dedupeKey: DEDUPE("ix2"), orderAt: 501, key: PKEY("k3") }),
     );
 
     await FeedInteractionRepo.insertSaved(db, {
@@ -201,35 +161,83 @@ describe("FeedInteractionRepo — saved/hidden refs", () => {
     await FeedInteractionRepo.insertHidden(db, {
       id: crypto.randomUUID(),
       ownerUserId: OWNER,
-      feedItemId: newsFeed.id,
+      feedItemId: hiddenFeed.id,
       createdAt: 1,
     });
     const hidden = await FeedInteractionRepo.hiddenItemIds(db, OWNER, 100);
-    expect(hidden).toContain(newsFeed.id);
+    expect(hidden).toContain(hiddenFeed.id);
   });
 });
 
-describe("FeedRepo — news enrichment", () => {
-  itest("listNewsNeedingEnrichment menemukan gdelt tanpa articleText; patch mengeluarkannya", async () => {
-    const news = await FeedRepo.upsertByDedupeKey(
-      db,
-      mkFeed({
-        dedupeKey: DEDUPE("enrich1"),
-        orderAt: 600,
-        kind: "news",
-        provider: "gdelt",
-        publishedAt: 600,
-      }),
-    );
-    const before = await FeedRepo.listNewsNeedingEnrichment(db, 50);
-    expect(before.some((t) => t.id === news.id)).toBe(true);
+describe("explore_papers literature fields", () => {
+  itest("menyimpan dan membaca kembali oaStatus/workType/language/isRetracted", async () => {
+    const key = PKEY("lit1");
+    await PaperCacheRepo.upsertMany(db, [
+      {
+        key,
+        title: "Paper uji",
+        snippet: null,
+        url: "https://example.org/a",
+        provider: "OpenAlex",
+        sourceLabel: "OpenAlex",
+        authors: ["A"],
+        topics: [],
+        oaStatus: "gold",
+        workType: "article",
+        language: "en",
+        isRetracted: true,
+        lastSeenAt: Date.now(),
+      },
+    ]);
+    const row = await PaperCacheRepo.getByKey(db, key);
+    expect(row?.oaStatus).toBe("gold");
+    expect(row?.workType).toBe("article");
+    expect(row?.language).toBe("en");
+    expect(row?.isRetracted).toBe(true);
+    expect(row?.snippet).toBeNull();
+  });
+});
 
-    await FeedRepo.applyEnrichmentPatch(db, news.id, {
-      enrichAttempts: 1,
-      articleText: "Body artikel ter-ekstrak.",
+describe("feed_items bentuk LiteraturePaper", () => {
+  itest("menyimpan dan membaca kembali seluruh field paper", async () => {
+    const now = Date.now();
+    const row = await FeedRepo.upsertByDedupeKey(db, {
+      id: crypto.randomUUID(),
+      kind: "paper",
+      key: PKEY("shape"),
+      title: "Bentuk baru",
+      snippet: null,
+      doi: `10.5555/shape-${SUFFIX}`,
+      url: null,
+      pdfUrl: "https://e.org/x.pdf",
+      hasPdf: true,
+      authors: ["A", "B"],
+      year: 2025,
+      publicationDate: "2025-03-04",
+      venue: "Jurnal",
+      citedByCount: 12,
+      isOpenAccess: true,
+      oaStatus: "green",
+      workType: "article",
+      language: "id",
+      isRetracted: true,
+      topics: ["x"],
+      trendScore: 12,
+      publishedAt: now,
+      dedupeKey: DEDUPE("shape"),
+      lastSeenAt: now,
+      createdAt: now,
+      orderAt: now,
     });
-    const after = await FeedRepo.listNewsNeedingEnrichment(db, 50);
-    expect(after.some((t) => t.id === news.id)).toBe(false); // articleText terisi → keluar dari sweep
+    expect(row.key).toBe(PKEY("shape"));
+    expect(row.snippet).toBeNull();
+    expect(row.url).toBeNull();
+    expect(row.hasPdf).toBe(true);
+    expect(row.publicationDate).toBe("2025-03-04");
+    expect(row.oaStatus).toBe("green");
+    expect(row.workType).toBe("article");
+    expect(row.language).toBe("id");
+    expect(row.isRetracted).toBe(true);
   });
 });
 

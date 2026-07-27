@@ -14,6 +14,7 @@
 		ref = $bindable(null),
 		open = $bindable(true),
 		onOpenChange = () => {},
+		persist = true,
 		class: className,
 		style,
 		children,
@@ -21,6 +22,12 @@
 	}: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
 		open?: boolean;
 		onOpenChange?: (open: boolean) => void;
+		/**
+		 * Whether this provider owns the persisted `sidebar_state` cookie. Only the app's nav
+		 * sidebar may — nested providers (detail/side panels) reuse this state machine but must not
+		 * write the cookie, or closing a panel would also collapse the nav on the next page load.
+		 */
+		persist?: boolean;
 	} = $props();
 
 	const sidebar = setSidebar({
@@ -29,6 +36,7 @@
 			open = value;
 			onOpenChange(value);
 
+			if (!persist) return;
 			// This sets the cookie to keep the sidebar state.
 			document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
 		}

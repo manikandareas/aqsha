@@ -20,12 +20,16 @@
 </script>
 
 {#if sources.length > 0}
+	<!--
+		Gutter + wrapping below `sm`: the four controls are wider than a phone viewport, so the bar
+		spans the gutter and lets them fall onto a second line rather than overflowing off-screen.
+	-->
 	<div
-		class="fixed inset-x-0 bottom-4 z-30 mx-auto flex w-fit items-center gap-2 rounded-md border-2 border-border bg-card px-3 py-2 shadow-soft-card"
+		class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-30 mx-auto flex w-fit flex-wrap items-center justify-center gap-2 rounded-md border-2 border-border bg-card px-3 py-2 shadow-soft-card sm:inset-x-0 sm:bottom-4 sm:flex-nowrap"
 		role="toolbar"
 		aria-label="Aksi sumber terpilih"
 	>
-		<span class="text-label font-medium">{sources.length} dipilih</span>
+		<span class="shrink-0 text-label font-medium">{sources.length} dipilih</span>
 		<Button type="button" size="sm" class="gap-1.5" onclick={() => (saveOpen = true)}>
 			<Icon icon={SaveIcon} class="size-3.5" />
 			Simpan {sources.length} sumber

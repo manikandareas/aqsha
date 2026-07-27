@@ -9,17 +9,12 @@
 		useHideDiscovery,
 		useRecordInteraction
 	} from '$lib/features/discovery/api';
-	import {
-		discoveryItemKey,
-		feedItemToDiscoveryItem,
-		type DiscoveryItem
-	} from '$lib/features/discovery/model';
 	import type { SearchSourceInput } from '$lib/features/citations/types';
-	import type { FeedItem, FeedMode, FeedTopic } from '$lib/features/discovery/types';
+	import type { FeedMode, FeedTopic } from '$lib/features/discovery/types';
+	import { literaturePaperToSearchInput, type FeedPaper } from '../literature-search-types';
 	import ExploreFeedSkeleton from './ExploreFeedSkeleton.svelte';
 	import LiteratureBatchBar from './LiteratureBatchBar.svelte';
 	import ExploreSourceRow from './ExploreSourceRow.svelte';
-	import { discoveryItemToExploreSource, exploreSourceToSearchInput } from '../explore-source';
 
 	/** Curated discovery feed keeps one query and a source-list presentation for every topic. */
 	let { topic }: { topic: FeedTopic | null } = $props();
@@ -39,16 +34,14 @@
 	const hide = useHideDiscovery();
 	const record = useRecordInteraction();
 
-	const items = $derived.by<DiscoveryItem[]>(() => {
-		const out: DiscoveryItem[] = [];
+	const items = $derived.by<FeedPaper[]>(() => {
+		const out: FeedPaper[] = [];
 		const seen = new SvelteSet<string>();
 		for (const page of feedQuery.data?.pages ?? []) {
-			for (const raw of page.items) {
-				const item = feedItemToDiscoveryItem(raw as FeedItem);
-				const key = discoveryItemKey(item);
-				if (seen.has(key)) continue;
-				seen.add(key);
-				if (!hidden.has(key)) out.push(item);
+			for (const item of page.items) {
+				if (seen.has(item.key)) continue;
+				seen.add(item.key);
+				if (!hidden.has(item.key)) out.push(item);
 			}
 		}
 		return out;
@@ -65,9 +58,7 @@
 	);
 	const selectedKeys = new SvelteSet<string>();
 	const selectedSources = $derived<SearchSourceInput[]>(
-		items
-			.filter((item) => selectedKeys.has(discoveryItemKey(item)))
-			.map((item) => exploreSourceToSearchInput(discoveryItemToExploreSource(item)))
+		items.filter((item) => selectedKeys.has(item.key)).map(literaturePaperToSearchInput)
 	);
 
 	// Cap auto-fetches per session so a run of locally-hidden items can't spin forever.
@@ -110,29 +101,30 @@
 		void feedQuery.fetchNextPage();
 	}
 
-	function handleSelectedChange(item: DiscoveryItem, selected: boolean): void {
-		const key = discoveryItemKey(item);
-		if (selected) selectedKeys.add(key);
-		else selectedKeys.delete(key);
+	function handleSelectedChange(item: FeedPaper, selected: boolean): void {
+		if (selected) selectedKeys.add(item.key);
+		else selectedKeys.delete(item.key);
 	}
 
 	function clearSelection(): void {
 		selectedKeys.clear();
 	}
 
-	function handleSaved(item: DiscoveryItem): void {
-		record.mutate({ itemRef: item.itemRef, kind: 'save' });
+	function handleSaved(item: FeedPaper): void {
+		record.mutate({ itemRef: { kind: 'feed', feedItemId: item.feedItemId }, kind: 'save' });
 	}
 
-	function handleHide(item: DiscoveryItem): void {
-		const key = discoveryItemKey(item);
-		hidden.add(key);
-		selectedKeys.delete(key);
-		hide.mutate(item.itemRef, { onError: () => toast.error('Gagal menyembunyikan.') });
+	function handleHide(item: FeedPaper): void {
+		hidden.add(item.key);
+		selectedKeys.delete(item.key);
+		hide.mutate(
+			{ kind: 'feed', feedItemId: item.feedItemId },
+			{ onError: () => toast.error('Gagal menyembunyikan.') }
+		);
 	}
 </script>
 
-<section class="pt-8">
+<section class="pt-6 sm:pt-8">
 	<div
 		class={[
 			'@container/feed',
@@ -151,10 +143,10 @@
 			{@render emptyState()}
 		{:else}
 			<div class="overflow-hidden" aria-label="Temuan untukmu">
-				{#each items as item (discoveryItemKey(item))}
+				{#each items as item (item.key)}
 					<ExploreSourceRow
-						source={discoveryItemToExploreSource(item)}
-						selected={selectedKeys.has(discoveryItemKey(item))}
+						source={item}
+						selected={selectedKeys.has(item.key)}
 						onSelectedChange={(selected) => handleSelectedChange(item, selected)}
 						onSaved={() => handleSaved(item)}
 						onHide={() => handleHide(item)}
@@ -204,7 +196,9 @@
 {/snippet}
 
 {#snippet emptyState()}
-	<div class="max-w-[560px] rounded-2xl border-2 border-border bg-card px-5 py-8 text-center">
+	<div
+		class="max-w-[560px] rounded-2xl border-2 border-border bg-card px-4 py-8 text-center sm:px-5"
+	>
 		<div
 			class="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-mint-soft text-mint-foreground"
 		>

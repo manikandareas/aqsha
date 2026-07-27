@@ -1,7 +1,6 @@
 /**
- * Ranking helpers feed — port verbatim V1 `feed.ts` (interestMatch/recency/popularity/
- * kindBoost/deClump/reasonFor). Pure (tanpa DB). Dipakai FeedService.getFeed/getFeedPaginated.
- * `kind` ditipekan `string` (bukan union) supaya row Drizzle bisa langsung di-skor.
+ * Ranking helpers feed — skor minat/kesegaran/popularitas. Pure (tanpa DB). Dipakai
+ * FeedService.getFeed/getFeedPaginated.
  */
 const DAY_MS = 86_400_000;
 const RECENCY_HALF_LIFE_DAYS = 21;
@@ -42,57 +41,3 @@ export function popularityScore(trendScore: number): number {
   return Math.min(1, Math.log10(trendScore + 1) / 5);
 }
 
-/** Nudge per-kind supaya lane non-paper tetap muncul. */
-export function kindBoost(kind: string): number {
-  switch (kind) {
-    case "claim":
-    case "idea":
-      return 0.25;
-    case "topic":
-      return 0.2;
-    case "news":
-      return 0.15;
-    default:
-      return 0;
-  }
-}
-
-/** Greedy re-order: tak boleh >2 (sebenarnya: tak ada 2 berturut) kind sama; skor tinggi tetap awal. */
-export function deClump<T extends { item: { kind: string } }>(scored: T[], limit: number): T[] {
-  const out: T[] = [];
-  const pool = [...scored]; // sudah desc by score
-  while (out.length < limit && pool.length > 0) {
-    let pickIndex = 0;
-    if (out.length >= 1) {
-      const prev = out[out.length - 1]!.item.kind;
-      if (pool[0]!.item.kind === prev) {
-        const alt = pool.findIndex((e) => e.item.kind !== prev);
-        if (alt >= 0) pickIndex = alt;
-      }
-    }
-    out.push(pool.splice(pickIndex, 1)[0]!);
-  }
-  return out;
-}
-
-/** "Kenapa aku lihat ini" (Bahasa Indonesia). Port reasonFor V1. */
-export function reasonFor(
-  item: { kind: string; trendScore: number },
-  interest: { topTopic?: string },
-  serendipity: boolean,
-): string {
-  if (serendipity) return "Bidang bersebelahan";
-  if (interest.topTopic) return `Karena minat: ${interest.topTopic}`;
-  switch (item.kind) {
-    case "claim":
-      return "Klaim diperiksa pemeriksa fakta";
-    case "topic":
-      return "Sedang ramai diperbincangkan";
-    case "news":
-      return "Berita terbaru";
-    case "idea":
-      return "Celah riset untuk digali";
-    default:
-      return item.trendScore > 0 ? "Banyak disitasi" : "Baru terbit";
-  }
-}

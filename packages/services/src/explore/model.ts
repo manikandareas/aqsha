@@ -16,7 +16,7 @@ export type ExploreMode = "recommendations" | "search";
 export type ExplorePaperInput = {
   key: string;
   title: string;
-  snippet: string;
+  snippet: string | null;
   abstract?: string;
   url: string;
   pdfUrl?: string;
@@ -31,6 +31,10 @@ export type ExplorePaperInput = {
   venue?: string;
   citedByCount?: number;
   isOpenAccess?: boolean;
+  oaStatus?: string;
+  workType?: string;
+  language?: string;
+  isRetracted?: boolean;
   topics: string[];
   score?: number;
 };
