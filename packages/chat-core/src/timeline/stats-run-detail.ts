@@ -3,8 +3,8 @@
 // Pure FE — numbers/verdicts still come from DB blocks (`statsGroupsByToolCallId`); this detail is
 // only identity + args + friendly status.
 
-import { statsAnalysisMeta, toRunKey } from '../stats-viz';
-import type { DatasetProfileColumn, DatasetProfileSummary, DeepStepDetail } from './types';
+import { statsAnalysisMeta, toRunKey } from '../stats-viz.ts';
+import type { DatasetProfileColumn, DatasetProfileSummary, DeepStepDetail } from './types.ts';
 
 type AnalysisDetail = Extract<DeepStepDetail, { kind: 'analysis' }>;
 

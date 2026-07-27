@@ -3,17 +3,17 @@
 // id from the URL. This builder turns the parsed timeline + persisted `research_sources` + live `/deep`
 // plan gate into id-keyed lookups the surface registers into the panel controller.
 
-import type { AskQuestionsResumeData } from '../ask-questions';
-import type { StatsGroup } from '../stats-viz';
-import type { MastraAskGate, MastraPlanGate } from './mastra';
-import { dedupeCards, researchSourceToCard, type ResearchSourceLike } from './source-cards';
+import type { AskQuestionsResumeData } from '../ask-questions.ts';
+import type { StatsGroup } from '../stats-viz.ts';
+import type { MastraAskGate, MastraPlanGate } from './mastra.ts';
+import { dedupeCards, researchSourceToCard, type ResearchSourceLike } from './source-cards.ts';
 import type {
 	DeepStepDetail,
 	SourceCardData,
 	TimelineMessage,
 	ToolRow,
 	ToolStatus
-} from './types';
+} from './types.ts';
 
 export const LIVE_PLAN_KEY = '__live__';
 

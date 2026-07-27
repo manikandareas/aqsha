@@ -8,8 +8,9 @@ import {
 	type DocumentOutlineEntry
 } from '$lib/features/document/lib/outline';
 import type { AnnotationDraft } from '$lib/features/document/lib/annotation-selection';
-import type { SaveWorkspaceDocumentResult } from '$lib/features/document/api';
+import type { AnnotationView, SaveWorkspaceDocumentResult } from '$lib/features/document/api';
 import type { Cm6Diagnostic } from '$lib/features/document/typst/diagnostics';
+import type { ProposalDiffState } from '$lib/features/document/lib/proposal-diff-extension';
 import type {
 	DocumentTypstEngine,
 	VedivadDocumentTypstEngine
@@ -25,6 +26,7 @@ type EditorComponent = Component<
 		diagnostics?: Cm6Diagnostic[];
 		mainFilePath?: string;
 		project: TypstProject | null;
+		proposalDiff?: ProposalDiffState | null;
 		onChange: (next: string) => void;
 	},
 	EditorHandle
@@ -35,12 +37,7 @@ type PreviewComponent = Component<
 		project?: TypstProject | null;
 		source?: string;
 		mainFilePath?: string;
-		annotations?: Array<{
-			id: string;
-			page: number;
-			rects: AnnotationDraft['rects'];
-			status: string;
-		}>;
+		annotations?: AnnotationView[];
 		activeAnnotationId?: string | null;
 		selectedAnnotationIds?: ReadonlySet<string>;
 		outlineTitles?: string[];
@@ -50,6 +47,10 @@ type PreviewComponent = Component<
 		proposalHunkCount?: number;
 		onReviewProposal?: () => void;
 		annotationMode?: boolean;
+		pinNumbers?: Map<string, number>;
+		onToggleAnnotationContext?: (id: string) => void;
+		onAskAnnotation?: (id: string) => void;
+		onDismissAnnotation?: (id: string) => void;
 	},
 	PreviewHandle
 >;

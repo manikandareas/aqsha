@@ -1,4 +1,4 @@
-import { messagePreview } from "./core";
+import { messagePreview } from "./core.ts";
 
 export type AgentKind = "lite" | "pro";
 

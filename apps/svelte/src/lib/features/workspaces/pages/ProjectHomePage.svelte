@@ -21,11 +21,11 @@
 	import ProjectChatPane from '../components/ProjectChatPane.svelte';
 	import ProjectChatRuntimeProvider from '../components/ProjectChatRuntimeProvider.svelte';
 	import { useWorkspace } from '../api';
+	import { projectQuickActions } from '../lib/project-quick-actions';
 	import { resolveMainTypFilename } from '../main-typ-filename';
 	import { projectDisplayTitle } from '../types';
 	import TocOverlay from '$lib/features/document/components/TocOverlay.svelte';
 	import AnnotationModeControls from '$lib/features/document/components/AnnotationModeControls.svelte';
-	import ProposalReviewCard from '$lib/features/document/components/ProposalReviewCard.svelte';
 	import {
 		ProposalReviewInteractions,
 		setProposalReviewInteractions
@@ -56,6 +56,7 @@
 		useMarkAnnotationsSent,
 		usePendingProposal,
 		useAcceptProposal,
+		useDecideHunk,
 		useRejectProposal
 	} from '$lib/features/document/api';
 
@@ -80,7 +81,6 @@
 	}
 	const activationController = new ProjectActivationController(dispatchActivation);
 	const backgroundQueriesActive = $derived(enabled && activation.shellPainted);
-	const documentQueriesActive = $derived(enabled && activation.documentRuntimeActive);
 	const qc = useQueryClient();
 
 	const mentions = new ComposerMentions();
@@ -93,13 +93,15 @@
 		() => workspaceId,
 		() => enabled
 	);
+	// Gated on the painted shell rather than the document runtime: the chat tab can open first on
+	// narrow layouts, and its opening prompts are computed from the document and bib.
 	const documentQuery = useWorkspaceDocument(
 		() => workspaceId,
-		() => documentQueriesActive
+		() => backgroundQueriesActive
 	);
 	const bibQuery = useWorkspaceBib(
 		() => workspaceId,
-		() => documentQueriesActive
+		() => backgroundQueriesActive
 	);
 	const saveDocument = useSaveWorkspaceDocument(() => workspaceId);
 	const annotations = useWorkspaceAnnotations(
@@ -115,6 +117,7 @@
 	);
 	const acceptProposal = useAcceptProposal(() => workspaceId);
 	const rejectProposal = useRejectProposal(() => workspaceId);
+	const decideHunk = useDecideHunk(() => workspaceId);
 	const exportPdf = useExportPdf(() => workspaceId);
 
 	const runtime = new DocumentWorkspaceRuntime({
@@ -182,7 +185,10 @@
 		getAnnotations: () => annotations.data ?? [],
 		create: (input, handlers) => createAnnotation.mutate(input, handlers),
 		markSent: (input) => markSent.mutate(input),
-		scrollToText: (text) => previewRef?.scrollToHeading(text)
+		scrollToText: (text) => previewRef?.scrollToHeading(text),
+		setComposerDraft: (text) => mentions.setComposerDraft(text),
+		selectChat: () => selectLeftMode('chat'),
+		getPinNumber: (id) => pinNumbers.get(id) ?? null
 	});
 
 	const proposalController = new ProjectProposalController({
@@ -192,6 +198,7 @@
 		selectMode: (mode) => selectLeftMode(mode),
 		accept: (input, handlers) => acceptProposal.mutate(input, handlers),
 		reject: (proposalId, handlers) => rejectProposal.mutate(proposalId, handlers),
+		decideHunk: (input, handlers) => decideHunk.mutate(input, handlers),
 		reload: () => void reloadFromServer(),
 		onSettled: () => {
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.proposals(workspaceId) });
@@ -232,11 +239,20 @@
 	let previewVisited = $state(false);
 	let annotationMode = $state(false);
 	let activeTocIndex = $state(0);
+	let pinNumbers = $state(new Map<string, number>());
 
 	const visibleAnnotationIds = $derived(
 		(annotations.data ?? []).flatMap((annotation) =>
 			annotation.status === 'open' || annotation.status === 'sent' ? [annotation.id] : []
 		)
+	);
+
+	const quickActions = $derived(
+		projectQuickActions({
+			source: documentQuery.data?.source ?? '',
+			bib: bibQuery.data?.bib ?? '',
+			annotations: annotations.data ?? []
+		})
 	);
 
 	function attachWorkspace(node: HTMLDivElement): () => void {
@@ -343,7 +359,7 @@
 {#snippet chatPanel()}
 	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
 		<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-			<ProjectChatPane leading={leftToggle} />
+			<ProjectChatPane leading={leftToggle} suggestions={quickActions} />
 		</div>
 	</div>
 {/snippet}
@@ -351,69 +367,74 @@
 {#snippet editorPanel()}
 	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
 		<PanelCardToolbar title={leftToggle} />
-		{#if proposalController.reviewing && proposal.data}
-			<div class="min-h-0 flex-1 overflow-y-auto p-3">
-				<ProposalReviewCard
-					proposal={proposal.data}
-					source={proposal.data.currentSource}
-					accepting={acceptProposal.isPending}
-					acceptErrors={proposalController.acceptErrors}
-					onAccept={proposalController.accept}
-					onReject={proposalController.reject}
-					onExitReview={proposalController.exitReview}
-					onResubmit={proposalController.resubmit}
-				/>
+		{#if runtime.autosave?.status === 'stale'}
+			<div
+				class="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-lemon/20 px-3 py-2 text-label"
+				role="status"
+			>
+				<span>Sumber berubah di tempat lain. Muat ulang sebelum menyunting.</span>
+				<Button type="button" size="sm" variant="secondary" onclick={reloadFromServer}>
+					Muat ulang
+				</Button>
 			</div>
-		{:else}
-			{#if runtime.autosave?.status === 'stale'}
-				<div
-					class="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-lemon/20 px-3 py-2 text-label"
-					role="status"
-				>
-					<span>Sumber berubah di tempat lain. Muat ulang sebelum menyunting.</span>
-					<Button type="button" size="sm" variant="secondary" onclick={reloadFromServer}>
-						Muat ulang
+		{/if}
+		{#if proposalController.remainingHunks.length > 0}
+			<div
+				class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-mint/15 px-3 py-2 text-label"
+				role="status"
+			>
+				<span>
+					Usulan Astra menunggu keputusan · {proposalController.remainingHunks.length} bagian
+					tersisa. Editor terkunci sampai semuanya diputuskan.
+				</span>
+				<div class="flex gap-1.5">
+					<Button type="button" size="sm" variant="outline" onclick={proposalController.rejectRest}>
+						Tolak sisanya
+					</Button>
+					<Button type="button" size="sm" onclick={proposalController.acceptRest}>
+						Terima sisanya
 					</Button>
 				</div>
-			{/if}
-			<div class="min-h-0 flex-1">
-				{#if runtime.loadError || runtime.previewError || documentQuery.isError}
-					<div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-						<p class="text-sm text-destructive">
-							{runtime.loadError ?? 'Dokumen gagal dimuat.'}
-						</p>
-						<Button type="button" size="sm" variant="outline" onclick={retryDocumentRuntime}>
-							Coba lagi
-						</Button>
-					</div>
-				{:else if !documentQuery.isSuccess || !runtime.Editor}
-					<div class="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-						<Spinner class="size-4" /> Menyiapkan editor…
-					</div>
-				{:else}
-					{@const Editor = runtime.Editor}
-					<Editor
-						bind:this={editorRef}
-						value={runtime.source}
-						docKey={runtime.docKey}
-						editable={runtime.editable}
-						diagnostics={runtime.diagnostics}
-						mainFilePath={runtime.mainFilePath}
-						project={runtime.typstProject}
-						onChange={(next) => runtime.onEditorChange(next)}
-					/>
-				{/if}
 			</div>
-			{#if runtime.saveStatusLabel}
-				<div
-					class="shrink-0 border-t border-border px-3 py-1 text-right text-micro text-muted-foreground"
-					aria-live={runtime.autosave?.status === 'error' || runtime.autosave?.status === 'stale'
-						? 'assertive'
-						: 'polite'}
-				>
-					{runtime.saveStatusLabel}
+		{/if}
+		<div class="min-h-0 flex-1">
+			{#if runtime.loadError || runtime.previewError || documentQuery.isError}
+				<div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+					<p class="text-sm text-destructive">
+						{runtime.loadError ?? 'Dokumen gagal dimuat.'}
+					</p>
+					<Button type="button" size="sm" variant="outline" onclick={retryDocumentRuntime}>
+						Coba lagi
+					</Button>
 				</div>
+			{:else if !documentQuery.isSuccess || !runtime.Editor}
+				<div class="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+					<Spinner class="size-4" /> Menyiapkan editor…
+				</div>
+			{:else}
+				{@const Editor = runtime.Editor}
+				<Editor
+					bind:this={editorRef}
+					value={runtime.source}
+					docKey={runtime.docKey}
+					editable={runtime.editable && proposalController.remainingHunks.length === 0}
+					diagnostics={runtime.diagnostics}
+					mainFilePath={runtime.mainFilePath}
+					project={runtime.typstProject}
+					proposalDiff={proposalController.diffState}
+					onChange={(next) => runtime.onEditorChange(next)}
+				/>
 			{/if}
+		</div>
+		{#if runtime.saveStatusLabel}
+			<div
+				class="shrink-0 border-t border-border px-3 py-1 text-right text-micro text-muted-foreground"
+				aria-live={runtime.autosave?.status === 'error' || runtime.autosave?.status === 'stale'
+					? 'assertive'
+					: 'polite'}
+			>
+				{runtime.saveStatusLabel}
+			</div>
 		{/if}
 	</div>
 {/snippet}
@@ -467,6 +488,7 @@
 				<Preview
 					bind:this={previewRef}
 					bind:annotationMode
+					bind:pinNumbers
 					svg={runtime.previewSvg}
 					project={runtime.typstProject}
 					source={runtime.source}
@@ -476,9 +498,20 @@
 					selectedAnnotationIds={annotationBridge.selectedIds}
 					outlineTitles={runtime.outline.map((entry) => entry.title)}
 					proposalHunkCount={proposalController.hunkCount}
-					onReviewProposal={proposalController.beginReview}
+					onReviewProposal={() => selectLeftMode('editor')}
 					onCreateAnnotation={annotationBridge.create}
 					onSelectAnnotation={annotationBridge.focus}
+					onToggleAnnotationContext={annotationBridge.toggleContext}
+					onAskAnnotation={annotationBridge.ask}
+					onDismissAnnotation={(id: string) => {
+						dismissAnnotations.mutate(
+							{ ids: [id] },
+							{
+								onError: (err) =>
+									toast.error(readableApiErrorMessage(err, 'Gagal menghapus anotasi.'))
+							}
+						);
+					}}
 					onActiveHeading={(index: number) => (activeTocIndex = index)}
 				/>
 				<TocOverlay

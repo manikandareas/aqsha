@@ -16,6 +16,11 @@ import {
 	typstThemes
 } from '@vedivad/codemirror-typst';
 import type { Cm6Diagnostic } from '../typst/diagnostics';
+import {
+	proposalDiffExtension,
+	type ProposalDiffState,
+	setProposalDiff
+} from './proposal-diff-extension';
 
 // Menandai transaksi reset non-user (setDoc programatik saat proposal diterima / muat ulang versi)
 // supaya updateListener tidak melaporkannya sebagai edit user → autosave tak ikut terpicu.
@@ -56,6 +61,7 @@ export type TypstEditorHandle = {
 	setDoc(next: string): void;
 	applyUserEdit(next: string): void;
 	setDiagnostics(diags: Cm6Diagnostic[]): void;
+	setProposalDiff(next: ProposalDiffState | null): void;
 	scrollToLine(line: number): void;
 	setEditable(editable: boolean): void;
 	setDark(dark: boolean): void;
@@ -104,6 +110,7 @@ export async function mountTypstEditor(
 				typstFilePath.of(opts.mainFilePath ?? '/main.typ'),
 				keymap.of([indentWithTab]),
 				EditorView.lineWrapping,
+				proposalDiffExtension(),
 				editableCompartment.of(EditorState.readOnly.of(!opts.editable)),
 				EditorView.updateListener.of((u) => {
 					if (!u.docChanged) return;
@@ -131,6 +138,9 @@ export async function mountTypstEditor(
 		},
 		setDiagnostics(diags) {
 			view.dispatch(setLintDiagnostics(view.state, toLintDiagnostics(diags)));
+		},
+		setProposalDiff(next) {
+			view.dispatch({ effects: setProposalDiff.of(next) });
 		},
 		scrollToLine(line) {
 			const total = view.state.doc.lines;

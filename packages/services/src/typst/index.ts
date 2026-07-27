@@ -15,16 +15,42 @@ export {
 } from "./main-filename";
 export { scaffoldTypstDocument, type ScaffoldTypstOptions } from "./scaffold";
 export { scanTypstCiteKeys, stripTypstComments } from "./cite-scan";
-export { composeProjectBib } from "./project-bib";
+export {
+  applyOutlineOperations,
+  countWords,
+  findOutlineSectionByTitle,
+  type OutlineHeading,
+  type OutlineOperation,
+  type OutlineSection,
+  parseTypstOutline,
+  sliceOutlineSection,
+} from "./outline";
+export { composeProjectBib, listProjectReferences, type ProjectReference } from "./project-bib";
+export {
+  citeIntegrity,
+  type ProjectFacts,
+  ProjectFactsService,
+  renderProjectManifest,
+} from "./project-facts";
+export {
+  type DocumentIssues,
+  type DocumentReport,
+  DocumentReportService,
+  inspectDocumentSource,
+} from "./document-report";
 export {
   applyHunkSelection,
   computeProposalHunks,
+  type HunkDecision,
+  type HunkDecisions,
   type ProposalHunk,
+  resolveHunkDecisions,
 } from "./hunks";
 export {
   applyProposalEdits,
   DocumentProposalService,
   type AcceptProposalResult,
+  type DecideHunkResult,
   type PendingProposalView,
   type ProposalEdit,
   type ProposeDocumentEditResult,

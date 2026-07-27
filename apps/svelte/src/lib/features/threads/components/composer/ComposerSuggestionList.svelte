@@ -5,17 +5,19 @@
 
 	let {
 		onSelectSuggestion,
-		landing = false
+		landing = false,
+		items = composerSuggestions
 	}: {
 		onSelectSuggestion: (prompt: string) => void;
 		landing?: boolean;
+		items?: readonly { label: string; prompt: string }[];
 	} = $props();
 
 	const suggestionIcons = [SearchIcon, CompassIcon, FlaskConicalIcon, FileTextIcon] as const;
 </script>
 
 <div class={cn('grid', landing ? 'gap-0' : 'gap-1.5')}>
-	{#each composerSuggestions as item, index (item.label)}
+	{#each items as item, index (item.label)}
 		<button
 			type="button"
 			onclick={() => onSelectSuggestion(item.prompt)}
@@ -32,7 +34,7 @@
 				)}
 				aria-hidden="true"
 			>
-				<Icon icon={suggestionIcons[index]!} class="size-3.5" />
+				<Icon icon={suggestionIcons[index % suggestionIcons.length]!} class="size-3.5" />
 			</span>
 			<span class="min-w-0 truncate">{item.label}</span>
 		</button>
