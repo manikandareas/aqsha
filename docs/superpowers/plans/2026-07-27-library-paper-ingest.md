@@ -29,7 +29,7 @@
 ## File Structure
 
 **Dibuat:**
-- `packages/db/migrations/0047_library_paper_ingest.sql` — kolom status ingest, pelonggaran constraint.
+- `packages/db/migrations/0049_library_paper_ingest.sql` — kolom status ingest, pelonggaran constraint.
 - `packages/services/src/library/library-ingest.service.ts` — gerbang enqueue + state machine.
 - `packages/services/src/library/index.ts` — barrel export.
 - `apps/api/src/workers/library-ingest.worker.ts` — pemanggil tipis worker.
@@ -70,7 +70,7 @@
 ### Task 1: Migrasi 0047 — status ingest dan pelonggaran constraint
 
 **Files:**
-- Create: `packages/db/migrations/0047_library_paper_ingest.sql`
+- Create: `packages/db/migrations/0049_library_paper_ingest.sql`
 - Modify: `packages/db/migrations/meta/_journal.json`
 - Modify: `packages/db/src/schema/citations.ts`
 - Modify: `packages/db/src/schema/artifacts.ts:62`
@@ -238,7 +238,7 @@ Expected: FAIL — TypeScript menolak `ingestStatus` (belum ada di skema) dan `w
 
 - [ ] **Step 3: Tulis SQL migrasi**
 
-Buat `packages/db/migrations/0047_library_paper_ingest.sql`:
+Buat `packages/db/migrations/0049_library_paper_ingest.sql`:
 
 ```sql
 ALTER TABLE "citations"
@@ -281,7 +281,7 @@ Tambahkan entri ke akhir array `entries` di `packages/db/migrations/meta/_journa
       "idx": 47,
       "version": "7",
       "when": <hasil Date.now()>,
-      "tag": "0047_library_paper_ingest",
+      "tag": "0049_library_paper_ingest",
       "breakpoints": true
     }
 ```
