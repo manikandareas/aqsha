@@ -72,21 +72,26 @@ const BIB = `@article{doe2020,
 async function cleanup() {
   if (!DATABASE_URL) return;
   const { client } = createDb(DATABASE_URL);
-  await client`delete from workspace_citation_links where citation_id in (select id from citations where owner_user_id like 'user_itest_cit_%')`;
-  await client`delete from citations where owner_user_id like 'user_itest_cit_%'`;
-  await client`delete from citation_import_batches where owner_user_id like 'user_itest_cit_%'`;
-  await client`delete from workspace_citation_settings where owner_user_id like 'user_itest_cit_%'`;
-  await client`delete from artifact_embeddings where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
-  await client`delete from artifact_contents where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
-  await client`delete from artifact_extractions where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
-  await client`delete from artifact_paper_metadata where owner_user_id like 'user_itest_cit_%'`;
-  await client`delete from artifact_urls where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
-  await client`delete from artifacts where owner_user_id like 'user_itest_cit_%'`;
-  await client`delete from workspace_folders where owner_user_id like 'user_itest_cit_%'`;
-  await client`delete from workspaces where owner_user_id like 'user_itest_cit_%'`;
-  await client`delete from user_onboarding where owner_user_id like 'user_itest_cit_%'`;
-  await client`delete from user_feed_interests where owner_user_id like 'user_itest_cit_%'`;
-  await client`delete from users where owner_user_id like 'user_itest_cit_%'`;
+  await client.begin(async (sql) => {
+    // Mengunci parent agar worker embedding yang terlambat tidak menyisipkan child
+    // di antara penghapusan dependensi dan artifact.
+    await sql`select id from artifacts where owner_user_id like 'user_itest_cit_%' for update`;
+    await sql`delete from workspace_citation_links where citation_id in (select id from citations where owner_user_id like 'user_itest_cit_%')`;
+    await sql`delete from citations where owner_user_id like 'user_itest_cit_%'`;
+    await sql`delete from citation_import_batches where owner_user_id like 'user_itest_cit_%'`;
+    await sql`delete from workspace_citation_settings where owner_user_id like 'user_itest_cit_%'`;
+    await sql`delete from artifact_embeddings where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
+    await sql`delete from artifact_contents where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
+    await sql`delete from artifact_extractions where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
+    await sql`delete from artifact_paper_metadata where owner_user_id like 'user_itest_cit_%'`;
+    await sql`delete from artifact_urls where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
+    await sql`delete from artifacts where owner_user_id like 'user_itest_cit_%'`;
+    await sql`delete from workspace_folders where owner_user_id like 'user_itest_cit_%'`;
+    await sql`delete from workspaces where owner_user_id like 'user_itest_cit_%'`;
+    await sql`delete from user_onboarding where owner_user_id like 'user_itest_cit_%'`;
+    await sql`delete from user_feed_interests where owner_user_id like 'user_itest_cit_%'`;
+    await sql`delete from users where owner_user_id like 'user_itest_cit_%'`;
+  });
   await client.end();
 }
 
