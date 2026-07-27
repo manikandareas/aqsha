@@ -29,8 +29,8 @@
 | --- | --- |
 | `packages/services/src/papers/work.ts` | Canonical `LiteraturePaper` type, OpenAlex `select` list, `mapOpenAlexWork`, and the two non-lossy converters to/from `explore_papers`. |
 | `packages/services/test/papers-work.test.ts` | Mapper and converter unit tests, plus the feed↔search parity contract. |
-| `packages/db/migrations/0046_explore_papers_literature_fields.sql` | Additive `explore_papers` columns; widen `snippet`. |
-| `packages/db/migrations/0047_feed_items_literature_shape.sql` | Purge legacy rows, restructure `feed_items`. |
+| `packages/db/migrations/0047_explore_papers_literature_fields.sql` | Additive `explore_papers` columns; widen `snippet`. |
+| `packages/db/migrations/0048_feed_items_literature_shape.sql` | Purge legacy rows, restructure `feed_items`. |
 
 **Modified**
 
@@ -69,7 +69,7 @@
 `LiteratureSearchService.search` writes every search result into `explore_papers`, and `ensureFeedItemForPaperKey` reads it back when a user saves one. The table has no home for `oaStatus`, `workType`, `language`, or `isRetracted`, so those four fields are lost on the way in. Widen the table first; everything downstream depends on it.
 
 **Files:**
-- Create: `packages/db/migrations/0046_explore_papers_literature_fields.sql`
+- Create: `packages/db/migrations/0047_explore_papers_literature_fields.sql`
 - Modify: `packages/db/migrations/meta/_journal.json`
 - Modify: `packages/db/src/schema/explorePapers.ts:13-44`
 - Modify: `packages/services/src/explore/model.ts:16-36`
@@ -124,7 +124,7 @@ Expected: FAIL — TypeScript rejects `oaStatus` as an unknown property on the i
 
 - [ ] **Step 3: Write the migration**
 
-Create `packages/db/migrations/0046_explore_papers_literature_fields.sql`:
+Create `packages/db/migrations/0047_explore_papers_literature_fields.sql`:
 
 ```sql
 ALTER TABLE "explore_papers" ADD COLUMN "oa_status" text;--> statement-breakpoint
@@ -143,7 +143,7 @@ In `packages/db/migrations/meta/_journal.json`, add this object to the end of th
       "idx": 46,
       "version": "7",
       "when": 1784808000000,
-      "tag": "0046_explore_papers_literature_fields",
+      "tag": "0047_explore_papers_literature_fields",
       "breakpoints": true
     }
 ```
@@ -803,7 +803,7 @@ git commit -m "fix(services): stop dropping oa/type/language fields when caching
 This is the destructive step. Legacy rows are purged, news-era columns are dropped, and `summary`/`retraction_status`/`paper_key` are replaced. `packages/services` will not compile at the end of this task — that is expected, and Task 5 repairs it. The gate here is `packages/db` alone, which has no dependency on services.
 
 **Files:**
-- Create: `packages/db/migrations/0047_feed_items_literature_shape.sql`
+- Create: `packages/db/migrations/0048_feed_items_literature_shape.sql`
 - Modify: `packages/db/migrations/meta/_journal.json`
 - Modify: `packages/db/src/schema/feedItems.ts`
 - Modify: `packages/db/src/repositories/feedRepo.ts`
@@ -872,7 +872,7 @@ Expected: FAIL — `key`, `snippet`, `hasPdf`, `publicationDate`, `oaStatus`, `w
 
 - [ ] **Step 3: Write the migration**
 
-Create `packages/db/migrations/0047_feed_items_literature_shape.sql`:
+Create `packages/db/migrations/0048_feed_items_literature_shape.sql`:
 
 ```sql
 DELETE FROM "feed_interactions" WHERE "feed_item_id" IN (SELECT "id" FROM "feed_items" WHERE "kind" <> 'paper' OR "paper_key" IS NULL);--> statement-breakpoint
@@ -934,7 +934,7 @@ Add to the end of the `entries` array in `packages/db/migrations/meta/_journal.j
       "idx": 47,
       "version": "7",
       "when": 1784808600000,
-      "tag": "0047_feed_items_literature_shape",
+      "tag": "0048_feed_items_literature_shape",
       "breakpoints": true
     }
 ```
