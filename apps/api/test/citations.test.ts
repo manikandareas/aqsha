@@ -76,7 +76,11 @@ async function cleanup() {
   await client`delete from citations where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from citation_import_batches where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from workspace_citation_settings where owner_user_id like 'user_itest_cit_%'`;
+  await client`delete from artifact_embeddings where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
+  await client`delete from artifact_contents where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
+  await client`delete from artifact_extractions where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
   await client`delete from artifact_paper_metadata where owner_user_id like 'user_itest_cit_%'`;
+  await client`delete from artifact_urls where artifact_id in (select id from artifacts where owner_user_id like 'user_itest_cit_%')`;
   await client`delete from artifacts where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from workspace_folders where owner_user_id like 'user_itest_cit_%'`;
   await client`delete from workspaces where owner_user_id like 'user_itest_cit_%'`;
