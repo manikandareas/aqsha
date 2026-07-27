@@ -2,9 +2,12 @@ import { toast } from 'svelte-sonner';
 import { readableApiErrorMessage } from '$lib/errors/api-error';
 import type {
 	AcceptProposalResult,
+	DecideHunkResult,
 	PendingProposalView,
-	TypstCompileError
+	ProposalHunk
 } from '$lib/features/document/api';
+import { proposalHunkLabel } from '$lib/features/document/lib/proposal-hunk-label';
+import type { ProposalDiffState } from '$lib/features/document/lib/proposal-diff-extension';
 import type { ProposalReviewInteractions } from '$lib/features/document/lib/proposal-review-interactions.svelte';
 import type { ComposerMentions } from '$lib/features/threads/state/composer-mentions.svelte';
 
@@ -24,69 +27,114 @@ type ProjectProposalControllerOptions = {
 		proposalId: string,
 		handlers: { onSuccess: () => void; onError: (error: unknown) => void }
 	) => void;
+	decideHunk: (
+		input: { proposalId: string; hunkIndex: number; decision: 'accept' | 'reject' },
+		handlers: { onSuccess: (result: DecideHunkResult) => void; onError: (error: unknown) => void }
+	) => void;
 	reload: () => void;
 	onSettled: () => void;
 };
 
-/** Owns proposal review state and accept/reject/resubmit orchestration for the project surface. */
+/** Owns per-hunk proposal decisions and the bulk accept/reject/resubmit paths for the project surface. */
 export class ProjectProposalController {
 	readonly #options: ProjectProposalControllerOptions;
-	#acceptErrors = $state<TypstCompileError[] | null>(null);
-	#reviewingId = $state<string | null>(null);
+	#busyIndex = $state<number | null>(null);
+	#hunkErrors = $state<Record<number, string[]>>({});
 
 	constructor(options: ProjectProposalControllerOptions) {
 		this.#options = options;
 	}
 
-	get acceptErrors(): TypstCompileError[] | null {
-		return this.#acceptErrors;
+	get remainingHunks(): ProposalHunk[] {
+		return this.#options.getProposal()?.remainingHunks ?? [];
 	}
 
+	/** Badge on the Editor toggle counts what is still open, not the proposal's original size. */
 	get hunkCount(): number {
-		return this.#options.getProposal()?.hunks.length ?? 0;
+		return this.remainingHunks.length;
 	}
 
-	get reviewing(): boolean {
-		return this.#reviewingId !== null && this.#reviewingId === this.#options.getProposal()?.id;
+	get diffState(): ProposalDiffState | null {
+		const proposal = this.#options.getProposal();
+		if (!proposal || proposal.isStale || proposal.remainingHunks.length === 0) return null;
+		return {
+			hunks: proposal.remainingHunks,
+			labelFor: (hunk) => proposalHunkLabel(proposal.currentSource, hunk),
+			busyIndex: this.#busyIndex,
+			errors: this.#hunkErrors,
+			onDecide: this.decide
+		};
 	}
 
 	syncInteraction(): void {
 		const proposal = this.#options.getProposal();
 		this.#options.interactions.set(
 			proposal
-				? { proposalId: proposal.id, hunkCount: proposal.hunks.length, review: this.beginReview }
+				? {
+						proposalId: proposal.id,
+						hunkCount: proposal.remainingHunks.length,
+						review: this.openEditor
+					}
 				: null
 		);
 	}
 
-	beginReview = (): void => {
-		const proposal = this.#options.getProposal();
-		if (!proposal) return;
-		this.#reviewingId = proposal.id;
+	openEditor = (): void => {
 		this.#options.selectMode('editor');
 	};
 
-	exitReview = (): void => {
-		this.#reviewingId = null;
-		this.#acceptErrors = null;
+	decide = (hunkIndex: number, decision: 'accept' | 'reject'): void => {
+		const proposal = this.#options.getProposal();
+		if (!proposal || this.#busyIndex !== null) return;
+		this.#busyIndex = hunkIndex;
+		this.#options.decideHunk(
+			{ proposalId: proposal.id, hunkIndex, decision },
+			{
+				onSuccess: (result) => {
+					this.#busyIndex = null;
+					if (result.status === 'compile_error') {
+						// Urutan penerimaan bisa berarti: hunk ini tetap terbuka sampai gabungannya sah.
+						this.#hunkErrors = {
+							...this.#hunkErrors,
+							[hunkIndex]: result.compileErrors.map((e) =>
+								e.line > 0 ? `baris ${e.line}: ${e.message}` : e.message
+							)
+						};
+						return;
+					}
+					this.#hunkErrors = {};
+					if (result.status === 'stale') {
+						toast.warning('Sumber sudah berubah — usulan dibatalkan. Minta Astra menyusun ulang.');
+					} else if (result.closed) {
+						toast.success('Seluruh usulan sudah diputuskan.');
+					}
+					this.#options.reload();
+					this.#options.onSettled();
+				},
+				onError: (error) => {
+					this.#busyIndex = null;
+					toast.error(readableApiErrorMessage(error, 'Gagal menyimpan keputusan.'));
+				}
+			}
+		);
 	};
 
-	accept = (acceptedHunkIndexes: number[] | undefined): void => {
+	/** Bulk accept of everything still open — the same server path as a per-hunk accept run to the end. */
+	acceptRest = (): void => {
 		const proposal = this.#options.getProposal();
-		if (!proposal) return;
-		this.#acceptErrors = null;
+		if (!proposal || this.#busyIndex !== null) return;
+		this.#hunkErrors = {};
 		this.#options.accept(
-			{ proposalId: proposal.id, acceptedHunkIndexes },
+			{ proposalId: proposal.id },
 			{
 				onSuccess: (result) => {
 					if (result.status === 'accepted') {
 						this.#options.interactions.set(null);
 						toast.success('Suntingan diterapkan.');
-						this.exitReview();
 						this.#options.reload();
+						this.#options.onSettled();
 					} else if (result.status === 'compile_error') {
-						this.#acceptErrors = result.compileErrors;
-						toast.warning('Hasil pilihan hunk gagal compile. Ubah pilihan atau tolak.');
+						toast.warning('Sisa usulan gagal compile. Putuskan per bagian atau tolak sisanya.');
 					} else {
 						toast.warning('Sumber sudah berubah — usulan dibatalkan. Minta Astra menyusun ulang.');
 					}
@@ -96,14 +144,15 @@ export class ProjectProposalController {
 		);
 	};
 
-	reject = (): void => {
+	rejectRest = (): void => {
 		const proposal = this.#options.getProposal();
 		if (!proposal) return;
-		this.#acceptErrors = null;
+		this.#hunkErrors = {};
 		this.#options.reject(proposal.id, {
 			onSuccess: () => {
 				this.#options.interactions.set(null);
-				this.exitReview();
+				this.#options.reload();
+				this.#options.onSettled();
 			},
 			onError: (error) => toast.error(readableApiErrorMessage(error, 'Gagal menolak usulan.'))
 		});
@@ -115,7 +164,7 @@ export class ProjectProposalController {
 		this.#options.reject(proposal.id, {
 			onSuccess: () => {
 				this.#options.interactions.set(null);
-				this.exitReview();
+				this.#hunkErrors = {};
 				this.#options.mentions.setComposerDraft(proposal.resubmitInstruction || proposal.summary);
 				this.#options.selectMode('chat');
 			},
@@ -125,7 +174,7 @@ export class ProjectProposalController {
 	};
 
 	agentSettled = (): void => {
-		this.#acceptErrors = null;
+		this.#hunkErrors = {};
 		this.#options.onSettled();
 	};
 }

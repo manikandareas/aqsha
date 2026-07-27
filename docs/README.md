@@ -6,7 +6,7 @@ Indeks dokumentasi monorepo. File disusun per domain; nama file memakai **kebab-
 
 | Folder | Isi |
 |---|---|
-| [`product/`](product/) | PRD, implementation plan, product spec Astra, versioning/changelog editorial |
+| [`product/`](product/) | Arah produk research-first, product spec Astra, versioning/changelog editorial |
 | [`architecture/`](architecture/) | Blueprint stack V2 (`00`–`06`) |
 | [`migration/`](migration/) | Migrasi Svelte (`svelte-plan.md` + harness + decision records) |
 | [`agent/`](agent/) | Audit & plan Astra yang masih aktif |
@@ -24,7 +24,7 @@ Indeks dokumentasi monorepo. File disusun per domain; nama file memakai **kebab-
 
 | Butuh | Baca |
 |---|---|
-| Arah produk | [`product/prd.md`](product/prd.md) |
+| Arah produk (research-first, branch Svelte) | [`product/research-first-product-direction.md`](product/research-first-product-direction.md) |
 | Blueprint teknis | [`architecture/00-overview.md`](architecture/00-overview.md) |
 | Migrasi Svelte | [`migration/svelte-plan.md`](migration/svelte-plan.md) + [`migration/README.md`](migration/README.md) |
 | Spec Astra | [`product/astra-agent-spec.md`](product/astra-agent-spec.md) |

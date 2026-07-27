@@ -332,6 +332,23 @@ export const workspaces = new Elysia()
     },
   )
   .post(
+    "/workspaces/:id/proposals/:pid/hunks/:index",
+    ({ ownerUserId, params, body }) => {
+      const { db } = getDb();
+      return DocumentProposalService.decideHunk(db, {
+        ownerUserId,
+        proposalId: params.pid,
+        hunkIndex: params.index,
+        decision: body.decision === "accept" ? "accepted" : "rejected",
+      });
+    },
+    {
+      auth: true,
+      params: t.Object({ id: t.String(), pid: t.String(), index: t.Integer({ minimum: 0 }) }),
+      body: t.Object({ decision: t.Union([t.Literal("accept"), t.Literal("reject")]) }),
+    },
+  )
+  .post(
     "/workspaces/:id/proposals/:pid/reject",
     ({ ownerUserId, params }) => {
       const { db } = getDb();

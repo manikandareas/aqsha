@@ -12,6 +12,8 @@ export type StagePoint = { x: number; y: number };
 type AgentationDeps = {
 	svgHost: () => HTMLElement | null;
 	stageEl: () => HTMLElement | null;
+	/** Panel bergulir yang memuat stage — dipakai auto-scroll saat drag menyentuh tepi. */
+	scrollEl?: () => HTMLElement | null;
 	outlineTitles: () => string[];
 	resolveBlock?: (
 		svgHost: HTMLElement,
@@ -36,8 +38,11 @@ type AgentationDeps = {
 
 type PointerGesture = {
 	pointerId: number;
-	startX: number;
-	startY: number;
+	/**
+	 * Titik jangkar dalam koordinat stage, bukan viewport: stage ikut bergulir bersama dokumen,
+	 * sehingga jangkar tetap menempel pada kata yang sama saat pengguna men-scroll di tengah drag.
+	 */
+	startStage: StagePoint;
 	startBlock: Promise<SemanticBlock | null>;
 };
 
@@ -50,6 +55,9 @@ type PendingDrag = {
 };
 
 const DRAG_THRESHOLD_PX = 5;
+/** Lebar zona tepi yang memicu auto-scroll saat drag seleksi. */
+const EDGE_SCROLL_ZONE_PX = 56;
+const EDGE_SCROLL_MAX_PX_PER_FRAME = 18;
 
 /**
  * Mode anotasi ala agentation di atas preview Typst: hover blok semantik → outline + badge,
@@ -76,6 +84,9 @@ export class AnnotationAgentation {
 	#finalizing = false;
 	#suppressClick = false;
 	#suppressClickTimer = 0;
+	#edgeScrollRaf = 0;
+	#edgeScrollSpeed = 0;
+	#edgeScrollPointer: { clientX: number; clientY: number } | null = null;
 
 	#deps: AgentationDeps;
 
@@ -111,7 +122,8 @@ export class AnnotationAgentation {
 			return;
 		if ((event.target as Element | null)?.closest?.('[data-annotation-ui]')) return;
 		const svgHost = this.#deps.svgHost();
-		if (!svgHost) return;
+		const stageEl = this.#deps.stageEl();
+		if (!svgHost || !stageEl) return;
 		event.preventDefault();
 		if (this.#raf) cancelAnimationFrame(this.#raf);
 		this.#raf = 0;
@@ -123,8 +135,7 @@ export class AnnotationAgentation {
 		this.#resolveVersion += 1;
 		this.#gesture = {
 			pointerId: event.pointerId,
-			startX: event.clientX,
-			startY: event.clientY,
+			startStage: this.#toStagePoint(stageEl, event.clientX, event.clientY),
 			startBlock: this.#resolveBlock(svgHost, event.target, event.clientX, event.clientY)
 		};
 		try {
@@ -139,17 +150,19 @@ export class AnnotationAgentation {
 		if ((event.target as Element | null)?.closest?.('[data-annotation-ui]')) return;
 		const gesture = this.#gesture;
 		if (gesture && gesture.pointerId === event.pointerId) {
-			const distance = Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY);
-			if (!this.#dragging && distance < DRAG_THRESHOLD_PX) return;
+			const stageEl = this.#deps.stageEl();
+			if (!stageEl) return;
+			const cursor = this.#toStagePoint(stageEl, event.clientX, event.clientY);
+			if (
+				!this.#dragging &&
+				Math.hypot(cursor.x - gesture.startStage.x, cursor.y - gesture.startStage.y) <
+					DRAG_THRESHOLD_PX
+			) {
+				return;
+			}
 			this.#dragging = true;
 			event.preventDefault();
-			const stageEl = this.#deps.stageEl();
-			if (stageEl) {
-				this.dragBox = {
-					start: this.#toStagePoint(stageEl, gesture.startX, gesture.startY),
-					end: this.#toStagePoint(stageEl, event.clientX, event.clientY)
-				};
-			}
+			this.dragBox = { start: gesture.startStage, end: cursor };
 			const version = ++this.#resolveVersion;
 			this.#pendingDrag = {
 				gesture,
@@ -159,6 +172,7 @@ export class AnnotationAgentation {
 				version
 			};
 			this.#scheduleDragResolve();
+			this.#updateEdgeScroll(event.clientX, event.clientY);
 			return;
 		}
 		const { clientX, clientY, target } = event;
@@ -178,6 +192,7 @@ export class AnnotationAgentation {
 		const wasDragging = this.#dragging;
 		if (this.#raf) cancelAnimationFrame(this.#raf);
 		this.#raf = 0;
+		this.#stopEdgeScroll();
 		this.#pendingDrag = null;
 		this.#gesture = null;
 		this.#dragging = false;
@@ -260,9 +275,81 @@ export class AnnotationAgentation {
 		return { x: clientX - box.left, y: clientY - box.top };
 	}
 
+	/** Kebalikan `#toStagePoint`, memakai posisi stage saat ini (jadi ikut memperhitungkan scroll). */
+	#toClientPoint(point: StagePoint): { clientX: number; clientY: number } {
+		const stageEl = this.#deps.stageEl();
+		if (!stageEl) return { clientX: point.x, clientY: point.y };
+		const box = stageEl.getBoundingClientRect();
+		return { clientX: box.left + point.x, clientY: box.top + point.y };
+	}
+
+	/**
+	 * Gulirkan panel saat kursor drag mendekati tepi atas/bawah, supaya seleksi lintas halaman tak
+	 * menuntut pengguna melepas drag atau menahan tombol panah. Kecepatan naik seiring kedalaman
+	 * kursor di zona tepi.
+	 */
+	#updateEdgeScroll(clientX: number, clientY: number): void {
+		const scrollEl = this.#deps.scrollEl?.();
+		if (!scrollEl) return;
+		const box = scrollEl.getBoundingClientRect();
+		const overTop = box.top + EDGE_SCROLL_ZONE_PX - clientY;
+		const overBottom = clientY - (box.bottom - EDGE_SCROLL_ZONE_PX);
+		const depth = overTop > 0 ? -overTop : overBottom > 0 ? overBottom : 0;
+		if (depth === 0) {
+			this.#stopEdgeScroll();
+			return;
+		}
+		const ratio = Math.min(Math.abs(depth) / EDGE_SCROLL_ZONE_PX, 1);
+		this.#edgeScrollSpeed = Math.sign(depth) * (2 + ratio * (EDGE_SCROLL_MAX_PX_PER_FRAME - 2));
+		this.#edgeScrollPointer = { clientX, clientY };
+		if (this.#edgeScrollRaf) return;
+		const step = () => {
+			const el = this.#deps.scrollEl?.();
+			const pointer = this.#edgeScrollPointer;
+			if (!el || !this.#dragging || !pointer) {
+				this.#edgeScrollRaf = 0;
+				return;
+			}
+			const before = el.scrollTop;
+			el.scrollTop = before + this.#edgeScrollSpeed;
+			if (el.scrollTop !== before) {
+				// Pointer diam saat auto-scroll, jadi ujung seleksi harus dihitung ulang dari geometri baru.
+				this.#refreshDragEnd(pointer.clientX, pointer.clientY);
+			}
+			this.#edgeScrollRaf = requestAnimationFrame(step);
+		};
+		this.#edgeScrollRaf = requestAnimationFrame(step);
+	}
+
+	#stopEdgeScroll(): void {
+		if (this.#edgeScrollRaf) cancelAnimationFrame(this.#edgeScrollRaf);
+		this.#edgeScrollRaf = 0;
+		this.#edgeScrollPointer = null;
+	}
+
+	/** Perbarui ujung drag + resolusi rentang untuk posisi kursor yang sama sesudah stage bergeser. */
+	#refreshDragEnd(clientX: number, clientY: number): void {
+		const gesture = this.#gesture;
+		const stageEl = this.#deps.stageEl();
+		if (!gesture || !stageEl) return;
+		this.dragBox = {
+			start: gesture.startStage,
+			end: this.#toStagePoint(stageEl, clientX, clientY)
+		};
+		this.#pendingDrag = {
+			gesture,
+			target: document.elementFromPoint(clientX, clientY),
+			clientX,
+			clientY,
+			version: ++this.#resolveVersion
+		};
+		this.#scheduleDragResolve();
+	}
+
 	#cancelGesture(): void {
 		if (this.#raf) cancelAnimationFrame(this.#raf);
 		this.#raf = 0;
+		this.#stopEdgeScroll();
 		this.#pendingDrag = null;
 		this.#gesture = null;
 		this.#dragging = false;
@@ -374,9 +461,10 @@ export class AnnotationAgentation {
 	): Promise<SemanticRangeResult | null> {
 		try {
 			const legacyBlocks = this.#ensureIndex(svgHost);
+			// Jangkar disimpan stage-relative; hit-test butuh koordinat viewport pada posisi scroll saat ini.
 			const areaResult = await this.#deps.resolveAreaRange?.(
 				svgHost,
-				{ clientX: gesture.startX, clientY: gesture.startY },
+				this.#toClientPoint(gesture.startStage),
 				{ clientX, clientY },
 				legacyBlocks
 			);

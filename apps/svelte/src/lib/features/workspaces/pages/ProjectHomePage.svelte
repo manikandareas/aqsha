@@ -26,7 +26,6 @@
 	import { projectDisplayTitle } from '../types';
 	import TocOverlay from '$lib/features/document/components/TocOverlay.svelte';
 	import AnnotationModeControls from '$lib/features/document/components/AnnotationModeControls.svelte';
-	import ProposalReviewCard from '$lib/features/document/components/ProposalReviewCard.svelte';
 	import {
 		ProposalReviewInteractions,
 		setProposalReviewInteractions
@@ -57,6 +56,7 @@
 		useMarkAnnotationsSent,
 		usePendingProposal,
 		useAcceptProposal,
+		useDecideHunk,
 		useRejectProposal
 	} from '$lib/features/document/api';
 
@@ -117,6 +117,7 @@
 	);
 	const acceptProposal = useAcceptProposal(() => workspaceId);
 	const rejectProposal = useRejectProposal(() => workspaceId);
+	const decideHunk = useDecideHunk(() => workspaceId);
 	const exportPdf = useExportPdf(() => workspaceId);
 
 	const runtime = new DocumentWorkspaceRuntime({
@@ -197,6 +198,7 @@
 		selectMode: (mode) => selectLeftMode(mode),
 		accept: (input, handlers) => acceptProposal.mutate(input, handlers),
 		reject: (proposalId, handlers) => rejectProposal.mutate(proposalId, handlers),
+		decideHunk: (input, handlers) => decideHunk.mutate(input, handlers),
 		reload: () => void reloadFromServer(),
 		onSettled: () => {
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.proposals(workspaceId) });
@@ -365,69 +367,74 @@
 {#snippet editorPanel()}
 	<div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
 		<PanelCardToolbar title={leftToggle} />
-		{#if proposalController.reviewing && proposal.data}
-			<div class="min-h-0 flex-1 overflow-y-auto p-3">
-				<ProposalReviewCard
-					proposal={proposal.data}
-					source={proposal.data.currentSource}
-					accepting={acceptProposal.isPending}
-					acceptErrors={proposalController.acceptErrors}
-					onAccept={proposalController.accept}
-					onReject={proposalController.reject}
-					onExitReview={proposalController.exitReview}
-					onResubmit={proposalController.resubmit}
-				/>
+		{#if runtime.autosave?.status === 'stale'}
+			<div
+				class="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-lemon/20 px-3 py-2 text-label"
+				role="status"
+			>
+				<span>Sumber berubah di tempat lain. Muat ulang sebelum menyunting.</span>
+				<Button type="button" size="sm" variant="secondary" onclick={reloadFromServer}>
+					Muat ulang
+				</Button>
 			</div>
-		{:else}
-			{#if runtime.autosave?.status === 'stale'}
-				<div
-					class="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-lemon/20 px-3 py-2 text-label"
-					role="status"
-				>
-					<span>Sumber berubah di tempat lain. Muat ulang sebelum menyunting.</span>
-					<Button type="button" size="sm" variant="secondary" onclick={reloadFromServer}>
-						Muat ulang
+		{/if}
+		{#if proposalController.remainingHunks.length > 0}
+			<div
+				class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-mint/15 px-3 py-2 text-label"
+				role="status"
+			>
+				<span>
+					Usulan Astra menunggu keputusan · {proposalController.remainingHunks.length} bagian
+					tersisa. Editor terkunci sampai semuanya diputuskan.
+				</span>
+				<div class="flex gap-1.5">
+					<Button type="button" size="sm" variant="outline" onclick={proposalController.rejectRest}>
+						Tolak sisanya
+					</Button>
+					<Button type="button" size="sm" onclick={proposalController.acceptRest}>
+						Terima sisanya
 					</Button>
 				</div>
-			{/if}
-			<div class="min-h-0 flex-1">
-				{#if runtime.loadError || runtime.previewError || documentQuery.isError}
-					<div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-						<p class="text-sm text-destructive">
-							{runtime.loadError ?? 'Dokumen gagal dimuat.'}
-						</p>
-						<Button type="button" size="sm" variant="outline" onclick={retryDocumentRuntime}>
-							Coba lagi
-						</Button>
-					</div>
-				{:else if !documentQuery.isSuccess || !runtime.Editor}
-					<div class="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-						<Spinner class="size-4" /> Menyiapkan editor…
-					</div>
-				{:else}
-					{@const Editor = runtime.Editor}
-					<Editor
-						bind:this={editorRef}
-						value={runtime.source}
-						docKey={runtime.docKey}
-						editable={runtime.editable}
-						diagnostics={runtime.diagnostics}
-						mainFilePath={runtime.mainFilePath}
-						project={runtime.typstProject}
-						onChange={(next) => runtime.onEditorChange(next)}
-					/>
-				{/if}
 			</div>
-			{#if runtime.saveStatusLabel}
-				<div
-					class="shrink-0 border-t border-border px-3 py-1 text-right text-micro text-muted-foreground"
-					aria-live={runtime.autosave?.status === 'error' || runtime.autosave?.status === 'stale'
-						? 'assertive'
-						: 'polite'}
-				>
-					{runtime.saveStatusLabel}
+		{/if}
+		<div class="min-h-0 flex-1">
+			{#if runtime.loadError || runtime.previewError || documentQuery.isError}
+				<div class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+					<p class="text-sm text-destructive">
+						{runtime.loadError ?? 'Dokumen gagal dimuat.'}
+					</p>
+					<Button type="button" size="sm" variant="outline" onclick={retryDocumentRuntime}>
+						Coba lagi
+					</Button>
 				</div>
+			{:else if !documentQuery.isSuccess || !runtime.Editor}
+				<div class="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+					<Spinner class="size-4" /> Menyiapkan editor…
+				</div>
+			{:else}
+				{@const Editor = runtime.Editor}
+				<Editor
+					bind:this={editorRef}
+					value={runtime.source}
+					docKey={runtime.docKey}
+					editable={runtime.editable && proposalController.remainingHunks.length === 0}
+					diagnostics={runtime.diagnostics}
+					mainFilePath={runtime.mainFilePath}
+					project={runtime.typstProject}
+					proposalDiff={proposalController.diffState}
+					onChange={(next) => runtime.onEditorChange(next)}
+				/>
 			{/if}
+		</div>
+		{#if runtime.saveStatusLabel}
+			<div
+				class="shrink-0 border-t border-border px-3 py-1 text-right text-micro text-muted-foreground"
+				aria-live={runtime.autosave?.status === 'error' || runtime.autosave?.status === 'stale'
+					? 'assertive'
+					: 'polite'}
+			>
+				{runtime.saveStatusLabel}
+			</div>
 		{/if}
 	</div>
 {/snippet}
@@ -491,13 +498,19 @@
 					selectedAnnotationIds={annotationBridge.selectedIds}
 					outlineTitles={runtime.outline.map((entry) => entry.title)}
 					proposalHunkCount={proposalController.hunkCount}
-					onReviewProposal={proposalController.beginReview}
+					onReviewProposal={() => selectLeftMode('editor')}
 					onCreateAnnotation={annotationBridge.create}
 					onSelectAnnotation={annotationBridge.focus}
 					onToggleAnnotationContext={annotationBridge.toggleContext}
 					onAskAnnotation={annotationBridge.ask}
 					onDismissAnnotation={(id: string) => {
-						void dismissAnnotations.mutateAsync({ ids: [id] });
+						dismissAnnotations.mutate(
+							{ ids: [id] },
+							{
+								onError: (err) =>
+									toast.error(readableApiErrorMessage(err, 'Gagal menghapus anotasi.'))
+							}
+						);
 					}}
 					onActiveHeading={(index: number) => (activeTocIndex = index)}
 				/>

@@ -6,6 +6,7 @@
 	import { Icon, Loader2Icon } from '$lib/icons';
 	import type { Cm6Diagnostic } from '../typst/diagnostics';
 	import type { TypstEditorHandle } from '../lib/typst-editor';
+	import type { ProposalDiffState } from '../lib/proposal-diff-extension';
 
 	/**
 	 * Editor sumber Typst (CodeMirror 6 + engine bahasa vedivad: highlight/autocomplete/hover).
@@ -20,6 +21,7 @@
 		diagnostics = [],
 		mainFilePath = '/main.typ',
 		project,
+		proposalDiff = null,
 		onChange
 	}: {
 		value: string;
@@ -29,6 +31,8 @@
 		/** Path virtual utama Typst, mis. `/skripsi.typ`. */
 		mainFilePath?: string;
 		project: TypstProject | null;
+		/** Hunk usulan yang masih terbuka, dirender sebagai diff inline di atas buffer tersimpan. */
+		proposalDiff?: ProposalDiffState | null;
 		onChange: (next: string) => void;
 	} = $props();
 
@@ -70,6 +74,7 @@
 				return;
 			}
 			local.setDiagnostics(seed.diagnostics);
+			local.setProposalDiff(untrack(() => proposalDiff));
 			mountedKey = seed.docKey;
 			handle = local;
 		})();
@@ -106,6 +111,10 @@
 	$effect(() => {
 		const e = editable;
 		handle?.setEditable(e);
+	});
+	$effect(() => {
+		const next = proposalDiff;
+		handle?.setProposalDiff(next);
 	});
 
 	export function scrollToLine(line: number): void {

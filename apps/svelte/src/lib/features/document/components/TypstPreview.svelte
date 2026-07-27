@@ -99,6 +99,7 @@
 	const agentation = new AnnotationAgentation({
 		svgHost: () => svgHost,
 		stageEl: () => stageEl,
+		scrollEl: () => scrollEl,
 		outlineTitles: () => outlineTitles,
 		resolveBlock: (host, target, clientX, clientY) =>
 			resolveVedivadBlockAtPoint({
@@ -392,8 +393,10 @@
 		<div
 			class="m-3 flex items-center justify-between gap-3 rounded-lg border-2 border-border bg-card px-3 py-2"
 		>
-			<span class="text-label">Astra mengusulkan {proposalHunkCount} bagian.</span>
-			<Button type="button" size="sm" onclick={() => onReviewProposal?.()}>Tinjau usulan</Button>
+			<span class="text-label">
+				Astra mengusulkan suntingan · {proposalHunkCount} bagian tersisa.
+			</span>
+			<Button type="button" size="sm" onclick={() => onReviewProposal?.()}>Buka editor</Button>
 		</div>
 	{/if}
 	<div
@@ -418,7 +421,7 @@
 			<div
 				bind:this={svgHost}
 				class={[
-					'typst-preview-svg overflow-hidden rounded-md border border-line bg-white',
+					'typst-preview-svg',
 					{ 'select-none': agentation.enabled }
 				]}
 			></div>
@@ -504,6 +507,22 @@
 </div>
 
 <style>
+	/* Tiap halaman berdiri sebagai lembar sendiri; jarak antar lembar membuat batas halaman terbaca
+	   tanpa garis pemisah buatan. Kotak per halaman diukur terpisah oleh `overlayBoxes`, jadi jarak
+	   ini tidak menggeser sorotan anotasi maupun pin. */
+	.typst-preview-svg :global(.typst-doc) {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.typst-preview-svg :global(.typst-page) {
+		overflow: hidden;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: white;
+	}
+
 	.typst-preview-svg :global(svg) {
 		display: block;
 		width: 100%;

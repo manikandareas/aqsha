@@ -1,18 +1,18 @@
-import { type ContextRef, contextRefKey, wrapMentionLabel } from '../context';
+import { type ContextRef, contextRefKey, wrapMentionLabel } from '../context.ts';
 import {
 	getPromptCommand,
 	getPromptCommandBySlug,
 	type PromptCommand,
 	promptCommandSlugPattern
-} from '../prompt-commands';
+} from '../prompt-commands.ts';
 import {
 	splitTokenLabel,
 	TOKEN_PILL_LABEL_CLASS,
 	TOKEN_PILL_PREFIX_CLASS,
 	tokenPillClass
-} from './token-pill';
+} from './token-pill.ts';
 
-export * from './token-pill';
+export * from './token-pill.ts';
 
 /**
  * Pure composer DOM logic for the tokenized composer. Manages the slash-command chip + `@mention`

@@ -218,6 +218,9 @@ export type PendingProposalView = {
 	currentVersion: number;
 	isStale: boolean;
 	hunks: ProposalHunk[];
+	remainingHunks: ProposalHunk[];
+	decidedCount: number;
+	totalHunks: number;
 } | null;
 
 export type AcceptProposalResult =
@@ -225,11 +228,17 @@ export type AcceptProposalResult =
 	| { status: 'stale'; currentVersion: number }
 	| { status: 'compile_error'; compileErrors: TypstCompileError[] };
 
+export type DecideHunkResult =
+	| { status: 'recorded'; contentVersion: number; remainingHunks: ProposalHunk[]; closed: boolean }
+	| { status: 'compile_error'; compileErrors: TypstCompileError[] }
+	| { status: 'stale'; currentVersion: number };
+
 export function normalizePendingProposal(value: unknown): PendingProposalView {
 	if (value === null) return null;
 	if (
 		typeof value !== 'object' ||
 		!Array.isArray((value as { hunks?: unknown }).hunks) ||
+		!Array.isArray((value as { remainingHunks?: unknown }).remainingHunks) ||
 		!Array.isArray((value as { annotationIds?: unknown }).annotationIds)
 	) {
 		return null;
@@ -267,6 +276,30 @@ export function useAcceptProposal(workspaceId: () => string) {
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.document(workspaceId()) });
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.annotations(workspaceId()) });
 			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.documentBib(workspaceId()) });
+		}
+	}));
+}
+
+export function useDecideHunk(workspaceId: () => string) {
+	const api = getApiClient();
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async (input: {
+			proposalId: string;
+			hunkIndex: number;
+			decision: 'accept' | 'reject';
+		}) =>
+			unwrap(
+				await api
+					.workspaces({ id: workspaceId() })
+					.proposals({ pid: input.proposalId })
+					.hunks({ index: input.hunkIndex })
+					.post({ decision: input.decision })
+			) as DecideHunkResult,
+		onSuccess: () => {
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.proposals(workspaceId()) });
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.document(workspaceId()) });
+			void qc.invalidateQueries({ queryKey: queryKeys.workspaces.annotations(workspaceId()) });
 		}
 	}));
 }
