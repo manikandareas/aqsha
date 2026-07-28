@@ -9,7 +9,7 @@ Product app stays on VPS at `app.aqshara.com` (Next.js) when product is live. Du
 
 ## Design system
 
-Visual tokens match **Aqsha DS v2** (same as `apps/svelte` / `@aqsha/ui-svelte`): emerald primary, Nunito Sans headings, 2px borders, keycap/lip depth. Copied into `src/styles/tokens.css` + `components.css` + `public/fonts/` — no runtime dependency on other Aqsha packages.
+Visual tokens match **Aqsha DS v2** (same as `apps/web` / `@aqsha/ui-svelte`): emerald primary, Nunito Sans headings, 2px borders, keycap/lip depth. Copied into `src/styles/tokens.css` + `components.css` + `public/fonts/` — no runtime dependency on other Aqsha packages.
 
 ## Local
 

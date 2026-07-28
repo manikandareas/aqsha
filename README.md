@@ -1,29 +1,29 @@
 # Aqsha
 
-Aqsha is a Postgres-backed personal research product: a Next.js app, an Elysia REST API, and an eve agent runtime (Astra + `/deep` deep research).
+Aqsha is a Postgres-backed personal research product: a SvelteKit app, an Elysia REST API, and an eve agent runtime (Astra + `/deep` deep research).
 
 ## Monorepo Structure
 
 ```txt
 apps/
-  web/      Next.js public landing + authenticated product app
+  web/      SvelteKit public landing + authenticated product app
   api/      Elysia REST API + BullMQ workers
   agent/    eve agent runtime (Astra, deep research)
 packages/
   db/       Drizzle ORM schema + migrations (Postgres/pgvector)
   services/ Domain services (business logic) shared by api, workers, agent
   chat-core/ Shared chat/timeline primitives
-  ui/       Shared React UI primitives and styles
+  ui-svelte/ Shared Svelte UI primitives and styles
 ```
 
 ## Tech Stack
 
 - **Runtime and package manager**: Bun (web + agent run on Node ≥24)
-- **Product app**: Next.js 16, React 19, Tailwind CSS 4
+- **Product app**: SvelteKit (Svelte 5 runes), Tailwind CSS 4
 - **API**: Elysia + Eden Treaty (type-safe client, no codegen), Clerk auth, Mayar billing, BullMQ workers, pino logging
 - **Agent**: eve runtime, AI SDK with OpenAI-compatible providers
 - **Data**: Postgres + Drizzle (pgvector), Redis, S3-compatible object storage (MinIO/R2)
-- **Shared UI**: Radix primitives and shadcn-style components in `packages/ui`
+- **Shared UI**: shadcn-svelte components (bits-ui) in `packages/ui-svelte`
 
 ## Getting Started
 
@@ -69,7 +69,7 @@ bun run db:studio
 
 ## Development Notes
 
-- `apps/web` imports the API's `App` type for the Eden Treaty client (no codegen) and consumes `@aqsha/ui`. It must not import `@aqsha/db` / `@aqsha/services`.
+- `apps/web` imports the API's `App` type for the Eden Treaty client (no codegen) and consumes `@aqsha/ui-svelte`. It must not import `@aqsha/db` / `@aqsha/services`.
 - Business logic lives once in `packages/services`; API routes, workers, and the agent are thin callers.
 - `@aqsha/db` and `@aqsha/services` build to `dist/` (tsup); the API and agent import from there.
 - Each app reads its own `.env` (see each app's `.env.example`).

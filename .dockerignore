@@ -5,6 +5,9 @@
 node_modules
 **/node_modules
 **/.next
+**/.svelte-kit
+**/.content-collections
+**/build
 **/dist
 **/.env
 **/.env.*

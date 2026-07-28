@@ -6,26 +6,18 @@
     "apps/api",
     "apps/web",
     "apps/www",
-    "apps/svelte",
     "apps/agent",
     "packages/chat-core",
     "packages/db",
     "packages/services",
-    "packages/ui",
     "packages/ui-svelte"
   ],
   "scripts": {
-    "dev": "bun run build:dist && (bun run watch:dist & bun run dev:api & bun run dev:worker & bun run dev:agent & bun run dev:web & bun run dev:www & bun run dev:svelte & wait)",
+    "dev": "bun run build:dist && (bun run watch:dist & bun run dev:api & bun run dev:worker & bun run dev:agent & bun run dev:web & bun run dev:www & wait)",
     "dev:api": "bun run --filter '@aqsha/api' dev",
     "dev:web": "bun run --filter '@aqsha/web' dev",
     "dev:www": "bun run --filter '@aqsha/www' dev",
-    "dev:svelte": "bun run --filter '@aqsha/svelte' dev",
-    "build:svelte": "bun run --filter '@aqsha/svelte' build",
-    "start:svelte": "bun run --filter '@aqsha/svelte' start",
-    "lint:svelte": "bun run --filter '@aqsha/svelte' lint",
-    "typecheck:svelte": "bun run --filter '@aqsha/svelte' typecheck",
     "typecheck:ui-svelte": "bun run --filter '@aqsha/ui-svelte' check",
-    "test:svelte": "bun run --filter '@aqsha/svelte' test",
     "dev:worker": "bun run --filter '@aqsha/api' worker",
     "dev:agent": "bun run --filter '@aqsha/agent' dev",
     "infra:up": "docker compose -f infra/compose.dev.yaml up -d",
@@ -45,7 +37,7 @@
     "db:studio": "bun run --filter '@aqsha/db' studio",
     "test": "bun run --filter '@aqsha/db' --filter '@aqsha/chat-core' --filter '@aqsha/services' --filter '@aqsha/api' test",
     "lint": "bun run --parallel --filter '@aqsha/api' --filter '@aqsha/web' lint",
-    "typecheck": "bun run --parallel --filter '@aqsha/ui' --filter '@aqsha/api' --filter '@aqsha/web' --filter '@aqsha/www' --filter '@aqsha/agent' --filter '@aqsha/db' --filter '@aqsha/chat-core' --filter '@aqsha/services' typecheck"
+    "typecheck": "bun run --parallel --filter '@aqsha/api' --filter '@aqsha/web' --filter '@aqsha/www' --filter '@aqsha/agent' --filter '@aqsha/db' --filter '@aqsha/chat-core' --filter '@aqsha/services' typecheck"
   },
   "overrides": {
     "elysia": "1.4.29",

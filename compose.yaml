@@ -41,7 +41,8 @@ x-infisical-bootstrap: &infisical-bootstrap
 
 services:
   web:
-    # Built in CI (NEXT_PUBLIC_* baked at build from Infisical /build). Local build: compose.build.yaml.
+    # Built in CI (SEO prerender values baked from Infisical /build; app config injected at runtime
+    # from Infisical /app via the entrypoint). Local build: compose.build.yaml.
     image: ghcr.io/manikandareas/aqsha-web:${IMAGE_TAG:-latest}
     # Dokploy deploys with `docker compose up -d` (no `pull`); a mutable tag like `latest` would
     # otherwise keep running the stale local image forever. Applies to every GHCR app image below.
@@ -50,7 +51,8 @@ services:
     environment:
       <<: *infisical-bootstrap
       # web proxies /mastra-api/* to the Mastra agent container — fixed internal wiring, not a secret.
-      # PORT/HOSTNAME are baked in the image; CLERK_SECRET_KEY + SENTRY_DSN_WEB come from Infisical /app.
+      # PORT/HOST are baked in the image; PUBLIC_CLERK_*/CLERK_SECRET_KEY/PUBLIC_API_URL/SENTRY_DSN
+      # come from Infisical /app.
       MASTRA_AGENT_ORIGIN: http://agent:4317
     expose:
       - "3000"

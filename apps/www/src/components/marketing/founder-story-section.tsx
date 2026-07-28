@@ -8,21 +8,6 @@ import { MotionProvider } from "@/components/motion-provider";
 import { EASE_OUT, FRAME_SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
-const REASONS = [
-  {
-    lead: "Mulai dari karya tulis yang ingin diselesaikan",
-    rest: ", bukan dari percakapan kosong yang cepat kehilangan konteks.",
-  },
-  {
-    lead: "Menjaga sumber dekat dengan draf",
-    rest: ", supaya ide, catatan, dan referensi tidak tercerai-berai.",
-  },
-  {
-    lead: "Memberi Aqsha ruang untuk membantu tanpa mengambil alih",
-    rest: ", lewat usulan yang tetap kamu review sendiri.",
-  },
-] as const;
-
 const FOUNDERS = [
   {
     name: "Vito",
@@ -149,7 +134,7 @@ export function FounderStorySection() {
         aria-label="Cerita di balik Aqsha"
         className="w-full scroll-mt-[72px] overflow-x-clip bg-background pb-24 sm:pb-32 lg:pb-40"
       >
-        <div className="mx-auto w-full max-w-4xl px-4 sm:px-6">
+        <div className="mx-auto w-full max-w-[50rem] px-4 sm:px-6">
           <m.div
             className="text-sm leading-relaxed text-muted-foreground sm:text-[15px]"
             initial="hidden"
@@ -157,7 +142,7 @@ export function FounderStorySection() {
             viewport={{ once: true, amount: 0.2 }}
             transition={{ staggerChildren: 0.07 }}
           >
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-[22rem_1fr] md:gap-8">
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-[22rem_1fr]">
               <div className="mx-auto flex w-full max-w-[22rem] items-start justify-center self-start">
                 {FOUNDERS.map((founder, index) => (
                   <FounderFrame
@@ -172,52 +157,46 @@ export function FounderStorySection() {
                 ))}
               </div>
 
-              <div className="relative">
+              <div className="relative flex flex-col gap-5">
                 <Starburst
-                  className="absolute -top-6 right-0 hidden -rotate-12 sm:block"
+                  className="absolute -right-4 -top-8 hidden -rotate-12 sm:block"
                   delay={0.4}
                 />
                 <m.h2
-                  className="font-heading text-xl font-medium leading-[1.15] text-foreground sm:text-2xl"
+                  className="font-heading text-pretty font-medium leading-[1.15] text-foreground sm:text-xl text-lg"
                   variants={rise}
                 >
-                  Halo, penulis{" "}
+                  Halo, para periset dan{" "}
                   <span className="relative inline-block">
-                    karya tulis
+                    penulis
                     <HandUnderline />
                   </span>{" "}
                   👋
                 </m.h2>
-                <m.p className="mt-3 text-pretty" variants={rise}>
-                  Aqsha dimulai dari masalah yang sederhana: riset dan tulisan
-                  sering hidup di tempat yang berbeda.
-                </m.p>
-                <m.p className="mt-3 text-pretty" variants={rise}>
-                  Kami Vito dan Tegar, pembuat Aqsha. Saat mengerjakan karya
-                  tulis, kami sering berpindah antara catatan, dokumen, dan
-                  sumber yang sama.
+                <m.p className="text-pretty" variants={rise}>
+                  Saat ini kita berada di era perkembangan AI Agent yang melesat begitu cepat. Berbagai sektor kini mulai terotomatisasi.{" "}
+                  <span className="font-medium text-foreground">Kami percaya ini adalah momen yang tepat untuk beradaptasi</span>
+                  , bukan dengan mencoba mengalahkan AI, melainkan dengan menjadikannya rekan kerja sehari-hari.
                 </m.p>
               </div>
             </div>
 
-            <m.p className="mt-8 text-pretty" variants={rise}>
-              Itu sebabnya Aqsha dibuat untuk tiga hal:
-            </m.p>
-            <ol className="mt-4 space-y-2">
-              {REASONS.map((reason, index) => (
-                <m.li key={reason.lead} className="text-pretty" variants={rise}>
-                  {index + 1}.{" "}
-                  <span className="font-medium text-foreground">
-                    {reason.lead}
-                  </span>
-                  {reason.rest}
-                </m.li>
-              ))}
-            </ol>
-            <m.p className="mt-5 text-pretty" variants={rise}>
-              Aqsha terus kami rapikan pelan-pelan. Semoga ia membantu kamu
-              kembali ke karya yang ingin kamu selesaikan. 🎓
-            </m.p>
+            <div className="mt-8 flex flex-col gap-5">
+              <m.p className="text-pretty" variants={rise}>
+                Kami membangun Aqsha dari sebuah keyakinan sederhana.{" "}
+                <span className="font-medium text-foreground">
+                  Kehadiran AI seharusnya mampu mengeskalasi penelitian menjadi jauh lebih canggih.
+                </span>
+                {" "}
+                   Energi dan waktumu terlalu berharga jika hanya dihabiskan untuk mengurus format penulisan, merangkai draf, atau merapikan kutipan. Lewat Aqsha, kami ingin mengubah cara kerja tersebut.
+              </m.p>
+              <m.p className="text-pretty" variants={rise}>
+                Kini, biarkan AI mengambil alih beban teknis penulisan. Tujuannya agar kamu bisa memusatkan seluruh fokusmu pada <span className="font-medium text-foreground">substansi, kedalaman ide, serta esensi</span> dari penelitian itu sendiri.
+              </m.p>
+              <m.p className="text-pretty font-medium text-foreground sm:text-lg" variants={rise}>
+                Mari tingkatkan standar karyamu bersama Aqsha.
+              </m.p>
+            </div>
           </m.div>
         </div>
       </section>

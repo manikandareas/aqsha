@@ -12,22 +12,20 @@ Untuk setiap proses brainstorming dan planning, gunakan **bahasa Indonesia**. Is
 - `docs/README.md` — index of product/architecture/migration/agent/features/ops docs.
 - `docs/product/versioning-and-changelog.md` — decision guide for product version bumps and whether a change needs a changelog entry. Consult when closing any user-facing work.
 - `docs/architecture/` — architecture and design notes (overview, tech stack, API domains, service layer, contracts).
-- `apps/svelte/PRODUCT.md` / `apps/svelte/DESIGN.md` — product positioning and visual system for the Svelte app.
+- `apps/web/PRODUCT.md` / `apps/web/DESIGN.md` — product positioning and visual system for the web app.
 - Mastra docs (`.mcp.json` `@mastra/mcp-docs-server`, or context7 `/mastra-ai/mastra`) — consult before editing the agent runtime in `apps/agent/src/mastra/` (agents, tools, skills, workflows, processors, memory). Verify Mastra APIs against the installed `@mastra/core` version; don't invent them.
-
-Next.js in this repo is 16.x. Before writing frontend code that depends on framework behavior, consult the installed `node_modules/next/dist/docs/` docs.
 
 ## Architecture
 
-Aqsha is a Postgres-backed research product. Stack: Next.js front-of-house, an Elysia REST API, and a Mastra agent runtime, over Postgres/Drizzle + Redis + S3-compatible object storage.
+Aqsha is a Postgres-backed research product. Stack: SvelteKit front-of-house, an Elysia REST API, and a Mastra agent runtime, over Postgres/Drizzle + Redis + S3-compatible object storage.
 
-- `apps/web` (`@aqsha/web`): Next.js 16 public landing + authenticated product app. Talks to the API via a type-safe Eden Treaty client; proxies `/mastra-api/*` to the agent runtime (`@mastra/client-js`).
+- `apps/web` (`@aqsha/web`): SvelteKit (Svelte 5 runes) public landing + authenticated product app. Talks to the API via a type-safe Eden Treaty client; proxies `/mastra-api/*` to the agent runtime (`@mastra/client-js`).
 - `apps/api` (`@aqsha/api`): Elysia REST API + BullMQ workers (feed hydration, metadata enrichment, account deletion, thread-title). Clerk auth, Mayar billing, pino logging.
 - `apps/agent` (`@aqsha/agent`): Mastra agent runtime for Astra — chat agent `astra-lite` + `/deep` Workflow `deep-research` (plan-gate HITL → subagents → cited synthesis). Mastra Memory (`mastra_*`) = source of truth for messages; streams via `@mastra/client-js`.
 - `packages/db` (`@aqsha/db`): Drizzle ORM schema + migrations for Postgres (pgvector). Shared structured `appError`.
 - `packages/services` (`@aqsha/services`): domain services (workspaces, artifacts, billing, RAG, research, citations, chat). One implementation consumed by API routes, workers, and the agent.
 - `packages/chat-core` (`@aqsha/chat-core`): shared chat/timeline primitives.
-- `packages/ui` (`@aqsha/ui`): shared React UI primitives and token CSS.
+- `packages/ui-svelte` (`@aqsha/ui-svelte`): shared Svelte UI primitives (shadcn-svelte) and token CSS.
 
 ## Commands
 
@@ -58,7 +56,7 @@ bun run db:studio
 
 ## Repo Notes
 
-- `apps/web` is a pure consumer: it imports the API's `App` type for the Eden Treaty client (no codegen) and consumes `@aqsha/ui`. It must not import `@aqsha/db` / `@aqsha/services` (keeps drizzle out of the client bundle).
+- `apps/web` is a pure consumer: it imports the API's `App` type for the Eden Treaty client (no codegen) and consumes `@aqsha/ui-svelte`. It must not import `@aqsha/db` / `@aqsha/services` (keeps drizzle out of the client bundle).
 - Business logic lives once in `packages/services`; API routes, workers, and the agent are thin callers.
 - Test runners are configured in `packages/db`, `packages/chat-core`, `packages/services`, and `apps/api`.
 - Environment is per-app `.env` (see each app's `.env.example`); infra (Postgres/Redis/MinIO) for local dev is `infra/compose.dev.yaml`.
@@ -76,30 +74,27 @@ Example — `// Runes-only mode (plan §3.4) turns legacy syntax into a build er
 
 ## Icons
 
-- Use `@aqsha/ui/icons` for all app icon imports in `apps/web`.
-- Use the local `packages/ui/src/icons.tsx` adapter for shared UI package icons, with relative imports such as `../icons`.
-- Do not add direct `lucide-react` imports or direct `lucide-react` package dependencies in Aqsha code. `lucide-react` may still appear transitively when required by third-party packages such as BlockNote.
-- When a needed icon name is missing, add a Lucide-compatible export to `packages/ui/src/icons.tsx` backed by the official Hugeicons packages (`@hugeicons/react` and `@hugeicons/core-free-icons`).
+- Use `$lib/icons` for all app icon imports in `apps/web`; direct `@lucide/svelte` imports are banned by eslint outside vendored `src/lib/components/ui/**`.
+- Icons are Hugeicons glyphs passed as data (`<Icon icon={SomeIcon} />`). When a needed icon name is missing, add a Lucide-compatible export to `apps/web/src/lib/icons/index.ts` backed by `@hugeicons/core-free-icons`.
 
 ## Frontend Data
 
-`apps/web` uses a type-safe Eden Treaty client over TanStack Query.
+`apps/web` uses a type-safe Eden Treaty client over TanStack Query (svelte-query).
 
-- Get the authenticated client with `useApi()` from `apps/web/lib/api-client.ts`.
-- Use `unwrap()` and the centralized `queryKeys` from `apps/web/lib/api-query.ts`.
-- Co-locate query/mutation hooks per feature in `features/<x>/api.ts` (e.g. `useWorkspacesList`, `useCreateWorkspace`).
-- Keep UI-only state local with React state: dialogs, drafts, selected IDs, composer text, and upload progress.
+- The authenticated client lives in `apps/web/src/lib/api/`; query helpers (`unwrap`, `queryKeys`) in `apps/web/src/lib/query/`.
+- Co-locate query/mutation hooks per feature in `src/lib/features/<x>/api.ts`.
+- Keep UI-only state local with Svelte runes: dialogs, drafts, selected IDs, composer text, and upload progress.
 
 ## Error Handling
 
-- Normalize frontend API errors with `apps/web/lib/api-error.ts`. Prefer `readableApiErrorMessage(error, fallback)` over rendering `error.message` directly.
+- Normalize frontend API errors with `apps/web/src/lib/errors`. Prefer `readableApiErrorMessage(error, fallback)` over rendering `error.message` directly.
 - For new or touched backend code, return structured application errors from `packages/db/src/appError.ts`.
 - Structured error payload shape: `{ message: string; code: string; severity?: "info" | "warning" | "error"; field?: string }`.
 - Keep intentional product return unions as return values instead of thrown errors, such as send-message rate-limit or billing-block results.
 
 ## Design Context
 
-`apps/svelte` carries its own design context for the Impeccable design skill:
+`apps/web` carries its own design context for the Impeccable design skill:
 
-- `apps/svelte/PRODUCT.md` — register `product`, platform `web`. Primary users are student researchers; positioning is a blend of a serious research engine (Astra, `/deep`, citations) with an approachable student-writing workspace ("Ideas, neatly linked"). Personality: calm, clear, playful. Anti-references: fear-driven AI-safety tone, generic AI SaaS, strict academic/institutional severity. Target WCAG 2.2 AA.
-- `apps/svelte/DESIGN.md` — the visual system captured from `src/styles/globals.css` (warm-cream OKLCH palette, Inter + Nunito Sans + JetBrains Mono + Caveat, mint/lavender/coral/lemon accents, keycap buttons, full dark mode). Consult before changing tokens or building new svelte screens.
+- `apps/web/PRODUCT.md` — register `product`, platform `web`. Primary users are student researchers; positioning is a blend of a serious research engine (Astra, `/deep`, citations) with an approachable student-writing workspace ("Ideas, neatly linked"). Personality: calm, clear, playful. Anti-references: fear-driven AI-safety tone, generic AI SaaS, strict academic/institutional severity. Target WCAG 2.2 AA.
+- `apps/web/DESIGN.md` — the visual system captured from `src/styles/globals.css` (warm-cream OKLCH palette, Inter + Nunito Sans + JetBrains Mono + Caveat, mint/lavender/coral/lemon accents, keycap buttons, full dark mode). Consult before changing tokens or building new screens.

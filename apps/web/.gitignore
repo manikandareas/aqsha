@@ -1,20 +1,28 @@
-/.next/
-/out/
-/build/
-/node_modules/
-/.env*.local
-next-env.d.ts
-*.tsbuildinfo
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
 .DS_Store
+Thumbs.db
 
-# eve (Fase 6): build artifacts + dev-server registry + durable runtime state
-/.eve/
-/.workflow-data/
-/.output/
-/.nitro/
-/.vercel/
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
 
-# Content Collections — generated type-safe content layer (blog MDX)
-/.content-collections/
+# Content Collections (generated blog/changelog module; regenerated on build/typecheck)
+/.content-collections
 
-testsprite_tests/tmp/config.json
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+# Playwright
+test-results

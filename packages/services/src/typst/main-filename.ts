@@ -2,7 +2,7 @@ import { WORKSPACE_KINDS, type WorkspaceKind } from "@aqsha/db";
 
 /**
  * Basename berkas utama Typst per kind proyek (label ID, slug). `freeform` tetap `main.typ`.
- * Paritas dengan helper client di apps/svelte workspaces.
+ * Paritas dengan helper client di apps/web workspaces.
  */
 export const MAIN_TYP_FILENAMES = {
   undergraduate_thesis: "skripsi.typ",

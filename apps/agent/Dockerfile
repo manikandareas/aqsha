@@ -14,7 +14,6 @@ COPY apps/agent/package.json apps/agent/package.json
 COPY packages/chat-core/package.json packages/chat-core/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/services/package.json packages/services/package.json
-COPY packages/ui/package.json packages/ui/package.json
 RUN bun install --frozen-lockfile
 
 # `mastra build` bundles the server (Hono) into apps/agent/.mastra/output. Workspace deps are

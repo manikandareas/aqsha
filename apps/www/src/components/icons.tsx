@@ -1,9 +1,8 @@
 /**
  * Local Hugeicons adapter for `@aqsha/www`.
  *
- * Intentional fork of `packages/ui/src/icons.tsx` for Cloudflare Pages deploy
- * isolation — this app must not import `@aqsha/ui` or any other `@aqsha/*`
- * package. Do not add a third adapter; extend this file when www needs icons.
+ * Local adapter kept for Cloudflare Pages deploy isolation — this app must not
+ * import any `@aqsha/*` package. Extend this file when www needs icons.
  */
 import {
   Archive02Icon,

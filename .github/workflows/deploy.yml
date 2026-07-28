@@ -67,13 +67,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Pull the web build-time secrets (NEXT_PUBLIC_* + Sentry org/project/DSN/auth-token) from
+      # Pull the web build-time secrets (SEO prerender values + Sentry org/project/auth-token) from
       # Infisical /build and inject them as env vars (masked in logs) for the build step below. Only
       # the web image consumes them, so ONLY the web matrix job runs the import — api/agent ignore
       # the extra (then-empty) build-args, and skipping keeps a GH-runner→VPS connectivity blip from
       # failing builds that never needed the secrets. Bootstrap = the `gh-actions` machine identity
       # (GH Secrets). env-slug follows the branch (prod|staging), so staging bakes its own
-      # NEXT_PUBLIC_* values. The composite action wraps the import with a delayed retry.
+      # PUBLIC_SITE_URL / indexing gate. The composite action wraps the import with a delayed retry.
       - name: Import build secrets from Infisical
         if: matrix.name == 'web'
         uses: ./.github/actions/infisical-import
@@ -110,16 +110,16 @@ jobs:
           # Per-image layer cache across runs (keyed by service so web/api/agent don't collide).
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
-          # Superset of build-args; a Dockerfile that doesn't declare an ARG just ignores it. NEXT_PUBLIC_*
-          # + SENTRY_ORG/PROJECT come from Infisical /build (imported into env by the step above), baked
-          # into the web bundle. GIT_COMMIT/CI are workflow-derived.
+          # Superset of build-args; a Dockerfile that doesn't declare an ARG just ignores it. Web app
+          # config is injected at RUNTIME via Infisical /app — only the SEO prerender bake
+          # (PUBLIC_SITE_URL / PUBLIC_SEO_ALLOW_INDEXING) and Sentry upload config are build args.
+          # Values come from Infisical /build (imported into env by the step above; the site URL key
+          # keeps its legacy NEXT_PUBLIC_* name there). GIT_COMMIT/CI are workflow-derived.
           build-args: |
             GIT_COMMIT=${{ github.sha }}
             CI=true
-            NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}
-            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-            NEXT_PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }}
-            NEXT_PUBLIC_SENTRY_DSN=${{ env.NEXT_PUBLIC_SENTRY_DSN }}
+            PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }}
+            PUBLIC_SEO_ALLOW_INDEXING=${{ env.PUBLIC_SEO_ALLOW_INDEXING }}
             SENTRY_ORG=${{ env.SENTRY_ORG }}
             SENTRY_PROJECT_WEB=${{ env.SENTRY_PROJECT_WEB }}
           # Auth token as a BuildKit secret (never in an image layer). From Infisical /build. Consumed
