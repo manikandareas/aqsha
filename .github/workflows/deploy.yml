@@ -53,8 +53,8 @@ jobs:
         with:
           client-id: ${{ secrets.INFISICAL_PUBLIC_CLIENT_ID }}
           client-secret: ${{ secrets.INFISICAL_PUBLIC_CLIENT_SECRET }}
-          project-slug: ${{ vars.INFISICAL_PUBLIC_PROJECT_SLUG }}
-          secret-path: /build
+          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          secret-path: /public/build
           env-slug: ${{ env.INFISICAL_ENV }}
 
       - name: Image tags + labels
@@ -102,8 +102,8 @@ jobs:
         with:
           client-id: ${{ secrets.INFISICAL_PUBLIC_CLIENT_ID }}
           client-secret: ${{ secrets.INFISICAL_PUBLIC_CLIENT_SECRET }}
-          project-slug: ${{ vars.INFISICAL_PUBLIC_PROJECT_SLUG }}
-          secret-path: /deploy
+          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          secret-path: /public/deploy
           env-slug: ${{ env.INFISICAL_ENV }}
 
       - name: Trigger Dokploy deploy

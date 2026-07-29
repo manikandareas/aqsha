@@ -16,22 +16,23 @@ database `aqsha_public`; jangan arahkan variabel ini ke volume atau database pro
 
 ## Infisical
 
-Buat project Infisical terpisah, misalnya `aqsha-public`. Machine identity `dokploy-public` hanya
-boleh membaca environment `prod`/`staging` project ini. Entry point image membaca folder `/app`.
+Gunakan project Infisical `aqsha` yang sudah ada, tetapi jangan menaruh secret publik di folder
+product lama. Buat namespace `/public` di environment `prod` dan `staging`. Machine identity
+`dokploy-public` hanya boleh membaca `/public/app`; entry point image membaca path tersebut.
 
 | Folder | Variabel |
 | --- | --- |
-| `/infra` | `POSTGRES_PASSWORD`, `REDIS_PASSWORD` |
-| `/app` | `DATABASE_URL`, `REDIS_URL`, `PUBLIC_CORS_ORIGINS`, `PUBLIC_SITE_URL`, `RESEND_API_KEY`, `WAITLIST_FROM_EMAIL`, `SENTRY_DSN_API`, `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`, `LOG_LEVEL` |
-| `/build` | `PUBLIC_SITE_URL`, `PUBLIC_API_URL`, `PUBLIC_SENTRY_DSN`, `PUBLIC_SENTRY_ENVIRONMENT`, `SENTRY_ORG`, `SENTRY_PROJECT_WWW`, `SENTRY_AUTH_TOKEN` |
-| `/deploy` | `DOKPLOY_URL`, `DOKPLOY_API_KEY`, `DOKPLOY_COMPOSE_ID` |
+| `/public/infra` | `POSTGRES_PASSWORD`, `REDIS_PASSWORD` |
+| `/public/app` | `DATABASE_URL`, `REDIS_URL`, `PUBLIC_CORS_ORIGINS`, `PUBLIC_SITE_URL`, `RESEND_API_KEY`, `WAITLIST_FROM_EMAIL`, `SENTRY_DSN_API`, `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`, `LOG_LEVEL` |
+| `/public/build` | `PUBLIC_SITE_URL`, `PUBLIC_API_URL`, `PUBLIC_SENTRY_DSN`, `PUBLIC_SENTRY_ENVIRONMENT`, `SENTRY_ORG`, `SENTRY_PROJECT_WWW`, `SENTRY_AUTH_TOKEN` |
+| `/public/deploy` | `DOKPLOY_URL`, `DOKPLOY_API_KEY`, `DOKPLOY_COMPOSE_ID` |
 
-Gunakan secret reference untuk wiring internal di `/app`:
+Gunakan secret reference untuk wiring internal di `/public/app`:
 
 ```dotenv
-DATABASE_URL=postgresql://aqsha_public:${prod.infra.POSTGRES_PASSWORD}@postgres:5432/aqsha_public
-REDIS_URL=redis://:${prod.infra.REDIS_PASSWORD}@redis:6379
-PUBLIC_CORS_ORIGINS=https://aqshara.com
+DATABASE_URL=postgresql://aqsha_public:${prod.public.infra.POSTGRES_PASSWORD}@postgres:5432/aqsha_public
+REDIS_URL=redis://:${prod.public.infra.REDIS_PASSWORD}@redis:6379
+PUBLIC_CORS_ORIGINS=https://aqshara.com,https://www.aqshara.com
 PUBLIC_SITE_URL=https://aqshara.com
 SENTRY_ENVIRONMENT=production
 SENTRY_TRACES_SAMPLE_RATE=0
@@ -49,8 +50,9 @@ sudah tervalidasi di Resend agar double opt-in benar-benar terkirim.
 2. Buat service staging tersendiri dengan `AQSHA_PROJECT_NAME=aqsha-public-staging`,
    `INFISICAL_ENV=staging`, dan `IMAGE_TAG=staging`.
 3. Tambahkan GitHub secrets `INFISICAL_PUBLIC_CLIENT_ID` dan
-   `INFISICAL_PUBLIC_CLIENT_SECRET`, serta variable `INFISICAL_PUBLIC_PROJECT_SLUG`.
-   Identity `gh-actions-public` hanya perlu akses folder `/build` dan `/deploy` pada project ini.
+   `INFISICAL_PUBLIC_CLIENT_SECRET`. Pipeline memakai variable yang sudah ada,
+   `INFISICAL_PROJECT_SLUG`. Identity `gh-actions-public` hanya perlu akses folder
+   `/public/build` dan `/public/deploy` pada project `aqsha`.
 4. Tambahkan registry credential GHCR read-only ke Dokploy. Pipeline membuat image
    `aqsha-www` dan `aqsha-api`; VPS hanya menarik image, tidak membangun source.
 

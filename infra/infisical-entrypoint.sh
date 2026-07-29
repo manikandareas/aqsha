@@ -3,7 +3,7 @@
 #
 # Baked into every app image (web/api/worker/agent/migrate) at /usr/local/bin/aqsha-entrypoint and
 # set as the image ENTRYPOINT, so the Dockerfile CMD (or a compose `command:` override) is passed as
-# "$@" and runs with Infisical `/app` secrets injected as env vars. Only our own images use this;
+# "$@" and runs with the configured Infisical secret path injected as env vars. Only our own images use this;
 # stock images (postgres/redis/minio/alloy) keep reading compose ${VAR} from the Dokploy env.
 #
 # Auth is a machine identity (Universal Auth). Dokploy supplies exactly five bootstrap vars:
@@ -21,6 +21,7 @@ fi
 
 : "${INFISICAL_API_URL:=https://secrets.aqshara.com}"
 : "${INFISICAL_ENV:=prod}"
+: "${INFISICAL_SECRET_PATH:=/app}"
 
 # Exchange the machine-identity client id/secret for a short-lived access token. --plain prints only
 # the token to stdout; --silent suppresses the update-check banner so it can't pollute the token.
@@ -31,10 +32,10 @@ INFISICAL_TOKEN="$(infisical login --method=universal-auth \
 
 # Don't leak the bootstrap identity into the app: only `login` above needed the client id/secret, so
 # drop them from the env, and hand the token to `infisical run` via --token instead of exporting it —
-# the child process then carries only the injected /app secrets, not our credentials.
+# the child process then carries only the injected runtime secrets, not our credentials.
 unset INFISICAL_UNIVERSAL_AUTH_CLIENT_ID INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
 
-# `infisical run` (authenticated by --token) fetches the /app secrets for INFISICAL_ENV, expands
+# `infisical run` (authenticated by --token) fetches the selected runtime secrets for INFISICAL_ENV, expands
 # cross-folder references (dot-notation, e.g. DATABASE_URL → ${prod.infra.POSTGRES_PASSWORD}) and
 # injects them into the child process. exec so the app becomes PID 1 (signals/shutdown propagate).
 exec infisical run \
@@ -42,5 +43,5 @@ exec infisical run \
   --projectId="$INFISICAL_PROJECT_ID" \
   --env="$INFISICAL_ENV" \
   --domain="$INFISICAL_API_URL" \
-  --path="/app" \
+  --path="$INFISICAL_SECRET_PATH" \
   --silent -- "$@"

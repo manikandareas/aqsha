@@ -7,6 +7,7 @@ x-infisical-bootstrap: &infisical-bootstrap
   INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
   INFISICAL_API_URL: ${INFISICAL_API_URL:-https://secrets.aqshara.com}
   INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+  INFISICAL_SECRET_PATH: ${INFISICAL_SECRET_PATH:-/public/app}
 
 services:
   www:
