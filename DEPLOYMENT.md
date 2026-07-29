@@ -1,5 +1,10 @@
 # Deployment (Dokploy)
 
+> Release `main` saat ini memakai landing/waitlist publik. Ikuti
+> [`docs/ops/public-launch-runbook.md`](docs/ops/public-launch-runbook.md) dan
+> `compose.public.yaml`; dokumen di bawah menjelaskan stack product lama yang tetap disimpan untuk
+> rollback, tetapi tidak dijalankan oleh pipeline publik.
+
 Aqsha deploys as a single Docker Compose stack via **Dokploy**. The app images (web/api/agent) are
 **built in CI** (GitHub Actions) and pushed to **GHCR**; `compose.yaml` references them by `image:`
 only, so Dokploy just **pulls the finished images and restarts** the stack (no build on the VPS).

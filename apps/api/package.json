@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "bun run --watch src/server.ts | pino-pretty",
     "start": "bun run src/server.ts",
+    "start:public": "bun run src/public-server.ts",
     "worker": "bun run --watch src/workers/index.ts | pino-pretty",
     "worker:start": "bun run src/workers/index.ts",
     "seed:feed": "bun run scripts/seed-feed.ts",

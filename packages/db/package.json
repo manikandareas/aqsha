@@ -24,6 +24,7 @@
     "build:watch": "tsup --watch",
     "generate": "drizzle-kit generate",
     "migrate": "bun run src/migrate.ts",
+    "migrate:public": "bun run src/migrate-public.ts",
     "studio": "drizzle-kit studio",
     "test": "bun test --timeout 30000",
     "typecheck": "tsc --noEmit"

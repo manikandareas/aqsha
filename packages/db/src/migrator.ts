@@ -8,10 +8,19 @@ import postgres from "postgres";
  * Idempotent: drizzle melacak migrasi yang sudah diterapkan; re-run = no-op.
  */
 export async function runMigrations(url: string = requireDatabaseUrl()): Promise<void> {
+  await runMigrationsFrom(url, "../migrations");
+}
+
+/** Public waitlist storage has an isolated migration history so product schema changes cannot touch it. */
+export async function runPublicMigrations(url: string = requireDatabaseUrl()): Promise<void> {
+  await runMigrationsFrom(url, "../public-migrations");
+}
+
+async function runMigrationsFrom(url: string, relativeFolder: string): Promise<void> {
   const sql = postgres(url, { max: 1 });
   try {
     const db = drizzle(sql);
-    const migrationsFolder = fileURLToPath(new URL("../migrations", import.meta.url));
+    const migrationsFolder = fileURLToPath(new URL(relativeFolder, import.meta.url));
     await migrate(db, { migrationsFolder });
   } finally {
     await sql.end();

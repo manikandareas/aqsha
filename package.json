@@ -34,6 +34,7 @@
     "stats:smoke": "bun run --filter '@aqsha/services' stats:smoke",
     "db:generate": "bun run --filter '@aqsha/db' generate",
     "db:migrate": "bun run --filter '@aqsha/db' migrate",
+    "db:migrate:public": "bun run --filter '@aqsha/db' migrate:public",
     "db:studio": "bun run --filter '@aqsha/db' studio",
     "test": "bun run --filter '@aqsha/db' --filter '@aqsha/chat-core' --filter '@aqsha/services' --filter '@aqsha/api' test",
     "lint": "bun run --parallel --filter '@aqsha/api' --filter '@aqsha/web' lint",

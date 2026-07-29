@@ -5,4 +5,4 @@ export * from "./cursor";
 export * from "./appError";
 export * from "./observability";
 export * from "./types";
-export { runMigrations } from "./migrator";
+export { runMigrations, runPublicMigrations } from "./migrator";

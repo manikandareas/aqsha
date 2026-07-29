@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { createDb, runMigrations, WaitlistRepo } from "@aqsha/db";
-import { app } from "../src/index";
+import { createDb, runPublicMigrations, WaitlistRepo } from "@aqsha/db";
+import { publicApp } from "../src/public-app";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const REDIS_URL = process.env.REDIS_URL;
@@ -13,13 +13,13 @@ const emailDup = `wl_api_dup_${suffix}@example.com`;
 const emailVerify = `wl_api_verify_${suffix}@example.com`;
 
 const sentBodies: Array<{ to: string[]; subject: string; html: string }> = [];
+const originalFetch = globalThis.fetch;
 
 beforeAll(async () => {
   process.env.RESEND_API_KEY = "re_test";
   process.env.WAITLIST_FROM_EMAIL = "Aqsha <hello@aqshara.com>";
   process.env.PUBLIC_SITE_URL = "http://localhost:4321";
 
-  const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (url.includes("api.resend.com")) {
@@ -34,10 +34,11 @@ beforeAll(async () => {
     return originalFetch(input, init);
   }) as typeof fetch;
 
-  if (DATABASE_URL) await runMigrations(DATABASE_URL);
+  if (DATABASE_URL) await runPublicMigrations(DATABASE_URL);
 });
 
 afterAll(async () => {
+  globalThis.fetch = originalFetch;
   if (!DATABASE_URL) return;
   const { client } = createDb(DATABASE_URL);
   await client`delete from waitlist_entries where email like ${`wl_api_%${suffix}@example.com`}`;
@@ -45,7 +46,7 @@ afterAll(async () => {
 });
 
 function postJson(path: string, body: unknown, headers?: Record<string, string>) {
-  return app.handle(
+  return publicApp.handle(
     new Request(`http://localhost${path}`, {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },

@@ -1,86 +1,59 @@
-name: Deploy
+name: Deploy public landing
 
-# Branch-aware deploy: push to main → PROD, push to staging → STAGING. Same flow for both:
-# gate (reuses CI) → build 3 images in parallel and push to GHCR → tell Dokploy to pull + restart.
-# The VPS never builds; it only `docker pull`s finished images.
-#
-# Branch flow: feature → development (integration + local test, NO deploy) → staging (deploys
-# the staging stack) → main (deploys prod). Pushing development never triggers this workflow.
-#
-# The only per-env divergence is data, selected by INFISICAL_ENV below: the Infisical env-slug
-# picks the right /build values (staging bakes its own NEXT_PUBLIC_*) and the right /deploy
-# folder (whose DOKPLOY_COMPOSE_ID points at that env's Dokploy compose service), and the meta
-# step emits `:latest`+`sha-*` on main vs `:staging`+`sha-*-staging` on the staging branch.
+# `main` serves only the public acquisition surface. Product code remains in the repository but
+# its web, agent, and worker processes are intentionally absent from compose.public.yaml.
 on:
   push:
     branches: [main, staging]
   workflow_dispatch: {}
 
 concurrency:
-  # Prod and staging deploys never block each other; same-env deploys still serialize.
-  group: deploy-${{ github.ref_name }}
-  cancel-in-progress: false # never interrupt a deploy mid-flight
+  group: deploy-public-${{ github.ref_name }}
+  cancel-in-progress: false
 
-# Default least privilege for every job; the build job widens it to `packages: write` below.
 permissions:
   contents: read
 
 env:
-  # Single switch for everything env-specific: main → prod, anything else (staging) → staging.
   INFISICAL_ENV: ${{ github.ref_name == 'main' && 'prod' || 'staging' }}
 
 jobs:
-  # Same typecheck + lint + test gate as PRs. A red gate blocks build/deploy.
-  # No `secrets: inherit`: the gate self-skips keyless external-service tests and only uses the
-  # workflow-local DATABASE_URL/REDIS_URL, so it needs none of this repo's secrets.
   check:
-    uses: ./.github/workflows/ci.yml
+    uses: ./.github/workflows/public-check.yml
 
   build:
     needs: check
-    # Only the two deployable branches build+deploy; a manual workflow_dispatch from another ref
-    # would push no mutable tag and then pointlessly redeploy a stale `:latest`/`:staging`.
     if: contains(fromJSON('["refs/heads/main", "refs/heads/staging"]'), github.ref)
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # push to GHCR
+      packages: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { name: web, dockerfile: apps/web/Dockerfile }
+          - { name: www, dockerfile: apps/www/Dockerfile }
           - { name: api, dockerfile: apps/api/Dockerfile }
-          - { name: agent, dockerfile: apps/agent/Dockerfile }
     steps:
-      # Third-party actions pinned to immutable commit SHAs (see ci.yml). Trailing comment = version.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          persist-credentials: false # don't retain the GITHUB_TOKEN in .git/config after checkout
+          persist-credentials: false
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Pull the web build-time secrets (SEO prerender values + Sentry org/project/auth-token) from
-      # Infisical /build and inject them as env vars (masked in logs) for the build step below. Only
-      # the web image consumes them, so ONLY the web matrix job runs the import — api/agent ignore
-      # the extra (then-empty) build-args, and skipping keeps a GH-runner→VPS connectivity blip from
-      # failing builds that never needed the secrets. Bootstrap = the `gh-actions` machine identity
-      # (GH Secrets). env-slug follows the branch (prod|staging), so staging bakes its own
-      # PUBLIC_SITE_URL / indexing gate. The composite action wraps the import with a delayed retry.
-      - name: Import build secrets from Infisical
-        if: matrix.name == 'web'
+      - name: Import public build configuration
+        if: matrix.name == 'www'
         uses: ./.github/actions/infisical-import
         with:
-          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
-          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
-          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          client-id: ${{ secrets.INFISICAL_PUBLIC_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_PUBLIC_CLIENT_SECRET }}
+          project-slug: ${{ vars.INFISICAL_PUBLIC_PROJECT_SLUG }}
           secret-path: /build
           env-slug: ${{ env.INFISICAL_ENV }}
 
@@ -89,10 +62,6 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/aqsha-${{ matrix.name }}
-          # main → `:latest` + `sha-<short>`; staging → `:staging` + `sha-<short>-staging`.
-          # The `-staging` suffix on the sha tag is load-bearing: a fast-forward merge of
-          # staging → main yields the SAME commit sha, and without the suffix the prod build
-          # would overwrite the staging web image (different baked NEXT_PUBLIC_*) under one tag.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short,enable={{is_default_branch}}
@@ -107,23 +76,16 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Per-image layer cache across runs (keyed by service so web/api/agent don't collide).
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
-          # Superset of build-args; a Dockerfile that doesn't declare an ARG just ignores it. Web app
-          # config is injected at RUNTIME via Infisical /app — only the SEO prerender bake
-          # (PUBLIC_SITE_URL / PUBLIC_SEO_ALLOW_INDEXING) and Sentry upload config are build args.
-          # Values come from Infisical /build (imported into env by the step above; the site URL key
-          # keeps its legacy NEXT_PUBLIC_* name there). GIT_COMMIT/CI are workflow-derived.
+          cache-from: type=gha,scope=public-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=public-${{ matrix.name }}
           build-args: |
             GIT_COMMIT=${{ github.sha }}
-            CI=true
-            PUBLIC_SITE_URL=${{ env.NEXT_PUBLIC_SITE_URL }}
-            PUBLIC_SEO_ALLOW_INDEXING=${{ env.PUBLIC_SEO_ALLOW_INDEXING }}
+            PUBLIC_SITE_URL=${{ env.PUBLIC_SITE_URL }}
+            PUBLIC_API_URL=${{ env.PUBLIC_API_URL }}
+            PUBLIC_SENTRY_DSN=${{ env.PUBLIC_SENTRY_DSN }}
+            PUBLIC_SENTRY_ENVIRONMENT=${{ env.PUBLIC_SENTRY_ENVIRONMENT }}
             SENTRY_ORG=${{ env.SENTRY_ORG }}
-            SENTRY_PROJECT_WEB=${{ env.SENTRY_PROJECT_WEB }}
-          # Auth token as a BuildKit secret (never in an image layer). From Infisical /build. Consumed
-          # only by the web build; unset → Sentry source-map upload is skipped, build still succeeds.
+            SENTRY_PROJECT_WWW=${{ env.SENTRY_PROJECT_WWW }}
           secrets: |
             sentry_auth_token=${{ env.SENTRY_AUTH_TOKEN }}
 
@@ -131,30 +93,20 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # Checkout is only needed to make the local composite action available.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          persist-credentials: false # don't retain the GITHUB_TOKEN in .git/config after checkout
+          persist-credentials: false
 
-      # Pull the Dokploy API creds from Infisical /deploy (masked in logs), injected as env vars.
-      # The env-slug selects the target stack: each env's /deploy holds its own DOKPLOY_COMPOSE_ID,
-      # so no other branching is needed here. The composite action wraps the import with a delayed
-      # retry against transient VPS blips.
-      - name: Import deploy secrets from Infisical
+      - name: Import public deploy credentials
         uses: ./.github/actions/infisical-import
         with:
-          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
-          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
-          project-slug: ${{ vars.INFISICAL_PROJECT_SLUG }}
+          client-id: ${{ secrets.INFISICAL_PUBLIC_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_PUBLIC_CLIENT_SECRET }}
+          project-slug: ${{ vars.INFISICAL_PUBLIC_PROJECT_SLUG }}
           secret-path: /deploy
           env-slug: ${{ env.INFISICAL_ENV }}
 
-      # compose.yaml references the env's mutable tag (IMAGE_TAG: prod `latest`, staging `staging`),
-      # which build just repushed → Dokploy pulls the fresh images and restarts that stack.
-      # Migrations stay manual (compose `migrate` profile).
       - name: Trigger Dokploy deploy
-        # Secrets flow in as env vars (not interpolated into the shell line) so they never appear in
-        # the rendered `run` script / process args and can't be shell-expanded.
         env:
           DOKPLOY_URL: ${{ env.DOKPLOY_URL }}
           DOKPLOY_API_KEY: ${{ env.DOKPLOY_API_KEY }}

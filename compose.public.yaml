@@ -1,0 +1,85 @@
+# Public landing stack. Product runtime remains in the repository but is intentionally not started here.
+name: ${AQSHA_PROJECT_NAME:-aqsha-public}
+
+x-infisical-bootstrap: &infisical-bootstrap
+  INFISICAL_UNIVERSAL_AUTH_CLIENT_ID: ${INFISICAL_UNIVERSAL_AUTH_CLIENT_ID:-}
+  INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET: ${INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET:-}
+  INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+  INFISICAL_API_URL: ${INFISICAL_API_URL:-https://secrets.aqshara.com}
+  INFISICAL_ENV: ${INFISICAL_ENV:-prod}
+
+services:
+  www:
+    image: ghcr.io/manikandareas/aqsha-www:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/ || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+  api:
+    image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    environment: &api-env
+      <<: *infisical-bootstrap
+      PORT: "3001"
+      AQSHA_PROCESS: api-public
+    expose:
+      - "3001"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:3001/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Run deliberately before opening the public domains on a new stack or after a public schema change.
+  migrate:
+    image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
+    pull_policy: always
+    profiles: ["migrate"]
+    command: ["bun", "run", "db:migrate:public"]
+    environment:
+      <<: *api-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aqsha_public}
+      POSTGRES_USER: ${POSTGRES_USER:-aqsha_public}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/init-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

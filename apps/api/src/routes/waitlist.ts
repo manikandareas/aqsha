@@ -8,11 +8,14 @@ import { Elysia, status, t } from "elysia";
 import { getDb } from "../clients/db";
 import { logger } from "../lib/log";
 
-type PublicLimitResult = { ok: true } | { ok: false; retryAt: number };
+type PublicLimitResult =
+  | { ok: true }
+  | { ok: false; reason: "limited"; retryAt: number }
+  | { ok: false; reason: "unavailable" };
 
 /**
- * Consume limiter publik (IP/email). Redis store error → fail-open (sama seperti
- * `rateLimitMacro` auth), supaya hiccup infra tak memblok waitlist.
+ * Waitlist adalah endpoint tanpa autentikasi yang mengirim email, jadi limiter
+ * sengaja fail-closed saat Redis bermasalah agar outage tidak berubah jadi relay spam.
  */
 async function consumePublicLimit(rule: RateLimitRule, key: string): Promise<PublicLimitResult> {
   try {
@@ -20,11 +23,11 @@ async function consumePublicLimit(rule: RateLimitRule, key: string): Promise<Pub
     return { ok: true };
   } catch (rejected) {
     if (rejected instanceof Error) {
-      logger.warn({ rule, err: rejected }, "waitlist_rate_limit_store_error_fail_open");
-      return { ok: true };
+      logger.error({ rule, err: rejected }, "waitlist_rate_limit_store_error");
+      return { ok: false, reason: "unavailable" };
     }
     const msBeforeNext = (rejected as { msBeforeNext?: number }).msBeforeNext ?? 1000;
-    return { ok: false, retryAt: Date.now() + msBeforeNext };
+    return { ok: false, reason: "limited", retryAt: Date.now() + msBeforeNext };
   }
 }
 
@@ -49,6 +52,14 @@ function rateLimited(retryAt: number) {
   });
 }
 
+function rateLimitUnavailable() {
+  return status(503, {
+    message: "Pendaftaran sementara tidak tersedia. Coba lagi sebentar.",
+    code: "waitlist_unavailable",
+    severity: "warning" as const,
+  });
+}
+
 /**
  * Waitlist publik (tanpa Clerk):
  * - POST /waitlist — submit email (+ company opsional) + honeypot `website`
@@ -65,17 +76,26 @@ export const waitlist = new Elysia({ prefix: "/waitlist" })
         return { ok: true as const };
       }
 
-      const ip = clientIp(request);
-      const ipLimit = await consumePublicLimit("waitlist:submit-ip", ip);
-      if (!ipLimit.ok) return rateLimited(ipLimit.retryAt);
-
-      // Validasi/normalize sebelum DB supaya invalid email → 400 tanpa butuh Postgres.
+      // Validasi/normalize sebelum dependency eksternal supaya input invalid tetap 400.
       const normalized = normalizeWaitlistJoinInput({
         email: body.email,
         companyOrUniversity: body.companyOrUniversity,
       });
+
+      const ip = clientIp(request);
+      const ipLimit = await consumePublicLimit("waitlist:submit-ip", ip);
+      if (!ipLimit.ok) {
+        return ipLimit.reason === "limited"
+          ? rateLimited(ipLimit.retryAt)
+          : rateLimitUnavailable();
+      }
+
       const emailLimit = await consumePublicLimit("waitlist:submit-email", normalized.email);
-      if (!emailLimit.ok) return rateLimited(emailLimit.retryAt);
+      if (!emailLimit.ok) {
+        return emailLimit.reason === "limited"
+          ? rateLimited(emailLimit.retryAt)
+          : rateLimitUnavailable();
+      }
 
       const { db } = getDb();
       await WaitlistService.join(
@@ -105,7 +125,11 @@ export const waitlist = new Elysia({ prefix: "/waitlist" })
     async ({ body, request }) => {
       const ip = clientIp(request);
       const ipLimit = await consumePublicLimit("waitlist:verify-ip", ip);
-      if (!ipLimit.ok) return rateLimited(ipLimit.retryAt);
+      if (!ipLimit.ok) {
+        return ipLimit.reason === "limited"
+          ? rateLimited(ipLimit.retryAt)
+          : rateLimitUnavailable();
+      }
 
       const { db } = getDb();
       await WaitlistService.verify(db, body.token);

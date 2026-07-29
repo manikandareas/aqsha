@@ -3,7 +3,7 @@ import { AppError, parseSampleRate } from "@aqsha/db";
 
 /**
  * Sentry bootstrap shared by the api server + the BullMQ worker (both run under Bun, same image,
- * same `aqsha-api` Sentry project). The two are told apart by the `process` tag (`api` | `worker`).
+ * same `aqsha-api` Sentry project). The process tag separates full API, public API, and worker.
  *
  * Init happens ONLY at a process entry (`initSentry` from server.ts / workers/index.ts), never at
  * module import — so importing the app in tests or type-importing it from web pulls in no live SDK.
@@ -16,7 +16,7 @@ import { AppError, parseSampleRate } from "@aqsha/db";
  */
 let initialized = false;
 
-export function initSentry(fallbackProcess: "api" | "worker"): void {
+export function initSentry(fallbackProcess: "api" | "worker" | "api-public"): void {
   if (initialized) return;
   const dsn = process.env.SENTRY_DSN_API;
   if (!dsn) return;

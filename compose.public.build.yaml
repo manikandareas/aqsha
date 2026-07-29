@@ -1,0 +1,27 @@
+# Emergency/local build overlay for compose.public.yaml. Normal deployments pull CI-built images.
+services:
+  www:
+    build:
+      context: .
+      dockerfile: apps/www/Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-local}
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://aqshara.com}
+        PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.aqshara.com}
+        PUBLIC_SENTRY_DSN: ${PUBLIC_SENTRY_DSN:-}
+        PUBLIC_SENTRY_ENVIRONMENT: ${PUBLIC_SENTRY_ENVIRONMENT:-development}
+        SENTRY_ORG: ${SENTRY_ORG:-}
+        SENTRY_PROJECT_WWW: ${SENTRY_PROJECT_WWW:-}
+      secrets:
+        - sentry_auth_token
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-local}
+
+secrets:
+  sentry_auth_token:
+    environment: SENTRY_AUTH_TOKEN

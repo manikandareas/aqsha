@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
+import sentry from "@sentry/astro";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
@@ -12,6 +13,7 @@ import remarkGfm from "remark-gfm";
 import { islandModulepreload } from "./integrations/island-modulepreload.ts";
 
 const site = process.env.PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://aqshara.com";
+const sentryEnabled = Boolean(process.env.PUBLIC_SENTRY_DSN);
 
 /**
  * Agentation is a dev-only annotation toolbar. `BaseLayout.astro` gates the
@@ -39,6 +41,12 @@ export default defineConfig({
   output: "static",
   integrations: [
     react(),
+    sentry({
+      enabled: { client: sentryEnabled, server: false },
+      sourcemaps: {
+        filesToDeleteAfterUpload: ["./dist/**/*.map"],
+      },
+    }),
     mdx({
       remarkPlugins: [remarkGfm],
       rehypePlugins: [
