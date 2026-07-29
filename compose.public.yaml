@@ -26,6 +26,7 @@ services:
     image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
+    command: ["bun", "run", "start:public"]
     environment: &api-env
       <<: *infisical-bootstrap
       PORT: "3001"
