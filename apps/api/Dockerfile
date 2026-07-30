@@ -23,10 +23,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 COPY package.json bun.lock ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY apps/www/package.json apps/www/package.json
 COPY apps/agent/package.json apps/agent/package.json
 COPY packages/chat-core/package.json packages/chat-core/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/services/package.json packages/services/package.json
+COPY packages/ui-svelte/package.json packages/ui-svelte/package.json
 RUN bun install --frozen-lockfile
 
 # Source last (.dockerignore strips node_modules/.next/dist/.eve/.workflow-data). build:dist emits
