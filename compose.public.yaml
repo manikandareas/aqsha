@@ -36,17 +36,17 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://localhost:3001/healthz || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
 
-  # Run deliberately before opening the public domains on a new stack or after a public schema change.
+  # Applying the isolated waitlist history on every deploy makes first launch safe and stays idempotent.
   migrate:
     image: ghcr.io/manikandareas/aqsha-api:${IMAGE_TAG:-latest}
     pull_policy: always
-    profiles: ["migrate"]
     command: ["bun", "run", "db:migrate:public"]
     environment:
       <<: *api-env
