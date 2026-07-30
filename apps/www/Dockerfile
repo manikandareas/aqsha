@@ -39,4 +39,4 @@ RUN --mount=type=secret,id=sentry_auth_token,required=false \
 FROM nginx:1.27-alpine AS runtime
 COPY apps/www/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/www/dist /usr/share/nginx/html
-EXPOSE 8080
+EXPOSE 80

@@ -15,9 +15,9 @@ services:
     pull_policy: always
     restart: unless-stopped
     expose:
-      - "8080"
+      - "80"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:80/ || exit 1"]
       interval: 15s
       timeout: 3s
       retries: 3
